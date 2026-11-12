@@ -137,6 +137,48 @@ export class AgentRuntime {
     try { return trimResult({ ok: true, value: this.callTool(name, args) }); }
     catch (err) { return trimResult({ ok: false, error: err.status ? err.message : "Tool failed" }); }
   }
+  async refinePrompt({ message, target = "generic" }) {
+    if (!this.status().configured) {
+      throw new DomainError(503, "Configure a working AI provider before improving prompts");
+    }
+    if (!["generic", "codex_cloud", "oagent"].includes(target)) {
+      throw new DomainError(400, "Unsupported prompt destination");
+    }
+    const original = validateMessage(message);
+    const instructions = [
+      "You are O-AGENT's prompt editor, not an autonomous executor.",
+      "Rewrite the request into a clear, actionable proposed prompt for " + target + ".",
+      "Preserve user intent and hard constraints; do not invent permissions, credentials, facts or completed work.",
+      "Keep it concise and verifiable. Return ONLY the proposed prompt, not commentary.",
+      "No tools or actions are available in this operation. Never attempt a side effect.",
+    ].join("\n");
+    try {
+      let proposed = "";
+      if (this.provider === "anthropic") {
+        const response = await providerJson(this.fetchImpl, "https://api.anthropic.com/v1/messages",
+          { "x-api-key": this.key, "anthropic-version": "2023-06-01" },
+          { model: this.model, max_tokens: 1200, system: instructions, messages: [{ role: "user", content: original }] });
+        proposed = (response.content ?? []).filter(x => x.type === "text").map(x => x.text).join("\n");
+      } else {
+        const response = await providerJson(this.fetchImpl, "https://api.openai.com/v1/responses",
+          { authorization: "Bearer " + this.key },
+          { model: this.model, instructions, input: [{ role: "user", content: original }], store: false,
+            max_output_tokens: 1200 });
+        proposed = openaiText(response);
+      }
+      if (!proposed.trim()) throw new DomainError(502, "Provider returned no improved prompt");
+      this.providerHealth = "connected";
+      this.lastVerifiedAt = new Date().toISOString();
+      this.lastError = null;
+      return { original, proposed: proposed.trim().slice(0, 3000), provider: this.provider, model: this.model };
+    } catch (error) {
+      this.lastError = error.status ? error.message : "AI provider request failed";
+      this.providerHealth = /429|credit|rate limit/i.test(this.lastError) ? "rate_limited"
+        : /rejected|permission|key/i.test(this.lastError) ? "invalid_credentials" : "degraded";
+      throw error;
+    }
+  }
+
   async generate(messages, agent) {
     if (this.provider === "anthropic") return this.generateAnthropic(messages, agent);
     return this.generateOpenAI(messages, agent);
