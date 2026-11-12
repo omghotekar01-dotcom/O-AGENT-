@@ -6,7 +6,7 @@ This repository now includes a **development** control plane, a read-only laptop
 
 - Node.js 20 or newer (Node.js 22 recommended).
 - A machine running the backend, and a machine running the gateway (they can initially be the same computer).
-- For Android: recent Android Studio, JDK 17+, Android SDK 37, and a compatible Gradle distribution.
+- For Android: recent Android Studio, JDK 17+, Android SDK 36, and a compatible Gradle distribution.
 
 ## Start the backend
 
