@@ -72,7 +72,7 @@ $workspace = [IO.Path]::GetFullPath($workspace)
 New-Item -ItemType Directory -Force -Path $workspace | Out-Null
 
 Write-Host ""
-Write-Host 'AI provider: 1 OpenAI, 2 Anthropic, 3 skip for now (machine controls still work)'
+Write-Host 'AI provider: 1 OpenAI, 2 Anthropic, 3 skip, 4 Google Gemini API'
 $choice = Read-Host 'Choose [1]'
 if ([string]::IsNullOrWhiteSpace($choice)) { $choice = '1' }
 $provider = 'none'
@@ -88,7 +88,8 @@ switch ($choice) {
         $model = 'claude-sonnet-4-5'
     }
     '3' { $provider = 'none' }
-    default { throw 'Please choose 1, 2 or 3.' }
+    '4' { $provider = 'gemini'; $model = 'gemini-2.5-flash' }
+    default { throw 'Please choose 1, 2, 3 or 4.' }
 }
 if ($provider -ne 'none') {
     $custom = Read-Host "Model ID [$model]"
