@@ -1,15 +1,15 @@
 # O-AGENT project continuity
 
 **Repository:** `omghotekar01-dotcom/O-AGENT-`  
-**Working branch:** `feat/omio-agent-hq-foundation`  
+**Release branch:** `main` (new work reviewed via feature pull requests)  
 **Project name:** O-AGENT / OMIO AGENT HQ  
-**Status:** architecture and schema foundation; no deployed production agent-control platform has been verified.
+**Status:** operational Node + gateway development MVP, Flutter Android/iOS Studio and optional server-side AI-provider integration. Not production-ready.
 
 ## Mission
 
 An Android-first command centre for real AI-agent operations on authorized laptop and cloud machines: discover agents, submit tasks, inspect actual execution, view real-time events, and approve sensitive actions. The phone is the control surface; durable backend and gateway workers perform execution even when the phone app closes.
 
-## Repository audit (2026-11-12)
+## Historical foundation audit (2026-11-12)
 
 The audited foundation branch contains:
 
@@ -17,7 +17,18 @@ The audited foundation branch contains:
 - Typed provider capability and run-state contracts under `packages/contracts/src/`.
 - An initial Supabase/Postgres migration covering workspaces, devices, agents, runs, approvals, events, outbox, artifacts and RLS.
 
-**Not yet demonstrated in repository:** Android application, web app, running backend, enrolled gateway, real provider integration, executable tests, CI, deployed infrastructure, or a successful end-to-end remote task. Do not render fictitious statuses or claim those capabilities are complete.
+**Historical note:** This was true when the foundation branch was first inspected. Subsequent work added the Node control-plane, worker, Flutter clients, tests and server-side provider integration; see current state below.
+
+## Current delivered development features (2026-11-12)
+
+- `apps/control-plane/src/server.mjs`: authenticated operator/worker HTTP endpoints with local JSON persistence.
+- `apps/control-plane/src/agent-runtime.mjs`: real OpenAI Responses / Anthropic Messages provider adapters, bounded safe tool loop, three agent profiles, persistent conversation threads. Requires a separately provisioned provider API key in the backend environment; live external calls cannot be verified in CI without the user's credentials.
+- `apps/gateway/src/worker.mjs`: outbound-only read-only machine information and human-approved workspace inventory.
+- `apps/flutter/lib/ui/studio.dart`: editorial Flutter home, agent profiles, real AI chat, activity and approvals; no dummy providers or connected workers.
+- `tests/agent-runtime.test.mjs`: mocked provider/protocol/tool-integration tests. GitHub CI runs Node + Flutter analysis/tests, Android APK and iOS Simulator builds.
+- Setup and real-device acceptance tests: [AI setup](AI_SETUP.md) and [MVP runbook](MVP_RUNBOOK.md).
+
+**Not yet shipped:** production identity/RBAC, per-device enrollment, cloud workers, full remote desktop, unrestricted commands, autonomous browser control, provider OAuth, hosted persistence, production deployment, observability platform, signed iPhone IPA.
 
 ## Decisions to preserve
 
