@@ -4,7 +4,7 @@ plugins {
 }
 android {
     namespace = "com.omiiii.oagent"
-    compileSdk = 37
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.omiiii.oagent"
         minSdk = 26
@@ -19,7 +19,7 @@ android {
     }
 }
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.06.01"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.12.0")
 }
