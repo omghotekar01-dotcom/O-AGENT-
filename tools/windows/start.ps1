@@ -54,10 +54,11 @@ try {
     $env:OAGENT_WORKER_ID = $config.WorkerId
     $env:OAGENT_WORKSPACE_ROOT = $config.Workspace
 
-    Remove-Item Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+    Remove-Item Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY, Env:GEMINI_API_KEY -ErrorAction SilentlyContinue
     if ($config.AiKeyEncrypted) {
         if ($config.Provider -eq 'openai') { $env:OPENAI_API_KEY = Unlock-OAgentSecret $config.AiKeyEncrypted }
         elseif ($config.Provider -eq 'anthropic') { $env:ANTHROPIC_API_KEY = Unlock-OAgentSecret $config.AiKeyEncrypted }
+        elseif ($config.Provider -eq 'gemini') { $env:GEMINI_API_KEY = Unlock-OAgentSecret $config.AiKeyEncrypted }
     }
     $env:OAGENT_AI_PROVIDER = $config.Provider
     $env:OAGENT_AI_MODEL = $config.Model
