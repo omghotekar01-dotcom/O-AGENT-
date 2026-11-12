@@ -20,6 +20,8 @@ export class ControlPlane {
       events: initial.events ?? [],
       sequence: initial.sequence ?? 0,
       agentThreads: initial.agentThreads ?? {},
+      projects: initial.projects ?? {},
+      externalProjects: initial.externalProjects ?? {},
     };
     this.persist = persist;
     this.clock = clock;
