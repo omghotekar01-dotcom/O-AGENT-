@@ -4,6 +4,7 @@ import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { timingSafeEqual } from "node:crypto";
 import { ControlPlane, DomainError } from "./core.mjs";
+import { AgentRuntime } from "./agent-runtime.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
 const workerToken = process.env.OAGENT_WORKER_TOKEN ?? "";
@@ -23,6 +24,7 @@ function persist(data) {
 }
 const initial = existsSync(dbPath) ? JSON.parse(readFileSync(dbPath, "utf8")) : {};
 const core = new ControlPlane(initial, persist);
+const agentRuntime = new AgentRuntime(core);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
   res.writeHead(code, JSON_HEADERS);
@@ -70,6 +72,16 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/dashboard.js") return staticFile(res, "dashboard.js", "text/javascript; charset=utf-8");
     const isWorkerRoute = path.startsWith("/api/workers/");
     if (!authorized(req, isWorkerRoute ? workerToken : apiToken)) throw new DomainError(401, "Invalid authorization token");
+
+    if (req.method === "GET" && path === "/api/ai/status") return send(res, 200, agentRuntime.status());
+    if (req.method === "GET" && path === "/api/ai/threads") return send(res, 200, { threads: agentRuntime.threads() });
+    const threadPath = path.match(/^\/api\/ai\/threads\/([0-9a-f-]+)$/);
+    if (req.method === "GET" && threadPath) return send(res, 200, agentRuntime.getThread(threadPath[1]));
+    if (req.method === "POST" && path === "/api/ai/chat") {
+      const body = await readJson(req);
+      const result = await agentRuntime.send(body);
+      return send(res, 200, result);
+    }
 
     if (req.method === "GET" && path === "/api/state") return send(res, 200, core.snapshot());
     if (req.method === "GET" && path === "/api/events") {
