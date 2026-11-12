@@ -72,8 +72,8 @@ export class ProjectHub {
       {
         id: "codex_cli", label: "Codex CLI / IDE", 
         status: localCodexEnabled ? (localCodexVerified ? "connected" : "configured_unverified") : "requires_setup",
-        capabilities: localCodexEnabled ? ["list_local_workspaces", "view_session_metadata"] : [],
-        limitation: "Reads authorized CLI/IDE session history grouped by working folder. Not a live browser feed; other Codex processes may be active even when listed sessions say notLoaded. Requires explicit opt-in.",
+        capabilities: localCodexEnabled ? ["list_local_workspaces", "view_session_metadata", "request_supervised_turn", "view_turn_events", "decide_permission_requests"] : [],
+        limitation: "Saved CLI/IDE threads support newly approved Codex turns and event updates, with controlled permission requests. This does not inject into an independent running CLI window or mirror ChatGPT browser screens.",
       },
       {
         id: "chatgpt_work", label: "ChatGPT Work", status: "unsupported",
@@ -300,7 +300,7 @@ export class ProjectHub {
         // An independent scanner cannot determine what another active Codex
         // process is currently doing. No false running indicator.
         state: "history_available", liveBrowser: false,
-        control: "read_only", capabilities: ["view_session_metadata"],
+        control: "approval_gated", capabilities: ["view_session_metadata", "request_supervised_turn", "view_turn_events", "decide_permission_requests"],
       };
     }
     // A successful empty sync clears previous sessions for this worker.
