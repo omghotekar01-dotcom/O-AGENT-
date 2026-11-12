@@ -69,16 +69,30 @@ create table public.provider_connections (
   display_name text not null,
   auth_method text not null check (auth_method in ('oauth', 'api_key', 'device_code', 'local_sdk', 'managed_session')),
   state public.connection_state not null default 'not_connected',
-  -- Opaque KMS/vault reference only. Never place credentials or bearer tokens here.
-  credential_secret_ref text,
   capability_manifest jsonb not null default '{}'::jsonb,
   last_health_check_at timestamptz,
   last_health_check_error_code text,
   lifecycle jsonb not null default '{"beta":false,"preview":false,"deprecated":false}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete cascade
+  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete restrict,
+  unique (id, workspace_id)
 );
+
+-- Secret handles live in a non-exposed schema. Secret values themselves live in KMS.
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+grant usage on schema private to service_role;
+create table private.provider_connection_credentials (
+  provider_connection_id uuid primary key references public.provider_connections(id) on delete cascade,
+  secret_ref text not null,
+  key_version text not null,
+  rotated_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+alter table private.provider_connection_credentials enable row level security;
+revoke all on private.provider_connection_credentials from public, anon, authenticated;
+grant select, insert, update, delete on private.provider_connection_credentials to service_role;
 
 create index provider_connections_workspace_idx on public.provider_connections(workspace_id, provider_id);
 
@@ -95,8 +109,8 @@ create table public.agents (
   configuration jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete set null,
-  foreign key (provider_connection_id) references public.provider_connections(id) on delete set null,
+  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete restrict,
+  foreign key (provider_connection_id, workspace_id) references public.provider_connections(id, workspace_id) on delete restrict,
   unique (id, workspace_id)
 );
 
@@ -121,7 +135,7 @@ create table public.agent_runs (
   updated_at timestamptz not null default now(),
   foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete set null,
   foreign key (agent_id, workspace_id) references public.agents(id, workspace_id) on delete cascade,
-  foreign key (worker_device_id, workspace_id) references public.devices(id, workspace_id) on delete set null,
+  foreign key (worker_device_id, workspace_id) references public.devices(id, workspace_id) on delete restrict,
   unique (workspace_id, idempotency_key),
   unique (id, workspace_id)
 );
@@ -175,7 +189,7 @@ create table public.agent_events (
   occurred_at timestamptz not null,
   received_at timestamptz not null default now(),
   foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete set null,
-  foreign key (agent_id, workspace_id) references public.agents(id, workspace_id) on delete set null,
+  foreign key (agent_id, workspace_id) references public.agents(id, workspace_id) on delete restrict,
   foreign key (run_id, workspace_id) references public.agent_runs(id, workspace_id) on delete cascade,
   unique (workspace_id, sequence)
 );
@@ -285,13 +299,6 @@ create policy "workspace owner reads events"
     where w.id = workspace_id and w.owner_user_id = (select auth.uid())
   ));
 
-create policy "workspace owner reads outbox"
-  on public.event_outbox for select to authenticated
-  using (exists (
-    select 1 from public.workspaces w
-    where w.id = workspace_id and w.owner_user_id = (select auth.uid())
-  ));
-
 create policy "workspace owner reads artifacts"
   on public.artifacts for select to authenticated
   using (exists (
@@ -309,8 +316,7 @@ revoke all on public.workspaces, public.projects, public.devices,
 
 grant select on public.workspaces, public.projects, public.devices,
   public.provider_connections, public.agents, public.agent_runs,
-  public.approvals, public.agent_events, public.event_outbox,
-  public.artifacts to authenticated;
+  public.approvals, public.agent_events, public.artifacts to authenticated;
 
 -- No UPDATE/DELETE policies are created on agent_events. The API must also
 -- expose no endpoint for mutating or deleting historical event records.
