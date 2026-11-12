@@ -32,6 +32,7 @@ class AgentTask {
     this.result,
     this.error,
     this.parameters,
+    this.approvals,
   });
 
   final String id;
@@ -42,6 +43,7 @@ class AgentTask {
   final Object? result;
   final String? error;
   final Map<String, dynamic>? parameters;
+  final Map<String, dynamic>? approvals;
 
   bool get awaitingApproval => status == 'waiting_for_approval';
   bool get cancellable => status == 'queued' || status == 'waiting_for_approval';
@@ -56,6 +58,8 @@ class AgentTask {
         return 'Workspace inventory';
       case 'codex_cloud_submit':
         return 'Submit new Codex Cloud task';
+      case 'codex_cli_turn':
+        return 'Run a real Codex CLI session turn';
       default:
         return kind.replaceAll('_', ' ');
     }
@@ -70,6 +74,7 @@ class AgentTask {
         result: json['result'],
         error: json['error']?.toString(),
         parameters: json['parameters'] is Map ? Map<String, dynamic>.from(json['parameters'] as Map) : null,
+        approvals: json['approvals'] is Map ? Map<String, dynamic>.from(json['approvals'] as Map) : null,
       );
 }
 
