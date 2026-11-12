@@ -40,8 +40,15 @@ if ($changeToken -match '^[yY]') {
 Write-Host ''
 Write-Host 'Codex Cloud can report YOUR task metadata via the official CLI if you have installed and signed in to Codex on this laptop.'
 Write-Host 'It does NOT mirror ChatGPT Work chats or browser screens. Sync sends task titles/status/URLs to your O-AGENT backend.'
-$enabled = Read-Host 'Opt in to Codex Cloud task sync? [y/N]'
-$config | Add-Member -NotePropertyName 'CodexEnabled' -NotePropertyValue ($enabled -match '^[yY]') -Force
+$cloudDefault = 'N'
+if (($config.PSObject.Properties.Name -contains 'CodexEnabled') -and $config.CodexEnabled) { $cloudDefault = 'Y' }
+$enabled = Read-Host "Opt in to Codex Cloud task sync? [y/N] (previous: $cloudDefault)"
+if ([string]::IsNullOrWhiteSpace($enabled)) {
+  $cloudEnabled = $cloudDefault -eq 'Y'
+} else {
+  $cloudEnabled = $enabled -match '^[yY]'
+}
+$config | Add-Member -NotePropertyName 'CodexEnabled' -NotePropertyValue $cloudEnabled -Force
 
 Write-Host ''
 Write-Host 'IMPORTANT: Codex CLI / IDE project history is different from Codex Cloud tasks.' -ForegroundColor Cyan
