@@ -31,6 +31,7 @@ class AgentTask {
     required this.createdAt,
     this.result,
     this.error,
+    this.parameters,
   });
 
   final String id;
@@ -40,6 +41,7 @@ class AgentTask {
   final DateTime? createdAt;
   final Object? result;
   final String? error;
+  final Map<String, dynamic>? parameters;
 
   bool get awaitingApproval => status == 'waiting_for_approval';
   bool get cancellable => status == 'queued' || status == 'waiting_for_approval';
@@ -52,6 +54,8 @@ class AgentTask {
         return 'System health report';
       case 'workspace_inventory':
         return 'Workspace inventory';
+      case 'codex_cloud_submit':
+        return 'Submit new Codex Cloud task';
       default:
         return kind.replaceAll('_', ' ');
     }
@@ -65,6 +69,7 @@ class AgentTask {
         createdAt: _date(json['createdAt'], unixMilliseconds: true),
         result: json['result'],
         error: json['error']?.toString(),
+        parameters: json['parameters'] is Map ? Map<String, dynamic>.from(json['parameters'] as Map) : null,
       );
 }
 
