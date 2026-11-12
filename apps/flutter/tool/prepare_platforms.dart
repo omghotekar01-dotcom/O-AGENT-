@@ -16,8 +16,16 @@ void main() {
       '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n'
           '    <uses-permission android:name="android.permission.INTERNET" />',
     );
-    mainManifest.writeAsStringSync(android);
   }
+  // Exclude app data from Android cloud backups: encrypted session state
+  // cannot be restored with a different Android Keystore key.
+  if (!android.contains('android:allowBackup=')) {
+    android = android.replaceFirst(
+      '<application',
+      '<application android:allowBackup="false"',
+    );
+  }
+  mainManifest.writeAsStringSync(android);
 
   final debugManifest = File('android/app/src/debug/AndroidManifest.xml');
   debugManifest.createSync(recursive: true);
@@ -43,5 +51,5 @@ void main() {
     }
   }
 
-  stdout.writeln('Platform configuration prepared: Android INTERNET + debug-local HTTP, iOS local-network exception.');
+  stdout.writeln('Platform configuration prepared: Android INTERNET + debug-local HTTP + no backup, iOS local-network exception.');
 }
