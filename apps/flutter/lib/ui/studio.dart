@@ -248,6 +248,8 @@ class _StudioShellState extends State<StudioShell> {
     );
   }
 
+  // Kept for the transitional dashboard while project-first navigation is validated.
+  // ignore: unused_element
   Widget _home() {
     final snapshot = c.snapshot!;
     final online = snapshot.machines.where((m) => m.online).toList();
