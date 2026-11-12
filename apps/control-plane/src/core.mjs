@@ -137,7 +137,8 @@ export class ControlPlane {
     const type = requiredString(body?.type, "event type", 60);
     const allowed = new Set(["session_resumed","turn_started","agent_delta","tool_started","tool_finished","turn_completed","error","status"]);
     if (!allowed.has(type)) throw new DomainError(400, "Unsupported Codex event type");
-    const text = body.text == null ? "" : requiredString(body.text, "event text", 2500);
+    if (body.text != null && (typeof body.text !== "string" || body.text.length > 2500)) throw new DomainError(400, "Invalid Codex event text");
+    const text = body.text ?? "";
     if (task.updates.length >= 240) {
       // Bounded storage. Latest updates are still available for reconnect.
       task.updates.splice(0, task.updates.length - 239);
@@ -153,6 +154,7 @@ export class ControlPlane {
     const task = this.getTask(taskId);
     if (task.workerId !== workerId) throw new DomainError(403, "Incorrect worker");
     if (task.kind !== "codex_cli_turn" || task.status !== "running") throw new DomainError(409, "Not a running Codex turn");
+    if (task.parameters?.mode === "read_only") throw new DomainError(403, "Read-only Codex turns cannot request permission escalation");
     if (Object.values(task.approvals ?? {}).filter(a => a.state === "pending").length > 3) throw new DomainError(429, "Too many pending approvals");
     const id = requiredString(body?.id, "approval ID", 80);
     if (!/^[a-zA-Z0-9_-]{8,80}$/.test(id)) throw new DomainError(400, "Invalid approval ID");
@@ -180,6 +182,7 @@ export class ControlPlane {
       throw new DomainError(409, "Approval is no longer active");
     }
     if (typeof approve !== "boolean") throw new DomainError(400, "approve must be boolean");
+    if (approve && task.parameters?.mode === "read_only") throw new DomainError(403, "Read-only turn cannot approve escalation");
     approval.state = approve ? "approved" : "denied";
     approval.decidedAt = this.clock();
     this.commit(approve ? "codex.approval.approved" : "codex.approval.denied", { taskId, approvalId });
