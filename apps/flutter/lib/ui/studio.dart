@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import '../core/models.dart';
 import '../theme.dart';
+import 'projects.dart';
 
 const _muted = Color(0xFF777A78);
 const _ok = Color(0xFF437963);
@@ -217,7 +218,7 @@ class _StudioShellState extends State<StudioShell> {
                   ],
                 ),
                 Expanded(child: switch (index) {
-                  0 => _home(),
+                  0 => ProjectHubScreen(controller: c),
                   1 => _agents(),
                   2 => _chat(),
                   3 => _tasks(),
@@ -230,7 +231,7 @@ class _StudioShellState extends State<StudioShell> {
             selectedIndex: index,
             onDestinationSelected: (next) => setState(() => index = next),
             destinations: const [
-              NavigationDestination(icon: Icon(Icons.space_dashboard_outlined), selectedIcon: Icon(Icons.space_dashboard_rounded), label: 'Home'),
+              NavigationDestination(icon: Icon(Icons.folder_copy_outlined), selectedIcon: Icon(Icons.folder_copy_rounded), label: 'Projects'),
               NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view_rounded), label: 'Agents'),
               NavigationDestination(icon: Icon(Icons.chat_bubble_outline_rounded), selectedIcon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
               NavigationDestination(icon: Icon(Icons.list_alt_rounded), label: 'Activity'),
