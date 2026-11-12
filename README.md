@@ -1,3 +1,9 @@
+## One-click Windows startup (recommended)
+
+If you use Windows, **[follow the 1-time setup guide](docs/ONE_CLICK_WINDOWS.md)** and double-click `O-AGENT.cmd` in this repository. The launcher stores tokens under your Windows account using DPAPI, starts the real Node backend and laptop gateway, checks that your machine is online, establishes the USB ADB bridge when available and opens the local dashboard. Subsequent runs require just one double-click. To stop, use `STOP-O-AGENT.cmd`.
+
+The latest Flutter APK also offers **opt-in “Remember this device”**, protecting the operator token with Android Keystore/iOS Keychain to reconnect without re-entering it. Model-provider keys remain on the backend only. No credentials are stored in GitHub.
+
 ## O-AGENT Studio — AI agents + Flutter mobile (November 2026)
 
 **[Start here: real AI provider setup and testing](docs/AI_SETUP.md).** The development backend now includes an authenticated model integration with OpenAI Responses API or Anthropic Messages API (choose one and provide your own server-side API key). Conversation threads are persisted locally; the model can use an allowlisted tool set to inspect real registered machines and tasks, request system health, and request a human-approved workspace inventory. No provider keys are shipped in APKs.
