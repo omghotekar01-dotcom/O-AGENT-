@@ -136,14 +136,43 @@ class _CodexSessionState extends State<CodexSessionScreen> {
       ]),
       body: SafeArea(child: Column(children: [
         Expanded(child: ListView(padding: const EdgeInsets.fromLTRB(18, 17, 18, 23), children: [
-          const Text('CODEX CLI / IDE', style: TextStyle(fontSize: 10,
-            fontWeight: FontWeight.w800, letterSpacing: 2, color: OTheme.violet)),
-          const SizedBox(height: 9),
-          Text(widget.sessionTitle, style: const TextStyle(fontSize: 25,
-            fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Text(widget.cwd, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          const SizedBox(height: 12),
+          Row(children: [
+            Container(width: 44, height: 44, alignment: Alignment.center,
+              decoration: BoxDecoration(color: OTheme.violet, borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.terminal_rounded, color: Colors.white, size: 23)),
+            const SizedBox(width: 12),
+            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('REMOTE AGENT CONSOLE', style: TextStyle(fontSize: 10,
+                fontWeight: FontWeight.w800, letterSpacing: 1.5, color: OTheme.violet)),
+              SizedBox(height: 3),
+              Text('Codex CLI / IDE', style: TextStyle(fontSize: 21,
+                fontWeight: FontWeight.w700, color: OTheme.ink)),
+            ])),
+          ]),
+          const SizedBox(height: 17),
+          InfoPanel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('SELECTED SAVED SESSION', style: TextStyle(
+              color: OTheme.violet, fontSize: 10, letterSpacing: 1,
+              fontWeight: FontWeight.w700)),
+            const SizedBox(height: 9),
+            Text(widget.sessionTitle.replaceAll(RegExp(r'\\s+'), ' ').trim(),
+              maxLines: 3, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                color: OTheme.ink, height: 1.4)),
+            const SizedBox(height: 9),
+            Row(children: [
+              const Icon(Icons.folder_outlined, size: 16, color: Colors.grey),
+              const SizedBox(width: 6),
+              Expanded(child: Text(widget.cwd, maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: Colors.grey))),
+            ]),
+            const SizedBox(height: 8),
+            Text('Session ID: ' + (widget.sessionId.length > 8
+              ? widget.sessionId.substring(0, 8) : widget.sessionId),
+              style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          ])),
+          const SizedBox(height: 13),
           Row(children: [
             StatePill(status),
             const SizedBox(width: 8),
@@ -193,7 +222,7 @@ class _CodexSessionState extends State<CodexSessionScreen> {
               ])),
           ],
           const SizedBox(height: 22),
-          const Heading('Actual agent activity'),
+          const Heading('Live activity timeline'),
           const SizedBox(height: 11),
           if (events.isEmpty)
             const InfoPanel(child: Text('No actual Codex events yet. Request and approve a turn below.')),
