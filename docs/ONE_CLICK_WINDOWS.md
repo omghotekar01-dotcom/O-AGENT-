@@ -20,7 +20,7 @@ An AI key requires separate provider API access and billing; it cannot be suppli
 
 - If using a real Android phone, plug it in with USB debugging enabled. Authorize the computer once on the phone.
 - **Double-click O-AGENT on your desktop.** It restores the local credentials, reuses already-running launcher processes, and retries the USB bridge. No `npm start`, `npm run worker` or `adb reverse`.
-- Open the Flutter Android app; connect to `http://127.0.0.1:8787` if not already connected. The current app stores its operator token in memory; a subsequent APK update adds **opt-in secure session remembering** to remove repeated typing.
+- Open the Flutter Android app; connect to `http://127.0.0.1:8787` if not already connected. On your first mobile login, check **Remember this device** if the phone is private. Android Keystore/iOS Keychain then protects the operator token for automatic reconnects. **Disconnect** clears the stored token. Leave it off on shared phones.
 - To shut down, double-click **`STOP-O-AGENT.cmd`** in the repo. The stop command checks process ownership before terminating them.
 
 The launcher does not expose your backend to the internet. The server binds to localhost; the phone connects over authorized USB debugging.
