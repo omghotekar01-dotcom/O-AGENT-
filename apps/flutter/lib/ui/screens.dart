@@ -281,12 +281,15 @@ class OverviewScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           GridView.count(
-            crossAxisCount: MediaQuery.sizeOf(context).width > 440 ? 4 : 2,
+            // Four columns squeeze the metric labels on many phones and
+            // trigger RenderFlex overflow banners. Use two columns for
+            // compact screens and a fixed height for readable content.
+            crossAxisCount: MediaQuery.sizeOf(context).width >= 840 ? 4 : 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 11,
             crossAxisSpacing: 11,
-            childAspectRatio: 1.6,
+            mainAxisExtent: 116,
             children: [
               MetricTile(label: 'Machines', value: '${state.machines.length}', icon: Icons.computer_outlined, color: OTheme.purple),
               MetricTile(label: 'Online', value: '${state.onlineCount}', icon: Icons.wifi_rounded, color: OTheme.aqua),
