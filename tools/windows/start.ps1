@@ -61,6 +61,13 @@ try {
     }
     $env:OAGENT_AI_PROVIDER = $config.Provider
     $env:OAGENT_AI_MODEL = $config.Model
+    # GitHub public repository updates are readable without a token.
+    $env:OAGENT_GITHUB_REPOS = if ($config.GitHubRepos) { $config.GitHubRepos } else { 'omghotekar01-dotcom/O-AGENT-' }
+    $env:OAGENT_ENABLE_CODEX_CLOUD_SYNC = if ($config.CodexEnabled) { '1' } else { '0' }
+    Remove-Item Env:OAGENT_GITHUB_TOKEN -ErrorAction SilentlyContinue
+    if ($config.GitHubTokenEncrypted) {
+        $env:OAGENT_GITHUB_TOKEN = Unlock-OAgentSecret $config.GitHubTokenEncrypted
+    }
 
     if ($backendPid -eq 0) {
         Write-Host 'Starting O-AGENT backend...' -ForegroundColor Cyan
@@ -98,7 +105,7 @@ try {
     catch { throw 'Backend token did not match saved operator token. Stop old server and reconfigure if needed.' }
 
     # Only the backend needs operator/provider keys. Do not pass them to the gateway.
-    Remove-Item Env:OAGENT_API_TOKEN, Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+    Remove-Item Env:OAGENT_API_TOKEN, Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY, Env:OAGENT_GITHUB_TOKEN -ErrorAction SilentlyContinue
     if ($workerPid -eq 0) {
         $otherWorkers = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -and (
@@ -183,7 +190,7 @@ try {
     }
     throw
 } finally {
-    Remove-Item Env:OAGENT_API_TOKEN, Env:OAGENT_WORKER_TOKEN, Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY -ErrorAction SilentlyContinue
+    Remove-Item Env:OAGENT_API_TOKEN, Env:OAGENT_WORKER_TOKEN, Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY, Env:OAGENT_GITHUB_TOKEN -ErrorAction SilentlyContinue
     $apiToken = $null
     $workerToken = $null
 }
