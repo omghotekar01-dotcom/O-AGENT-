@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { DomainError } from "./core.mjs";
 
 const REPO_NAME = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
@@ -34,11 +34,15 @@ export class ProjectHub {
     this.now = now;
     core.data.projects ??= {};
     core.data.externalProjects ??= {};
+    core.data.codexLocalProjects ??= {};
+    core.data.codexLocalSync ??= {};
     this.repoCache = new Map();
   }
   sources() {
     const repos = repoSpec(this.env);
     const codexEnabled = this.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC === "1";
+    const localCodexEnabled = this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC === "1";
+    const localCodexVerified = localCodexEnabled && Object.values(this.core.data.codexLocalSync).some(at => this.now() - at < 120000);
     const codexVerified = codexEnabled && Object.values(this.core.data.externalProjects).some(p => this.now() - p.syncedAt < 120000);
     const githubVerified = [...this.repoCache.values()].some(v => this.now() - v.at < 120000);
     return [
@@ -56,6 +60,12 @@ export class ProjectHub {
         id: "codex_cloud", label: "Codex Cloud", status: codexEnabled ? (codexVerified ? "connected" : "configured_unverified") : "requires_setup",
         capabilities: codexEnabled ? ["list_cloud_tasks", "open_provider", "request_new_cloud_task_with_approval"] : [],
         limitation: "Existing cloud tasks are read-only; a NEW task can be submitted with explicit approval via authenticated Codex CLI. No live browser viewport or Work chat access.",
+      },
+      {
+        id: "codex_cli", label: "Codex CLI / IDE", 
+        status: localCodexEnabled ? (localCodexVerified ? "connected" : "configured_unverified") : "requires_setup",
+        capabilities: localCodexEnabled ? ["list_local_workspaces", "view_session_metadata"] : [],
+        limitation: "Reads authorized CLI/IDE session history grouped by working folder. Not a live browser feed; other Codex processes may be active even when listed sessions say notLoaded. Requires explicit opt-in.",
       },
       {
         id: "chatgpt_work", label: "ChatGPT Work", status: "unsupported",
@@ -133,13 +143,17 @@ export class ProjectHub {
       const fresh = this.now() - p.syncedAt < 120000;
       return { ...p, state: fresh ? p.state : "stale", stale: !fresh };
     });
+    const codexLocal = Object.values(this.core.data.codexLocalProjects).map(p => {
+      const stale = this.now() - p.syncedAt >= 120000;
+      return { ...p, state: stale ? "stale" : p.state, stale };
+    });
     const repos = repoSpec(this.env);
     const results = await Promise.all(repos.map(async repo => {
       try { return { project: await this.githubProject(repo) }; }
       catch (e) { return { error: { repo, message: e.message } }; }
     }));
     return {
-      projects: [...local, ...codex, ...results.filter(r => r.project).map(r => r.project)],
+      projects: [...codexLocal, ...local, ...codex, ...results.filter(r => r.project).map(r => r.project)],
       sources: this.sources(),
       sourceErrors: results.filter(r => r.error).map(r => r.error),
       updatedAt: new Date(this.now()).toISOString(),
@@ -162,6 +176,11 @@ export class ProjectHub {
       const spec = id.slice(7);
       if (!repoSpec(this.env).includes(spec)) throw new DomainError(404, "GitHub project is not configured");
       return { project: await this.githubProject(spec), thread: null };
+    }
+    const localCodex = this.core.data.codexLocalProjects[id];
+    if (localCodex) {
+      const stale = this.now() - localCodex.syncedAt >= 120000;
+      return { project: { ...localCodex, state: stale ? "stale" : localCodex.state, stale }, thread: null };
     }
     const imported = this.core.data.externalProjects[id];
     if (imported) return { project: { ...imported, stale: this.now() - imported.syncedAt >= 120000 }, thread: null };
@@ -202,6 +221,67 @@ export class ProjectHub {
       environmentId: body?.environmentId,
       prompt: body?.prompt,
     }, requestKey);
+  }
+
+  // Read-only local history from an explicitly opted-in, authenticated worker.
+  publishCodexLocal(workerId, body) {
+    if (this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1") {
+      throw new DomainError(403, "Codex CLI local session sync is disabled");
+    }
+    if (!this.core.data.workers[workerId]) throw new DomainError(403, "Unknown worker");
+    if (!body || !Array.isArray(body.sessions) || body.sessions.length > 80) {
+      throw new DomainError(400, "Expected at most 80 Codex CLI sessions");
+    }
+    const grouped = new Map();
+    const stamp = this.now();
+    for (const item of body.sessions) {
+      const sessionId = safeTitle(item?.id, "Codex session ID", 120);
+      if (!/^[\w-]{8,120}$/.test(sessionId)) throw new DomainError(400, "Invalid Codex session ID");
+      const cwd = safeTitle(item.cwd, "Codex working directory", 600);
+      if (!/^(?:[A-Za-z]:[\\/]|\/)/.test(cwd) || /[\x00-\x1f]/.test(cwd)) {
+        throw new DomainError(400, "Codex session working directory must be absolute");
+      }
+      const hash = createHash("sha256").update(workerId + "|" + cwd.toLowerCase()).digest("hex").slice(0, 24);
+      const id = "codex-local:" + workerId + ":" + hash;
+      if (!grouped.has(id)) grouped.set(id, { id, cwd, sessions: [] });
+      const state = ["active", "idle", "notLoaded", "systemError"].includes(item.state)
+        ? item.state : "unknown";
+      const session = {
+        id: sessionId,
+        title: shorten(item.title, 180) || "Codex session",
+        state, activeFlags: Array.isArray(item.activeFlags)
+          ? item.activeFlags.filter(x => x === "waitingOnApproval" || x === "waitingOnUserInput").slice(0, 2) : [],
+        updatedAt: typeof item.updatedAt === "string" && !Number.isNaN(Date.parse(item.updatedAt)) ? item.updatedAt : null,
+        modelProvider: shorten(item.modelProvider, 80) || null,
+      };
+      grouped.get(id).sessions.push(session);
+    }
+    const fresh = {};
+    for (const group of grouped.values()) {
+      group.sessions.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+      const latest = group.sessions[0];
+      const cwd = group.cwd;
+      const folder = cwd.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || cwd;
+      fresh[group.id] = {
+        id: group.id, source: "codex_cli", sourceRef: cwd,
+        title: shorten(folder, 120),
+        description: "Codex CLI / IDE workspace · " + group.sessions.length + " saved session(s)",
+        cwd, sessions: group.sessions, workerId,
+        updatedAt: latest?.updatedAt || null, syncedAt: stamp,
+        // An independent scanner cannot determine what another active Codex
+        // process is currently doing. No false running indicator.
+        state: "history_available", liveBrowser: false,
+        control: "read_only", capabilities: ["view_session_metadata"],
+      };
+    }
+    // A successful empty sync clears previous sessions for this worker.
+    for (const [id, project] of Object.entries(this.core.data.codexLocalProjects)) {
+      if (project.workerId === workerId) delete this.core.data.codexLocalProjects[id];
+    }
+    Object.assign(this.core.data.codexLocalProjects, fresh);
+    this.core.data.codexLocalSync[workerId] = stamp;
+    this.core.commit("provider.codex_local.synced", { workerId, projectCount: grouped.size, sessionCount: body.sessions.length });
+    return { projectCount: grouped.size, sessionCount: body.sessions.length };
   }
 
   // Codex metadata is accepted only from the authenticated worker route.
