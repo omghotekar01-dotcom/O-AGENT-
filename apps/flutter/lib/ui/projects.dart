@@ -138,6 +138,7 @@ class _ProjectHubState extends State<ProjectHubScreen> {
           SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
             for (final tab in const [
               ('all', 'All'), ('oagent', 'O-AGENT'),
+              ('codex_cli', 'Codex CLI / IDE'),
               ('github', 'GitHub'), ('codex_cloud', 'Codex Cloud'),
             ])
               Padding(padding: const EdgeInsets.only(right: 8), child: ChoiceChip(
@@ -321,6 +322,7 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
         final messages = asItems(asMap(snap.data!['thread'])['messages']);
         final runs = asItems(project['runs']);
         final pulls = asItems(project['pullRequests']);
+        final sessions = asItems(project['sessions']);
         return SafeArea(child: Column(children: [
           Expanded(child: ListView(padding: const EdgeInsets.all(22), children: [
             Text(source.toUpperCase().replaceAll('_', ' '),
@@ -344,13 +346,15 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
               child: Text('Task feed is stale. Check the connector.', style: TextStyle(color: Color(0xFFA65B41)))),
             if (source != 'oagent') ...[
               const SizedBox(height: 14),
-              OutlinedButton.icon(onPressed: project['url'] == null
+              if (source != 'codex_cli') OutlinedButton.icon(onPressed: project['url'] == null
                 ? null : () => _openUrl(project['url']),
                 icon: const Icon(Icons.open_in_new), label: const Text('Open provider page')),
               const SizedBox(height: 10),
-              Text(source == 'codex_cloud'
-                ? 'Existing cloud tasks are read-only. A NEW Codex task can be submitted through your signed-in laptop after explicit approval.'
-                : 'This external source is read-only; browser viewing and provider approvals are not exposed.',
+              Text(source == 'codex_cli'
+                ? 'These are actual Codex CLI / IDE saved sessions grouped by working folder. This connector cannot yet resume a session or stream what its agent is showing. Not loaded does not mean stopped.'
+                : source == 'codex_cloud'
+                  ? 'Existing cloud tasks are read-only. A NEW Codex task can be submitted through your signed-in laptop after explicit approval.'
+                  : 'This external source is read-only; browser viewing and provider approvals are not exposed.',
                 style: const TextStyle(fontSize: 12, color: muted, height: 1.5)),
               if (source == 'codex_cloud') ...[
                 const SizedBox(height: 13),
@@ -358,6 +362,36 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Request new Codex Cloud task')),
               ],
+            ],
+            if (sessions.isNotEmpty) ...[
+              const SizedBox(height: 19),
+              const Heading('Saved Codex sessions'),
+              const SizedBox(height: 8),
+              Text('Workspace: ' + (project['cwd']?.toString() ?? ''),
+                style: const TextStyle(fontSize: 11, color: muted, height: 1.5)),
+              const SizedBox(height: 11),
+              for (final session in sessions)
+                Padding(padding: const EdgeInsets.only(bottom: 10),
+                  child: InfoPanel(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        const Icon(Icons.terminal_rounded, size: 18, color: OTheme.violet),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(session['title']?.toString() ?? 'Codex session',
+                          maxLines: 3, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+                      ]),
+                      const SizedBox(height: 9),
+                      Row(children: [
+                        StatePill(session['state']?.toString() ?? 'unknown'),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(
+                          'Last updated: ' + (session['updatedAt']?.toString() ?? 'Unknown'),
+                          style: const TextStyle(fontSize: 10, color: muted),
+                          overflow: TextOverflow.ellipsis)),
+                      ]),
+                    ]),
+                  )),
             ],
             if (runs.isNotEmpty) ...[
               const SizedBox(height: 24), const Heading('Workflow runs'),
@@ -432,6 +466,7 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
 IconData sourceIcon(String source) => switch (source) {
   'github' => Icons.code_rounded,
   'codex_cloud' => Icons.cloud_outlined,
+  'codex_cli' => Icons.terminal_rounded,
   'oagent' => Icons.auto_awesome_rounded,
   _ => Icons.extension_rounded,
 };
