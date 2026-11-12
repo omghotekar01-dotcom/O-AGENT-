@@ -24,6 +24,7 @@ class ControlController extends ChangeNotifier with WidgetsBindingObserver {
   bool refreshing = false;
 
   bool get connected => _api != null && snapshot != null;
+  AgentApi? get client => _api;
   bool get hasMachineOnline => snapshot?.machines.any((m) => m.online) ?? false;
   Machine? get selectedMachine {
     for (final machine in snapshot?.machines ?? const <Machine>[]) {
