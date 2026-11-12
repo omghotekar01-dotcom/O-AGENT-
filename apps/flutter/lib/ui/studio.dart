@@ -530,6 +530,14 @@ class _StudioShellState extends State<StudioShell> {
 
   Widget _approvals() {
     final items = c.snapshot!.tasks.where((t) => t.awaitingApproval).toList();
+    final pendingActions = <({AgentTask task, Map<String, dynamic> approval})>[];
+    for (final task in c.snapshot!.tasks.where((t) => t.running)) {
+      for (final raw in (task.approvals ?? {}).values) {
+        if (raw is Map && raw['state'] == 'pending') {
+          pendingActions.add((task: task, approval: Map<String, dynamic>.from(raw)));
+        }
+      }
+    }
     return RefreshIndicator(onRefresh: c.refresh, child: ListView(
       padding: const EdgeInsets.fromLTRB(22, 14, 22, 30),
       children: [
@@ -539,7 +547,7 @@ class _StudioShellState extends State<StudioShell> {
         const SizedBox(height: 8),
         const Text('Nothing happens here without your decision.', style: TextStyle(color: _muted)),
         const SizedBox(height: 22),
-        if (items.isEmpty) const _EmptyState(icon: Icons.verified_user_outlined,
+        if (items.isEmpty && pendingActions.isEmpty) const _EmptyState(icon: Icons.verified_user_outlined,
           title: 'All clear', description: 'Requests requiring a decision will appear here.'),
         for (final task in items) Padding(padding: const EdgeInsets.only(bottom: 12), child: _Tile(
           padding: const EdgeInsets.all(19),
@@ -550,10 +558,22 @@ class _StudioShellState extends State<StudioShell> {
             const SizedBox(height: 6),
             Text('Machine: ${task.workerId}', style: const TextStyle(fontSize: 13, color: _muted)),
             const SizedBox(height: 7),
-            Text(task.kind == 'codex_cloud_submit'
-                ? 'Creates a NEW Codex Cloud task in the environment listed below, potentially using API credits. Approval does not mean the provider will complete the task.'
-                : 'Lists the top-level workspace filenames only. It does not modify files.',
+            Text(task.kind == 'codex_cli_turn'
+                ? 'Resumes your selected Codex CLI session through the official app-server. Read-only mode prevents file edits; project edits mode can change files within the selected workspace.'
+                : task.kind == 'codex_cloud_submit'
+                  ? 'Creates a NEW Codex Cloud task in the selected environment, potentially using provider credits.'
+                  : 'Lists only the top-level workspace filenames.',
               style: const TextStyle(fontSize: 12, height: 1.5, color: _muted)),
+            if (task.kind == 'codex_cli_turn') ...[
+              const SizedBox(height: 9),
+              Text('Workspace: ' + (task.parameters?['cwd']?.toString() ?? ''),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              Text('Mode: ' + (task.parameters?['mode']?.toString() ?? ''),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              SelectableText('Exact Codex prompt: ' + (task.parameters?['prompt']?.toString() ?? ''),
+                style: const TextStyle(fontSize: 12, height: 1.5)),
+            ],
             if (task.kind == 'codex_cloud_submit') ...[
               const SizedBox(height: 8),
               Text('Environment: ' + (task.parameters?['environmentId']?.toString() ?? 'Unknown'),
@@ -574,16 +594,68 @@ class _StudioShellState extends State<StudioShell> {
             ]),
           ]),
         )),
+        for (final pair in pendingActions)
+          Padding(padding: const EdgeInsets.only(bottom: 12), child: _Tile(
+            padding: const EdgeInsets.all(19),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _StatusLabel(label: 'CODEX TOOL APPROVAL', color: _alert),
+              const SizedBox(height: 11),
+              Text(pair.approval['kind']?.toString() ?? 'Tool request',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+              const SizedBox(height: 8),
+              Text('Machine: ' + pair.task.workerId,
+                style: const TextStyle(fontSize: 12, color: _muted)),
+              const SizedBox(height: 8),
+              SelectableText(pair.approval['description']?.toString() ?? '',
+                style: const TextStyle(fontSize: 12, height: 1.5)),
+              const SizedBox(height: 13),
+              Row(children: [
+                Expanded(child: OutlinedButton(
+                  onPressed: () => _decideCodexPermission(pair.task, pair.approval, false),
+                  child: const Text('Deny'))),
+                const SizedBox(width: 10),
+                Expanded(child: FilledButton(
+                  onPressed: () => _decideCodexPermission(pair.task, pair.approval, true),
+                  child: const Text('Approve action'))),
+              ]),
+            ]),
+          )),
         const SizedBox(height: 12),
         const _Note('Review the complete target and exact prompt before approving. Cloud task submissions may incur provider charges; O-AGENT approval only authorizes the specified request.'),
       ],
     ));
   }
 
+  Future<void> _decideCodexPermission(AgentTask task,
+      Map<String, dynamic> request, bool approve) async {
+    final yes = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: Text(approve ? 'Approve this Codex action?' : 'Deny this Codex action?'),
+      content: SingleChildScrollView(child: SelectableText(
+        'Workspace: ' + (task.parameters?['cwd']?.toString() ?? '') +
+        '\nType: ' + (request['kind']?.toString() ?? '') +
+        '\n\n' + (request['description']?.toString() ?? '') +
+        '\n\nOnly this specific request will be decided.')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Back')),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true),
+          child: Text(approve ? 'Authorize action' : 'Deny')),
+      ],
+    ));
+    if (yes != true || !mounted) return;
+    try {
+      await c.client!.decideCodexAction(
+        taskId: task.id, approvalId: request['id'].toString(), approve: approve);
+      await c.refresh();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _decide(AgentTask task, bool approve) async {
     final allowed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       title: Text(approve ? 'Approve this request?' : 'Reject this request?'),
-      content: Text('${task.title}\n\nMachine: ${task.workerId}\nTask ID: ${task.id}\n\nFor Codex tasks, this sends a NEW approved prompt to a cloud environment. For workspace inventories, it lists filenames only.'),
+      content: Text('${task.title}\n\nMachine: ${task.workerId}\nTask ID: ${task.id}\n\nFor local Codex turns, this resumes the selected session with the exact approved prompt and sandbox mode. For cloud tasks, it starts a NEW provider task. For inventory, it lists filenames only.'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Back')),
         FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(approve ? 'Approve' : 'Reject')),
