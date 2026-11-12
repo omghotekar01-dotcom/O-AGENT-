@@ -3,6 +3,7 @@ import { readdir, lstat, realpath } from "node:fs/promises";
 import { resolve, basename, join } from "node:path";
 import { readCodexCloudTasks, submitCodexCloudTask } from "./codex-cloud.mjs";
 import { readCodexLocalSessions } from "./codex-local.mjs";
+import { runCodexTurn } from "./codex-turn.mjs";
 
 const endpoint = new URL(process.env.OAGENT_SERVER_URL || "http://127.0.0.1:8787");
 if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname))) {
@@ -15,11 +16,11 @@ const root = resolve(process.env.OAGENT_WORKSPACE_ROOT || process.cwd());
 if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error("Invalid OAGENT_WORKER_ID");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function api(path, body = {}) {
+async function api(path, body = {}, method = "POST") {
   const result = await fetch(new URL(path, endpoint), {
-    method: "POST",
+    method,
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: method === "GET" ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(15000),
   });
   const json = await result.json();
@@ -46,12 +47,35 @@ async function execute(task) {
     // Only runs AFTER the operator has approved the exact immutable task.
     return submitCodexCloudTask(task.parameters.environmentId, task.parameters.prompt);
   }
+  if (task.kind === "codex_cli_turn") {
+    if (process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1") throw new Error("Codex CLI session control is disabled");
+    return runCodexTurn(task, {
+      sendUpdate: event => api(`/api/workers/${id}/tasks/${task.id}/update`, event),
+      askPermission: async request => {
+        // A real Codex request is tied to the specific live turn.
+        // No acceptance without an authenticated phone decision.
+        await api(`/api/workers/${id}/tasks/${task.id}/approvals`, request);
+        const expires = Date.now() + 180000;
+        while (Date.now() < expires) {
+          await sleep(1800);
+          try {
+            const { state } = await api(
+              `/api/workers/${id}/tasks/${task.id}/approvals/${request.id}`, {}, "GET");
+            if (state === "approved") return true;
+            if (state === "denied" || state === "expired") return false;
+          } catch { return false; }
+        }
+        return false;
+      },
+    });
+  }
   throw new Error("Unsupported task");
 }
 async function main() {
   console.log(`O-AGENT worker ${id} starting; workspace root: ${root}`);
   let lastCodexSync = 0;
   let lastLocalCodexSync = 0;
+  let activeTask = false;
   await api("/api/workers/register", { id, name: hostname() });
   while (true) {
     try {
@@ -82,13 +106,29 @@ async function main() {
         })();
       }
       await api(`/api/workers/${id}/heartbeat`);
-      const { task } = await api(`/api/workers/${id}/next`);
-      if (task) {
-        try {
-          const result = await execute(task);
-          await api(`/api/workers/${id}/tasks/${task.id}/finish`, { ok: true, result });
-        } catch (err) {
-          await api(`/api/workers/${id}/tasks/${task.id}/finish`, { ok: false, error: String(err.message).slice(0, 1000) });
+      if (!activeTask) {
+        const { task } = await api(`/api/workers/${id}/next`);
+        if (task) {
+          activeTask = true;
+          // A long-running Codex turn must not block heartbeats or provider
+          // metadata synchronization. Only one active approved task per worker.
+          void (async () => {
+            try {
+              const result = await execute(task);
+              if (task.kind === "codex_cli_turn" &&
+                  result.providerStatus !== "completed") {
+                await api(`/api/workers/${id}/tasks/${task.id}/finish`,
+                  { ok: false, error: "Codex turn ended with provider status: " + result.providerStatus });
+              } else {
+                await api(`/api/workers/${id}/tasks/${task.id}/finish`, { ok: true, result });
+              }
+            } catch (err) {
+              try {
+                await api(`/api/workers/${id}/tasks/${task.id}/finish`,
+                  { ok: false, error: String(err.message).slice(0, 1000) });
+              } catch { console.error("Could not report completed task state; check backend connectivity."); }
+            } finally { activeTask = false; }
+          })();
         }
       }
     } catch (err) {
