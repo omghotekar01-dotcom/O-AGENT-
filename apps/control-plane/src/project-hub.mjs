@@ -39,6 +39,8 @@ export class ProjectHub {
   sources() {
     const repos = repoSpec(this.env);
     const codexEnabled = this.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC === "1";
+    const codexVerified = codexEnabled && Object.values(this.core.data.externalProjects).some(p => this.now() - p.syncedAt < 120000);
+    const githubVerified = [...this.repoCache.values()].some(v => this.now() - v.at < 120000);
     return [
       {
         id: "oagent", label: "O-AGENT", status: "available",
@@ -46,14 +48,14 @@ export class ProjectHub {
         limitation: "Owned conversations only; external provider credentials and quota still required for AI replies.",
       },
       {
-        id: "github", label: "GitHub", status: repos.length ? "configured" : "requires_setup",
+        id: "github", label: "GitHub", status: repos.length ? (githubVerified ? "connected" : "configured_unverified") : "requires_setup",
         capabilities: repos.length ? ["list_projects", "view_workflow_runs", "view_pull_requests", "open_provider"] : [],
         limitation: "Read-only; GitHub workflow status does not reveal live agent browser screens or give provider approval control.",
       },
       {
-        id: "codex_cloud", label: "Codex Cloud", status: codexEnabled ? "configured_unverified" : "requires_setup",
-        capabilities: codexEnabled ? ["list_cloud_tasks", "open_provider"] : [],
-        limitation: "Requires a locally authenticated official Codex CLI. Shows supported task metadata, not the cloud browser viewport or ChatGPT Work chats.",
+        id: "codex_cloud", label: "Codex Cloud", status: codexEnabled ? (codexVerified ? "connected" : "configured_unverified") : "requires_setup",
+        capabilities: codexEnabled ? ["list_cloud_tasks", "open_provider", "request_new_cloud_task_with_approval"] : [],
+        limitation: "Existing cloud tasks are read-only; a NEW task can be submitted with explicit approval via authenticated Codex CLI. No live browser viewport or Work chat access.",
       },
       {
         id: "chatgpt_work", label: "ChatGPT Work", status: "unsupported",
