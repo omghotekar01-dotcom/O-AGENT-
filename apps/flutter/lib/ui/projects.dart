@@ -86,16 +86,29 @@ class _ProjectHubState extends State<ProjectHubScreen> {
             IconButton(onPressed: _refresh, tooltip: 'Refresh', icon: const Icon(Icons.sync_rounded)),
           ]),
           const SizedBox(height: 9),
-          const Text('Everything\nin motion.', style: TextStyle(
-            color: OTheme.ink, fontWeight: FontWeight.w700, fontSize: 37,
-            height: 1.12, letterSpacing: -1.2)),
-          const SizedBox(height: 9),
-          const Text('Real projects, cloud tasks and outputs from your connected sources.',
-            style: TextStyle(color: muted, fontSize: 13, height: 1.5)),
-          const SizedBox(height: 21),
-          FilledButton.icon(onPressed: _create, icon: const Icon(Icons.add_rounded),
-            label: const Text('New O-AGENT project')),
-          const SizedBox(height: 23),
+          const Text('Your AI command center.', style: TextStyle(
+            color: OTheme.ink, fontWeight: FontWeight.w800, fontSize: 30,
+            height: 1.13, letterSpacing: -0.8)),
+          const SizedBox(height: 7),
+          const Text('Actual projects, connected agents and verified work. Never simulated.',
+            style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
+          const SizedBox(height: 18),
+          Row(children: [
+            Expanded(child: _MetricCard(
+              label: 'PROJECTS', value: all.length.toString(), icon: Icons.folder_copy_outlined)),
+            const SizedBox(width: 9),
+            Expanded(child: _MetricCard(
+              label: 'CODEX', value: all.where((p) => p['source'] == 'codex_cli').length.toString(),
+              icon: Icons.terminal_rounded)),
+            const SizedBox(width: 9),
+            Expanded(child: _MetricCard(
+              label: 'SOURCES', value: sources.where((p) => p['status'] == 'connected').length.toString(),
+              icon: Icons.link_rounded)),
+          ]),
+          const SizedBox(height: 17),
+          OutlinedButton.icon(onPressed: _create, icon: const Icon(Icons.add_rounded),
+            label: const Text('Create O-AGENT project')),
+          const SizedBox(height: 15),
           if (snap.connectionState == ConnectionState.waiting)
             const LinearProgressIndicator(minHeight: 2),
           if (snap.hasError)
@@ -105,47 +118,6 @@ class _ProjectHubState extends State<ProjectHubScreen> {
               Text(snap.error.toString(), style: const TextStyle(color: muted, fontSize: 12)),
               TextButton(onPressed: _refresh, child: const Text('Retry')),
             ])),
-          if (sources.isNotEmpty) ...[
-            const Heading('Connected sources'),
-            const SizedBox(height: 10),
-            for (final source in sources)
-              Padding(padding: const EdgeInsets.only(bottom: 8), child: InfoPanel(
-                child: Row(children: [
-                  Icon(sourceIcon(source['id']?.toString() ?? ''),
-                    size: 22, color: OTheme.violet),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(source['label']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    Text((source['status'] ?? 'unknown').toString().replaceAll('_',' '),
-                      style: const TextStyle(color: muted, fontSize: 11)),
-                  ])),
-                  IconButton(
-                    tooltip: 'Connection details',
-                    icon: Icon(source['status'] == 'unsupported'
-                      ? Icons.lock_outline : Icons.info_outline, size: 18, color: muted),
-                    onPressed: () => showDialog<void>(context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: Text(source['label']?.toString() ?? 'Connection'),
-                        content: SingleChildScrollView(child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min, children: [
-                            Text('Status: ' + (source['status'] ?? 'unknown').toString().replaceAll('_', ' ')),
-                            const SizedBox(height: 13),
-                            Text(source['limitation']?.toString() ?? ''),
-                            if (source['id'] == 'codex_cli') ...[
-                              const SizedBox(height: 12),
-                              const Text('Windows setup: stop O-AGENT, open CONFIGURE-PROJECTS.cmd, choose Y at Sync MY local Codex CLI / IDE projects, then restart O-AGENT. Work in a project with codex to create genuine session history.'),
-                            ],
-                          ]),
-                        ),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
-                        ],
-                      )),
-                  ),
-                ]),
-              )),
-          ],
           if (errors.isNotEmpty) InfoPanel(
             background: const Color(0xFFF8ECE3),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -197,7 +169,9 @@ class _ProjectHubState extends State<ProjectHubScreen> {
                   ]),
                   const SizedBox(height: 11),
                   Text(project['title']?.toString() ?? 'Project',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: OTheme.ink)),
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700,
+                      color: OTheme.ink, height: 1.3)),
                   if (project['description']?.toString().isNotEmpty == true) ...[
                     const SizedBox(height: 5),
                     Text(project['description'].toString(), maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -205,14 +179,59 @@ class _ProjectHubState extends State<ProjectHubScreen> {
                   ],
                   const SizedBox(height: 13),
                   Row(children: [
-                    Expanded(child: Text(project['control'] == 'read_only'
-                      ? 'External source · read only' : 'Owned O-AGENT conversation',
+                    Expanded(child: Text(project['source'] == 'codex_cli'
+                      ? 'Open sessions · live Codex control'
+                      : project['control'] == 'read_only'
+                        ? 'External source · view activity'
+                        : 'O-AGENT conversation',
                       style: const TextStyle(fontSize: 11, color: muted))),
                     const Icon(Icons.arrow_outward_rounded, size: 18, color: OTheme.ink),
                   ]),
                 ])),
               ),
             ),
+          const SizedBox(height: 24),
+          if (sources.isNotEmpty) ...[
+            Heading('Connected sources · ' + sources.length.toString()),
+            const SizedBox(height: 10),
+            for (final source in sources)
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: InfoPanel(
+                child: Row(children: [
+                  Icon(sourceIcon(source['id']?.toString() ?? ''),
+                    size: 22, color: OTheme.violet),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(source['label']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text((source['status'] ?? 'unknown').toString().replaceAll('_',' '),
+                      style: const TextStyle(color: muted, fontSize: 11)),
+                  ])),
+                  IconButton(
+                    tooltip: 'Connection details',
+                    icon: Icon(source['status'] == 'unsupported'
+                      ? Icons.lock_outline : Icons.info_outline, size: 18, color: muted),
+                    onPressed: () => showDialog<void>(context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: Text(source['label']?.toString() ?? 'Connection'),
+                        content: SingleChildScrollView(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min, children: [
+                            Text('Status: ' + (source['status'] ?? 'unknown').toString().replaceAll('_', ' ')),
+                            const SizedBox(height: 13),
+                            Text(source['limitation']?.toString() ?? ''),
+                            if (source['id'] == 'codex_cli') ...[
+                              const SizedBox(height: 12),
+                              const Text('Windows setup: stop O-AGENT, open CONFIGURE-PROJECTS.cmd, choose Y at Sync MY local Codex CLI / IDE projects, then restart O-AGENT. Work in a project with codex to create genuine session history.'),
+                            ],
+                          ]),
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+                        ],
+                      )),
+                  ),
+                ]),
+              )),
+          ],
           const SizedBox(height: 14),
           const Text('Provider integrations are capability-based. GitHub and Codex Cloud views do not expose their live browser screens or permissions.',
             style: TextStyle(color: muted, fontSize: 11, height: 1.5)),
@@ -504,9 +523,37 @@ IconData sourceIcon(String source) => switch (source) {
   'github' => Icons.code_rounded,
   'codex_cloud' => Icons.cloud_outlined,
   'codex_cli' => Icons.terminal_rounded,
+  'gemini_api' => Icons.auto_awesome_outlined,
+  'claude_api' => Icons.psychology_outlined,
+  'claude_code' => Icons.code_rounded,
+  'cursor' => Icons.mouse_outlined,
+  'copilot_sdk' => Icons.smart_toy_outlined,
+  'vscode' => Icons.developer_mode_rounded,
+  'chatgpt_work' => Icons.cloud_outlined,
   'oagent' => Icons.auto_awesome_rounded,
   _ => Icons.extension_rounded,
 };
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({required this.label, required this.value, required this.icon});
+  final String label, value;
+  final IconData icon;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 13, 10, 13),
+    decoration: BoxDecoration(color: OTheme.lavender,
+      border: Border.all(color: OTheme.hairline),
+      borderRadius: BorderRadius.circular(16)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Icon(icon, color: OTheme.violet, size: 19),
+      const SizedBox(height: 8),
+      Text(value, style: const TextStyle(color: OTheme.ink,
+        fontSize: 23, fontWeight: FontWeight.w800)),
+      Text(label, style: const TextStyle(fontSize: 9,
+        color: OTheme.violet, letterSpacing: 0.7, fontWeight: FontWeight.w800)),
+    ]),
+  );
+}
+
 class Heading extends StatelessWidget {
   const Heading(this.text, {super.key});
   final String text;
