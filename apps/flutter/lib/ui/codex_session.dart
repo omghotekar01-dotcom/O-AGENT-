@@ -246,7 +246,35 @@ class _CodexSessionState extends State<CodexSessionScreen> {
           ],
           if (task?['error']?.toString().isNotEmpty == true)
             InfoPanel(background: const Color(0xFFF9EDE8),
-              child: Text(task!['error'].toString())),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Row(children: [
+                  Icon(Icons.error_outline_rounded, color: Color(0xFF9B4835), size: 19),
+                  SizedBox(width: 7),
+                  Text('Provider error', style: TextStyle(
+                    fontWeight: FontWeight.w700, color: Color(0xFF9B4835))),
+                ]),
+                const SizedBox(height: 8),
+                SelectableText(task!['error'].toString(),
+                  style: const TextStyle(fontSize: 12, height: 1.5)),
+                const SizedBox(height: 8),
+                const Text('A failed attempt remains in history. Retrying creates a NEW approval request.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey)),
+                const SizedBox(height: 9),
+                OutlinedButton.icon(
+                  onPressed: busy || active ? null : () {
+                    final previous = asMap(task?['parameters']);
+                    final message = previous['prompt']?.toString() ?? '';
+                    if (message.isEmpty) return;
+                    setState(() {
+                      composer.text = message;
+                      mode = previous['mode'] == 'workspace_write'
+                        ? 'workspace_write' : 'read_only';
+                    });
+                  },
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Reuse prompt for new attempt'),
+                ),
+              ])),
           const SizedBox(height: 18),
           const Text('This connects to the official Codex app-server, not the consumer ChatGPT website or a separate running terminal window.',
             style: TextStyle(fontSize: 11, color: Colors.grey)),
