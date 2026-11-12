@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-const TASK_TYPES = new Set(["system_info", "workspace_inventory"]);
+const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit"]);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted", "rejected"]);
 const MAX_EVENTS = 5000;
 export class DomainError extends Error {
@@ -58,15 +58,23 @@ export class ControlPlane {
     const kind = requiredString(body.kind, "kind", 60);
     if (!TASK_TYPES.has(kind)) throw new DomainError(400, "Unsupported task capability");
     if (!this.data.workers[workerId]) throw new DomainError(404, "Worker is not registered");
+    let parameters = null;
+    if (kind === "codex_cloud_submit") {
+      const environmentId = requiredString(body.environmentId, "Codex Cloud environmentId", 120);
+      if (!/^[A-Za-z0-9_-]{3,120}$/.test(environmentId)) throw new DomainError(400, "Invalid Codex Cloud environmentId");
+      const prompt = requiredString(body.prompt, "Codex Cloud prompt", 2000);
+      parameters = { environmentId, prompt };
+    }
     const key = requiredString(requestKey, "Idempotency-Key", 200);
     if (key.length < 12) throw new DomainError(400, "Idempotency-Key must be at least 12 characters");
     const existing = Object.values(this.data.tasks).find(t => t.requestKey === key);
     if (existing) {
-      if (existing.workerId !== workerId || existing.kind !== kind) throw new DomainError(409, "Idempotency key reused for different task");
+      if (existing.workerId !== workerId || existing.kind !== kind || JSON.stringify(existing.parameters ?? null) !== JSON.stringify(parameters)) throw new DomainError(409, "Idempotency key reused for different task");
       return existing;
     }
     const task = {
-      id: randomUUID(), requestKey: key, workerId, kind, status: kind === "workspace_inventory" ? "waiting_for_approval" : "queued",
+      id: randomUUID(), requestKey: key, workerId, kind, parameters,
+      status: ["workspace_inventory", "codex_cloud_submit"].includes(kind) ? "waiting_for_approval" : "queued",
       createdAt: this.clock(), updatedAt: this.clock(), result: null, error: null,
     };
     this.data.tasks[task.id] = task;
