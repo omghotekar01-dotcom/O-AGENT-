@@ -53,6 +53,10 @@ export class ProjectHub {
     const localCodexVerified = localCodexEnabled && Object.values(this.core.data.codexLocalSync).some(at => this.now() - at < 120000);
     const codexVerified = codexEnabled && Object.values(this.core.data.externalProjects).some(p => this.now() - p.syncedAt < 120000);
     const githubVerified = [...this.repoCache.values()].some(v => this.now() - v.at < 120000);
+    const ai = typeof this.ai?.status === "function" ? this.ai.status() : null;
+    const apiStatus = provider => ai?.provider !== provider || !ai?.configured
+      ? "requires_setup"
+      : ai.health === "connected" ? "connected" : "configured_unverified";
     return [
       {
         id: "oagent", label: "O-AGENT", status: "available",
@@ -76,9 +80,41 @@ export class ProjectHub {
         limitation: "Saved CLI/IDE threads support newly approved Codex turns and event updates, with controlled permission requests. This does not inject into an independent running CLI window or mirror ChatGPT browser screens.",
       },
       {
-        id: "chatgpt_work", label: "ChatGPT Work", status: "unsupported",
+        id: "gemini_api", label: "Google Gemini API", status: apiStatus("gemini"),
+        capabilities: ai?.provider === "gemini" && ai?.configured
+          ? ["send_prompt_in_oagent", "view_oagent_conversations", "improve_prompt"] : [],
+        limitation: "Uses O-AGENT-owned Gemini API conversations only. It cannot read existing consumer Gemini website sessions or browser screens. Requires Google AI Studio API key and quota.",
+      },
+      {
+        id: "claude_api", label: "Anthropic Claude API", status: apiStatus("anthropic"),
+        capabilities: ai?.provider === "anthropic" && ai?.configured
+          ? ["send_prompt_in_oagent", "view_oagent_conversations", "improve_prompt"] : [],
+        limitation: "Messages API for O-AGENT-owned conversations. Does not read arbitrary claude.ai chats or Claude Code IDE sessions.",
+      },
+      {
+        id: "copilot_sdk", label: "GitHub Copilot SDK", status: "requires_setup",
         capabilities: [],
-        limitation: "No verified third-party API to mirror existing Work chats, cloud browser screens, or in-product permissions.",
+        limitation: "A separate Copilot SDK runtime and authenticated session must be installed and tested. GitHub repository read access is not Copilot session access.",
+      },
+      {
+        id: "claude_code", label: "Claude Code / SDK", status: "requires_setup",
+        capabilities: [],
+        limitation: "Requires a signed-in, enrolled Claude Code/Agent SDK runtime and an explicit session permission bridge. Not currently reading existing sessions.",
+      },
+      {
+        id: "cursor", label: "Cursor", status: "requires_setup",
+        capabilities: [],
+        limitation: "Cursor has an official CLI with headless and session operations; O-AGENT does not yet own or control a Cursor CLI session or active IDE tab.",
+      },
+      {
+        id: "vscode", label: "VS Code", status: "requires_setup",
+        capabilities: [],
+        limitation: "The VS Code extension API can expose workspace state through an explicitly installed extension. No IDE extension or screen-control bridge is currently installed.",
+      },
+      {
+        id: "chatgpt_work", label: "ChatGPT Work / website", status: "unsupported",
+        capabilities: [],
+        limitation: "No verified third-party API to mirror arbitrary existing ChatGPT project chats, managed cloud browsers, or all in-product UI and approvals.",
       },
     ];
   }
