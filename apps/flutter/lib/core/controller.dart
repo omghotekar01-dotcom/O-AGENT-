@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import 'api_client.dart';
+import 'device_session.dart';
 import 'models.dart';
 
 /// Coordinates actual state from the backend; no prefilled records or demo mode.
 class ControlController extends ChangeNotifier with WidgetsBindingObserver {
   AgentApi? _api;
+  final SessionStore _sessionStore;
+  bool hasSavedSession = false;
+  bool restoringSession = false;
   Timer? _poller;
   int _generation = 0;
   bool _busyRefreshing = false;
@@ -33,11 +37,32 @@ class ControlController extends ChangeNotifier with WidgetsBindingObserver {
     return null;
   }
 
-  ControlController() {
+  ControlController({SessionStore? sessionStore})
+      : _sessionStore = sessionStore ?? const DeviceSessionStore() {
     WidgetsBinding.instance.addObserver(this);
   }
 
-  Future<bool> connect(String origin, String token) async {
+  /// Called when the app starts, and when the user taps Reconnect.
+  /// Never deletes a saved session just because the laptop is offline.
+  Future<bool> reconnectSavedSession() async {
+    if (connected || connecting || restoringSession) return false;
+    restoringSession = true;
+    notifyListeners();
+    try {
+      final saved = await _sessionStore.read();
+      hasSavedSession = saved != null;
+      if (saved == null) return false;
+      return await connect(saved.endpoint, saved.token, remember: true);
+    } catch (_) {
+      error = 'Unable to unlock saved device credentials. Sign in manually.';
+      return false;
+    } finally {
+      restoringSession = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> connect(String origin, String token, {bool remember = false}) async {
     if (connecting) return false;
     final generation = ++_generation;
     connecting = true;
@@ -59,6 +84,24 @@ class ControlController extends ChangeNotifier with WidgetsBindingObserver {
       events = const [];
       _cursor = 0;
       lastSuccessfulSync = DateTime.now();
+      if (remember) {
+        try {
+          await _sessionStore.save(SavedDeviceSession(
+            endpoint: pending.endpoint.toString(), token: token.trim()));
+          hasSavedSession = true;
+        } catch (_) {
+          // Connection still works, but no silent insecure fallback.
+          error = 'Connected, but this device could not securely remember your session.';
+          hasSavedSession = false;
+        }
+      } else {
+        try {
+          await _sessionStore.clear();
+        } catch (_) {
+          // No token is stored by us when remember=false.
+        }
+        hasSavedSession = false;
+      }
       _poller?.cancel();
       _poller = Timer.periodic(const Duration(seconds: 5), (_) => refresh());
       connecting = false;
@@ -155,6 +198,9 @@ class ControlController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void disconnect() {
+    // Explicit sign-out also clears optional device-protected credentials.
+    hasSavedSession = false;
+    unawaited(_sessionStore.clear().catchError((Object _) {}));
     _generation++;
     _poller?.cancel();
     _api?.close();
