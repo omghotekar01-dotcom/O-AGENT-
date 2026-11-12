@@ -295,7 +295,7 @@ class OverviewScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
-          SectionTitle(title: 'Quick actions', trailing: 'Actual backend operations'),
+          const SectionTitle(title: 'Quick actions', trailing: 'Actual backend operations'),
           const SizedBox(height: 10),
           OPanel(child: Column(children: [
             ActionLine(
