@@ -63,6 +63,7 @@ try {
     $env:OAGENT_AI_MODEL = $config.Model
     # GitHub public repository updates are readable without a token.
     $env:OAGENT_GITHUB_REPOS = if (($config.PSObject.Properties.Name -contains 'GitHubRepos' -and $config.GitHubRepos)) { $config.GitHubRepos } else { 'omghotekar01-dotcom/O-AGENT-' }
+    $env:OAGENT_ENABLE_CODEX_LOCAL_SYNC = if (($config.PSObject.Properties.Name -contains 'CodexLocalEnabled') -and $config.CodexLocalEnabled) { '1' } else { '0' }
     $env:OAGENT_ENABLE_CODEX_CLOUD_SYNC = if (($config.PSObject.Properties.Name -contains 'CodexEnabled' -and $config.CodexEnabled)) { '1' } else { '0' }
     Remove-Item Env:OAGENT_GITHUB_TOKEN -ErrorAction SilentlyContinue
     if (($config.PSObject.Properties.Name -contains 'GitHubTokenEncrypted') -and $config.GitHubTokenEncrypted) {
