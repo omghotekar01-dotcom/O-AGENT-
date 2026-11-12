@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ControlPlane } from "../apps/control-plane/src/core.mjs";
 import { ProjectHub } from "../apps/control-plane/src/project-hub.mjs";
-import { normalizeCodexTasks, readCodexCloudTasks } from "../apps/gateway/src/codex-cloud.mjs";
+import { normalizeCodexTasks, readCodexCloudTasks, submitCodexCloudTask } from "../apps/gateway/src/codex-cloud.mjs";
 
 function stubAi() {
   let call = 0;
@@ -106,4 +106,44 @@ test("Codex CLI JSON data is bounded and command has no user-supplied shell argu
     return { stdout: JSON.stringify({ tasks: [{ id: "codex-a", title: "Test" }] }) };
   });
   assert.equal(tasks[0].id, "codex-a");
+});
+
+test("new Codex Cloud requests cannot execute before human approval", () => {
+  const { core, hub } = makeHub({ OAGENT_ENABLE_CODEX_CLOUD_SYNC: "1" });
+  core.registerWorker({ id: "laptop", name: "My Windows device" });
+  const request = {
+    workerId: "laptop",
+    environmentId: "env-12345",
+    prompt: "Create a new website from my requirements.",
+  };
+  const task = hub.requestCodexTask(request, "codex-idempotency-key-123");
+  assert.equal(task.status, "waiting_for_approval");
+  assert.deepEqual(task.parameters, { environmentId: request.environmentId, prompt: request.prompt });
+  assert.equal(core.claim("laptop"), null);
+  assert.throws(() => hub.requestCodexTask({ ...request, prompt: "Modified prompt" }, "codex-idempotency-key-123"), /Idempotency/);
+  core.decide(task.id, true);
+  assert.equal(core.claim("laptop").id, task.id);
+  assert.equal(hub.requestCodexTask(request, "codex-idempotency-key-123").id, task.id);
+});
+test("Codex submission rejects unapproved/unavailable source and unsupported parameters", () => {
+  const { core, hub } = makeHub({ OAGENT_ENABLE_CODEX_CLOUD_SYNC: "0" });
+  core.registerWorker({ id: "laptop", name: "My Windows" });
+  assert.throws(() => hub.requestCodexTask({ workerId: "laptop", environmentId: "test-env", prompt: "Hi" },
+    "codex-request-123456"), /enabled/);
+  assert.throws(() => core.createTask({ workerId: "laptop", kind: "codex_cloud_submit",
+    environmentId: "bad env; cmd.exe", prompt: "do work" }, "codex-request-123456"), /Invalid Codex Cloud environmentId/);
+});
+test("the official Codex exec command is fixed, and user prompt is never composed as shell source", async () => {
+  const prompt = 'Create a good website. $(Remove-Item -Recurse)';
+  const result = await submitCodexCloudTask("environment-111", prompt, async (bin, args, options) => {
+    assert.ok(["codex", "powershell.exe"].includes(bin));
+    assert.equal(options.env.OAGENT_CODEX_TASK_PROMPT, prompt);
+    if (bin === "powershell.exe") assert.equal(args.join(" ").includes(prompt), false);
+    else assert.equal(args.at(-1), prompt);
+    assert.ok(options.timeout <= 120000);
+    assert.equal(options.env.OAGENT_API_TOKEN, undefined);
+    return { stdout: "Task URL https://chatgpt.com/codex" };
+  });
+  assert.equal(result.state, "submitted_to_provider");
+  assert.match(result.message, /Task URL/);
 });
