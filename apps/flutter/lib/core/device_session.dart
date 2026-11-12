@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Stores an explicitly opted-in development operator token using Android
@@ -18,30 +20,28 @@ class DeviceSessionStore implements SessionStore {
   const DeviceSessionStore();
 
   static const _storage = FlutterSecureStorage();
-  static const _urlKey = 'oagent.backend.origin.v1';
-  static const _tokenKey = 'oagent.operator.token.v1';
+  static const _sessionKey = 'oagent.session.v1';
 
   @override
   Future<SavedDeviceSession?> read() async {
-    final origin = await _storage.read(key: _urlKey);
-    final token = await _storage.read(key: _tokenKey);
-    if (origin == null || origin.isEmpty || token == null || token.isEmpty) {
-      return null;
-    }
-    return SavedDeviceSession(endpoint: origin, token: token);
+    final encoded = await _storage.read(key: _sessionKey);
+    if (encoded == null || encoded.isEmpty) return null;
+    final json = Map<String, dynamic>.from(jsonDecode(encoded) as Map);
+    final endpoint = json['endpoint']?.toString() ?? '';
+    final token = json['token']?.toString() ?? '';
+    if (endpoint.isEmpty || token.isEmpty) return null;
+    return SavedDeviceSession(endpoint: endpoint, token: token);
   }
 
   @override
   Future<void> save(SavedDeviceSession session) async {
-    // Write token first so incomplete writes cannot yield an old token tied
-    // to a new backend. Both fields are device-protected, not app preferences.
-    await _storage.write(key: _tokenKey, value: session.token);
-    await _storage.write(key: _urlKey, value: session.endpoint);
+    // A single encrypted value avoids partially updated origin/token pairs.
+    await _storage.write(
+      key: _sessionKey,
+      value: jsonEncode({'endpoint': session.endpoint, 'token': session.token}),
+    );
   }
 
   @override
-  Future<void> clear() async {
-    await _storage.delete(key: _urlKey);
-    await _storage.delete(key: _tokenKey);
-  }
+  Future<void> clear() => _storage.delete(key: _sessionKey);
 }
