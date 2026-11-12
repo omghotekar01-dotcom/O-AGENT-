@@ -59,12 +59,12 @@ jobs:
       - run: flutter build apk --debug --no-pub
       - name: Package complete Flutter source with native platform scaffolds
         run: |
-          mkdir -p dist
-          zip -qr dist/o-agent-flutter-source.zip . -x "build/*" ".dart_tool/*" "o-agent-ios-simulator.zip"
+          mkdir -p ../../dist
+          zip -qr ../../dist/o-agent-flutter-source.zip . -x "build/*" ".dart_tool/*" "o-agent-ios-simulator.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: o-agent-flutter-source-android-ios
-          path: apps/flutter/dist/o-agent-flutter-source.zip
+          path: dist/o-agent-flutter-source.zip
           retention-days: 30
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
