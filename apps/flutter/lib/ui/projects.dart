@@ -23,6 +23,7 @@ class _ProjectHubState extends State<ProjectHubScreen> {
   late Future<Map<String, dynamic>> future;
   Timer? timer;
   String filter = 'all';
+  String searchText = '';
   @override
   void initState() {
     super.initState();
@@ -76,7 +77,13 @@ class _ProjectHubState extends State<ProjectHubScreen> {
       final all = asItems(snap.data?['projects']);
       final sources = asItems(snap.data?['sources']);
       final errors = asItems(snap.data?['sourceErrors']);
-      final shown = all.where((p) => filter == 'all' || p['source'] == filter).toList();
+      final term = searchText.trim().toLowerCase();
+      final shown = all.where((p) {
+        if (filter != 'all' && p['source'] != filter) return false;
+        if (term.isEmpty) return true;
+        return [p['title'], p['cwd'], p['sourceRef'], p['description']]
+          .whereType<String>().any((value) => value.toLowerCase().contains(term));
+      }).toList();
       return RefreshIndicator(
         onRefresh: () async { _refresh(); try { await future; } catch (_) {} },
         child: ListView(padding: const EdgeInsets.fromLTRB(22, 16, 22, 36), children: [
@@ -130,6 +137,20 @@ class _ProjectHubState extends State<ProjectHubScreen> {
           const SizedBox(height: 19),
           Heading('Projects · ' + all.length.toString()),
           const SizedBox(height: 12),
+          TextField(
+            onChanged: (value) => setState(() => searchText = value),
+            decoration: InputDecoration(
+              hintText: 'Search projects and working folders',
+              prefixIcon: const Icon(Icons.search_rounded),
+              filled: true,
+              fillColor: Colors.white,
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: const BorderSide(color: OTheme.hairline)),
+            ),
+          ),
+          const SizedBox(height: 12),
           SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
             for (final tab in const [
               ('all', 'All'), ('oagent', 'O-AGENT'),
@@ -146,7 +167,7 @@ class _ProjectHubState extends State<ProjectHubScreen> {
             const InfoPanel(child: Column(children: [
               Icon(Icons.folder_open_rounded, color: OTheme.violet, size: 31),
               SizedBox(height: 12),
-              Text('No projects from this source', style: TextStyle(fontWeight: FontWeight.w700)),
+              Text('No matching projects', style: TextStyle(fontWeight: FontWeight.w700)),
               SizedBox(height: 5),
               Text('Create a project or enable an authorized source. O-AGENT never invents cloud activity.',
                 textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
