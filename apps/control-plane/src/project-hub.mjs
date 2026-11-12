@@ -92,22 +92,22 @@ export class ProjectHub {
         limitation: "Messages API for O-AGENT-owned conversations. Does not read arbitrary claude.ai chats or Claude Code IDE sessions.",
       },
       {
-        id: "copilot_sdk", label: "GitHub Copilot SDK", status: "requires_setup",
+        id: "copilot_sdk", label: "GitHub Copilot SDK", status: "not_implemented",
         capabilities: [],
         limitation: "A separate Copilot SDK runtime and authenticated session must be installed and tested. GitHub repository read access is not Copilot session access.",
       },
       {
-        id: "claude_code", label: "Claude Code / SDK", status: "requires_setup",
+        id: "claude_code", label: "Claude Code / SDK", status: "not_implemented",
         capabilities: [],
         limitation: "Requires a signed-in, enrolled Claude Code/Agent SDK runtime and an explicit session permission bridge. Not currently reading existing sessions.",
       },
       {
-        id: "cursor", label: "Cursor", status: "requires_setup",
+        id: "cursor", label: "Cursor", status: "not_implemented",
         capabilities: [],
         limitation: "Cursor has an official CLI with headless and session operations; O-AGENT does not yet own or control a Cursor CLI session or active IDE tab.",
       },
       {
-        id: "vscode", label: "VS Code", status: "requires_setup",
+        id: "vscode", label: "VS Code", status: "not_implemented",
         capabilities: [],
         limitation: "The VS Code extension API can expose workspace state through an explicitly installed extension. No IDE extension or screen-control bridge is currently installed.",
       },
