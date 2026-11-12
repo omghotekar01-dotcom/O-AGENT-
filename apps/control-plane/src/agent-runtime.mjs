@@ -84,9 +84,9 @@ export class AgentRuntime {
     core.data.agentThreads ??= {};
   }
 
-  get provider() { return this.env.OAGENT_AI_PROVIDER === "anthropic" ? "anthropic" : "openai"; }
-  get model() { return this.env.OAGENT_AI_MODEL || (this.provider === "openai" ? "gpt-5.6-terra" : "claude-sonnet-4-5"); }
-  get key() { return this.provider === "openai" ? this.env.OPENAI_API_KEY : this.env.ANTHROPIC_API_KEY; }
+  get provider() { return ["openai", "anthropic", "gemini"].includes(this.env.OAGENT_AI_PROVIDER) ? this.env.OAGENT_AI_PROVIDER : "openai"; }
+  get model() { return this.env.OAGENT_AI_MODEL || (this.provider === "openai" ? "gpt-5.6-terra" : this.provider === "anthropic" ? "claude-sonnet-4-5" : "gemini-2.5-flash"); }
+  get key() { return this.provider === "openai" ? this.env.OPENAI_API_KEY : this.provider === "anthropic" ? this.env.ANTHROPIC_API_KEY : this.env.GEMINI_API_KEY; }
 
   status() {
     return { configured: typeof this.key === "string" && this.key.length > 12, provider: this.provider, model: this.model,
@@ -154,7 +154,9 @@ export class AgentRuntime {
     ].join("\n");
     try {
       let proposed = "";
-      if (this.provider === "anthropic") {
+      if (this.provider === "gemini") {
+        proposed = await this.geminiText([{ role: "user", content: original }], instructions, 1200);
+      } else if (this.provider === "anthropic") {
         const response = await providerJson(this.fetchImpl, "https://api.anthropic.com/v1/messages",
           { "x-api-key": this.key, "anthropic-version": "2023-06-01" },
           { model: this.model, max_tokens: 1200, system: instructions, messages: [{ role: "user", content: original }] });
@@ -180,8 +182,30 @@ export class AgentRuntime {
   }
 
   async generate(messages, agent) {
+    if (this.provider === "gemini") return this.geminiText(messages, systemInstructions(agent), 1800);
     if (this.provider === "anthropic") return this.generateAnthropic(messages, agent);
     return this.generateOpenAI(messages, agent);
+  }
+  async geminiText(messages, instruction, maxOutputTokens) {
+    // Dedicated Google Gemini API account. This does not access personal
+    // Gemini web chats, and does not grant the model machine tools.
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,90}$/.test(this.model)) {
+      throw new DomainError(400, "Invalid Gemini model ID");
+    }
+    const contents = messages.map(m => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+    const data = await providerJson(this.fetchImpl,
+      "https://generativelanguage.googleapis.com/v1beta/models/" +
+        encodeURIComponent(this.model) + ":generateContent",
+      { "x-goog-api-key": this.key },
+      { systemInstruction: { parts: [{ text: instruction }] },
+        contents, generationConfig: { maxOutputTokens } });
+    const answer = (data.candidates?.[0]?.content?.parts ?? [])
+      .filter(p => typeof p.text === "string").map(p => p.text).join("\n").trim();
+    if (!answer) throw new DomainError(502, "Gemini returned no text or blocked this request");
+    return answer;
   }
   async generateOpenAI(messages, agent) {
     const tools = TOOL_DEFS.map(t => ({ type: "function", ...t, strict: true }));
