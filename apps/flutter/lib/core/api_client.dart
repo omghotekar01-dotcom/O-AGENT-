@@ -54,8 +54,9 @@ class AgentApi {
     String? idempotencyKey,
   }) async {
     try {
+      final timeout = path == "/api/ai/chat" ? const Duration(seconds: 85) : const Duration(seconds: 15);
       final url = endpoint.resolve(path);
-      final request = await _http.openUrl(method, url).timeout(const Duration(seconds: 15));
+      final request = await _http.openUrl(method, url).timeout(timeout);
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       if (idempotencyKey != null) request.headers.set('Idempotency-Key', idempotencyKey);
@@ -63,8 +64,8 @@ class AgentApi {
         request.headers.contentType = ContentType.json;
         request.write(jsonEncode(body));
       }
-      final response = await request.close().timeout(const Duration(seconds: 15));
-      final text = await utf8.decoder.bind(response).join().timeout(const Duration(seconds: 15));
+      final response = await request.close().timeout(timeout);
+      final text = await utf8.decoder.bind(response).join().timeout(timeout);
       Map<String, dynamic> data;
       try {
         data = Map<String, dynamic>.from(jsonDecode(text) as Map);
@@ -83,6 +84,28 @@ class AgentApi {
       throw ApiException('Network request failed: ${e.message}');
     }
   }
+
+  /// AI provider key stays on server; mobile only uses its operator token.
+  Future<Map<String, dynamic>> aiStatus() => _request('/api/ai/status');
+  Future<List<Map<String, dynamic>>> aiThreads() async {
+    final data = await _request('/api/ai/threads');
+    final raw = data['threads'];
+    if (raw is! List) throw const ApiException('Invalid conversation list');
+    return raw.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> aiThread(String id) =>
+      _request('/api/ai/threads/${Uri.encodeComponent(id)}');
+
+  Future<Map<String, dynamic>> aiChat({
+    required String agentId,
+    required String message,
+    String? threadId,
+  }) => _request('/api/ai/chat', method: 'POST', body: {
+        'agentId': agentId,
+        'message': message,
+        if (threadId != null) 'threadId': threadId,
+      });
 
   Future<ControlSnapshot> readState() async => ControlSnapshot.fromJson(await _request('/api/state'));
 
