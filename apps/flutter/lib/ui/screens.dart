@@ -446,7 +446,7 @@ class _TasksScreenState extends State<TasksScreen> {
               const Text('Submit an authorized task', style: TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
-                value: widget.controller.selectedMachine?.online == true ? widget.controller.selectedMachineId : null,
+                initialValue: widget.controller.selectedMachine?.online == true ? widget.controller.selectedMachineId : null,
                 hint: const Text('Select an online machine'),
                 isExpanded: true,
                 decoration: const InputDecoration(prefixIcon: Icon(Icons.computer_outlined)),
