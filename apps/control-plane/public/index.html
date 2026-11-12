@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#15141e">
+<title>O-AGENT | Control Plane</title>
+<link rel="stylesheet" href="/dashboard.css">
+<script type="module" src="/dashboard.js"></script>
+</head>
+<body>
+<header class="top"><div class="logo">✳ <span>O-AGENT</span></div><div class="subtitle">Real execution control plane · Development MVP</div></header>
+<main>
+<section class="intro"><p class="eyebrow">Agent operations</p><h1>Your command centre</h1><p>Monitor registered machines, submit authorized work, and review actual execution results. No demo counters.</p></section>
+<section class="panel" id="authPanel"><h2>Connect securely</h2><p>Enter the operator token configured on the backend. The token remains in this browser tab.</p><form id="authForm"><label>Operator token<input id="token" required type="password" autocomplete="off" placeholder="OAGENT_API_TOKEN"></label><button type="submit">Connect</button></form></section>
+<div id="workspace" hidden>
+<div class="stats"><article><small>Registered machines</small><strong id="machines">0</strong></article><article><small>Online machines</small><strong id="online">0</strong></article><article><small>Running tasks</small><strong id="running">0</strong></article><article><small>Needs approval</small><strong id="approvals">0</strong></article></div>
+<div class="layout">
+<section class="panel"><div class="heading"><h2>Machines</h2><button class="secondary" id="refresh" type="button">Refresh</button></div><div id="workerList" class="stack"></div><p class="hint">Machines must run the local gateway. An offline machine cannot execute tasks.</p></section>
+<section class="panel"><h2>New task</h2><form id="taskForm"><label>Execution machine<select id="workerSelect" required></select></label><label>Supported operation<select id="kind"><option value="system_info">Read system health</option><option value="workspace_inventory">Inspect workspace (approval required)</option></select></label><button type="submit">Submit task</button></form><p class="hint">No arbitrary shell access or destructive operations are enabled in this MVP.</p></section>
+</div>
+<section class="panel"><h2>Tasks and approvals</h2><div id="taskList" class="stack"></div></section>
+<section class="panel"><h2>Recent events</h2><div id="eventList" class="stack"></div></section>
+<button class="secondary" id="disconnect" type="button">Disconnect this tab</button>
+</div>
+<p id="notice" role="status" aria-live="polite"></p>
+</main>
+<footer>O-AGENT development MVP · Execution depends on a real connected worker.</footer>
+</body></html>
