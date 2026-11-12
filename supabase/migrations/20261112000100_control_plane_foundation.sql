@@ -133,7 +133,7 @@ create table public.agent_runs (
   finished_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete set null,
+  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete restrict,
   foreign key (agent_id, workspace_id) references public.agents(id, workspace_id) on delete cascade,
   foreign key (worker_device_id, workspace_id) references public.devices(id, workspace_id) on delete restrict,
   unique (workspace_id, idempotency_key),
@@ -188,7 +188,7 @@ create table public.agent_events (
   payload_redacted jsonb not null default '{}'::jsonb,
   occurred_at timestamptz not null,
   received_at timestamptz not null default now(),
-  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete set null,
+  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete restrict,
   foreign key (agent_id, workspace_id) references public.agents(id, workspace_id) on delete restrict,
   foreign key (run_id, workspace_id) references public.agent_runs(id, workspace_id) on delete cascade,
   unique (workspace_id, sequence)
@@ -225,8 +225,8 @@ create table public.artifacts (
   sensitivity text not null default 'internal' check (sensitivity in ('public', 'internal', 'confidential', 'restricted')),
   redaction_status text not null default 'pending' check (redaction_status in ('pending', 'complete', 'blocked')),
   created_at timestamptz not null default now(),
-  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete set null,
-  foreign key (run_id, workspace_id) references public.agent_runs(id, workspace_id) on delete set null,
+  foreign key (project_id, workspace_id) references public.projects(id, workspace_id) on delete restrict,
+  foreign key (run_id, workspace_id) references public.agent_runs(id, workspace_id) on delete restrict,
   unique (storage_bucket, storage_object_key)
 );
 
