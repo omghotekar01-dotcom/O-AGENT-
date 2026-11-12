@@ -1,0 +1,14 @@
+{
+  "name": "o-agent-hq",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node apps/control-plane/src/server.mjs",
+    "worker": "node apps/gateway/src/worker.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check apps/control-plane/src/core.mjs && node --check apps/control-plane/src/server.mjs && node --check apps/gateway/src/worker.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
