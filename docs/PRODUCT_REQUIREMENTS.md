@@ -20,8 +20,8 @@ From an Android phone, an authenticated operator should be able to enumerate enr
 | FR-07 | Human approvals | View exact action/target, approve or reject once | Partial; inventory approval, production canonical-action binding pending |
 | FR-08 | Background work | Continue work while phone is closed | Backend-worker lifecycle supports this when both processes stay online; no durable workflows yet |
 | FR-09 | Realtime feed | Ordered persisted event stream, gap replay | Partial; HTTP cursor feed and live SSE, no durable transactional outbox |
-| FR-10 | Chat | Agent-specific conversations, streaming and cancellation | Not implemented |
-| FR-11 | Provider adapters | Real OpenAI, Anthropic, Gemini, etc. using official APIs | Research/contracts only |
+| FR-10 | Chat | Agent-specific conversations, streaming and cancellation | Partial; persisted provider-backed text conversations, no streaming or cancellation |
+| FR-11 | Provider adapters | Real OpenAI, Anthropic, Gemini, etc. using official APIs | Partial; real OpenAI and Anthropic APIs supported, requires backend key; Gemini pending |
 | FR-12 | MCP integration | Registered tools with granular policy, auditing | Not implemented |
 | FR-13 | Workspace browser | Scoped files, real terminal and diffs as separate views | Partial; top-level metadata inventory only |
 | FR-14 | Screen sharing | Authenticated WebRTC screen transport and controlled input | Not implemented |
@@ -64,7 +64,7 @@ Visual direction from reference images: Android-first polished cards, light and 
 
 ## Implementation boundaries and phases
 
-**Implemented development slice:** Node control plane, events, two task capabilities, read-only laptop worker, web dashboard, native Android client, tests and runbook.
+**Implemented development slice:** Node control plane, events, two task capabilities, read-only laptop worker, web dashboard, native Android prototype, Flutter Android/iOS Studio, AI provider tool loop and saved conversations (requires a user's backend provider key), tests and runbook.
 
 **Next required work:** Supabase Auth and tenant-scoped database persistence, per-device gateway credentials, durable orchestration and recovery, real provider adapter, secure mobile session flow and deeper tests. After these, implement live workspace, WebRTC control, cloud workers, MCP, notifications and rollout hardening.
 
