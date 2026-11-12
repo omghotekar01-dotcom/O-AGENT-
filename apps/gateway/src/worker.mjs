@@ -2,6 +2,7 @@ import { hostname, platform, arch, cpus, totalmem, freemem, uptime } from "node:
 import { readdir, lstat, realpath } from "node:fs/promises";
 import { resolve, basename, join } from "node:path";
 import { readCodexCloudTasks, submitCodexCloudTask } from "./codex-cloud.mjs";
+import { readCodexLocalSessions } from "./codex-local.mjs";
 
 const endpoint = new URL(process.env.OAGENT_SERVER_URL || "http://127.0.0.1:8787");
 if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname))) {
@@ -50,9 +51,19 @@ async function execute(task) {
 async function main() {
   console.log(`O-AGENT worker ${id} starting; workspace root: ${root}`);
   let lastCodexSync = 0;
+  let lastLocalCodexSync = 0;
   await api("/api/workers/register", { id, name: hostname() });
   while (true) {
     try {
+      if (process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC === "1" && Date.now() - lastLocalCodexSync > 45000) {
+        lastLocalCodexSync = Date.now();
+        try {
+          const sessions = await readCodexLocalSessions();
+          await api(`/api/workers/${id}/codex/local/sync`, { sessions });
+        } catch {
+          console.error("Local Codex CLI sessions unavailable; check Codex app-server support and signed-in Windows user.");
+        }
+      }
       if (process.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC === "1" && Date.now() - lastCodexSync > 45000) {
         lastCodexSync = Date.now();
         try {
