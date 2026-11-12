@@ -37,7 +37,7 @@ This branch is the **foundation baseline**: researched architecture decisions, s
 - Local execution: signed Windows worker running in the interactive logged-in user session.
 - Observability: OpenTelemetry plus durable domain events and append-only audit records.
 
-See [Architecture decisions](docs/ARCHITECTURE_DECISIONS.md), [Security baseline](docs/SECURITY_BASELINE.md), [Realtime and audit contract](docs/REALTIME_AND_AUDIT.md), [provider contracts](packages/contracts/src/provider-capabilities.ts), and the full [implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md).
+See [Architecture decisions](docs/ARCHITECTURE_DECISIONS.md), [Security baseline](docs/SECURITY_BASELINE.md), [Realtime and audit contract](docs/REALTIME_AND_AUDIT.md), [provider capability matrix](docs/PROVIDER_CAPABILITY_MATRIX.md), [provider contracts](packages/contracts/src/provider-capabilities.ts), and the full [implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md).
 
 ## First release gates
 
