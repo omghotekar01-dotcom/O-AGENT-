@@ -214,6 +214,27 @@ export class ProjectHub {
     this.core.commit("project.message.completed", { projectId: id, threadId: thread.id });
     return { project: this.localView(project), thread };
   }
+  requestLocalCodexTurn(body, requestKey) {
+    if (this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1") throw new DomainError(403, "Codex CLI connector disabled");
+    const projectId = safeTitle(body?.projectId, "Codex project ID", 160);
+    const sessionId = safeTitle(body?.sessionId, "Codex session ID", 120);
+    const project = this.core.data.codexLocalProjects[projectId];
+    if (!project) throw new DomainError(404, "Codex workspace not found; refresh real CLI history");
+    if (this.now() - project.syncedAt >= 120000) throw new DomainError(409, "Codex workspace sync is stale; refresh the CLI worker");
+    if (!project.sessions.some(session => session.id === sessionId)) throw new DomainError(404, "Session does not belong to selected workspace");
+    const worker = this.core.snapshot().workers.find(w => w.id === project.workerId);
+    if (!worker || worker.status !== "online") throw new DomainError(409, "Codex CLI laptop worker is offline");
+    const existing = Object.values(this.core.data.tasks).find(t =>
+      t.kind === "codex_cli_turn" && t.parameters?.sessionId === sessionId &&
+      !["completed","failed","rejected","cancelled","interrupted"].includes(t.status));
+    if (existing && existing.requestKey !== requestKey) throw new DomainError(409, "A Codex turn is already active or awaiting approval for this session");
+    return this.core.createTask({
+      workerId: project.workerId, kind: "codex_cli_turn",
+      projectId, sessionId, cwd: project.cwd,
+      prompt: body.prompt, mode: body.mode || "read_only",
+    }, requestKey);
+  }
+
   requestCodexTask(body, requestKey) {
     if (this.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC !== "1") {
       throw new DomainError(403, "Codex Cloud connector must be enabled explicitly");
