@@ -54,7 +54,7 @@ class AgentApi {
     String? idempotencyKey,
   }) async {
     try {
-      final timeout = path == "/api/ai/chat" ? const Duration(seconds: 85) : const Duration(seconds: 15);
+      final timeout = path == "/api/ai/chat" || path.endsWith("/messages") ? const Duration(seconds: 85) : const Duration(seconds: 15);
       final url = endpoint.resolve(path);
       final request = await _http.openUrl(method, url).timeout(timeout);
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
@@ -84,6 +84,24 @@ class AgentApi {
       throw ApiException('Network request failed: ${e.message}');
     }
   }
+
+  /// Unified project feed: real GitHub/Codex metadata and locally owned projects.
+  Future<Map<String, dynamic>> projects() => _request('/api/projects');
+
+  Future<Map<String, dynamic>> project(String id) =>
+      _request('/api/projects/${Uri.encodeComponent(id)}');
+
+  Future<Map<String, dynamic>> createProject(String title, String description) =>
+      _request('/api/projects', method: 'POST', body: {
+        'title': title, 'description': description,
+      });
+
+  /// Only O-AGENT-owned projects support this endpoint. Other providers
+  /// expose read-only capabilities unless a documented write adapter exists.
+  Future<Map<String, dynamic>> promptProject(String id, String message,
+      {String agentId = 'navigator'}) =>
+      _request('/api/projects/${Uri.encodeComponent(id)}/messages',
+        method: 'POST', body: {'agentId': agentId, 'message': message});
 
   /// AI provider key stays on server; mobile only uses its operator token.
   Future<Map<String, dynamic>> aiStatus() => _request('/api/ai/status');
