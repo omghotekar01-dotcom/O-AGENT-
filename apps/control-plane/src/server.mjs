@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { timingSafeEqual } from "node:crypto";
 import { ControlPlane, DomainError } from "./core.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
+import { ProjectHub } from "./project-hub.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
 const workerToken = process.env.OAGENT_WORKER_TOKEN ?? "";
@@ -25,6 +26,7 @@ function persist(data) {
 const initial = existsSync(dbPath) ? JSON.parse(readFileSync(dbPath, "utf8")) : {};
 const core = new ControlPlane(initial, persist);
 const agentRuntime = new AgentRuntime(core);
+const projectHub = new ProjectHub(core, agentRuntime);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
   res.writeHead(code, JSON_HEADERS);
@@ -73,6 +75,25 @@ const server = createServer(async (req, res) => {
     const isWorkerRoute = path.startsWith("/api/workers/");
     if (!authorized(req, isWorkerRoute ? workerToken : apiToken)) throw new DomainError(401, "Invalid authorization token");
 
+    // Unified, capability-aware project registry: no simulated external work.
+    if (req.method === "GET" && path === "/api/projects") {
+      return send(res, 200, await projectHub.list());
+    }
+    if (req.method === "GET" && path === "/api/integrations") {
+      return send(res, 200, { sources: projectHub.sources() });
+    }
+    if (req.method === "POST" && path === "/api/projects") {
+      return send(res, 201, projectHub.create(await readJson(req)));
+    }
+    const projectRoute = path.match(/^\/api\/projects\/([^/]+)$/);
+    if (req.method === "GET" && projectRoute) {
+      return send(res, 200, await projectHub.details(decodeURIComponent(projectRoute[1])));
+    }
+    const projectMessage = path.match(/^\/api\/projects\/([^/]+)\/messages$/);
+    if (req.method === "POST" && projectMessage) {
+      return send(res, 200, await projectHub.send(decodeURIComponent(projectMessage[1]), await readJson(req)));
+    }
+
     if (req.method === "GET" && path === "/api/ai/status") return send(res, 200, agentRuntime.status());
     if (req.method === "GET" && path === "/api/ai/threads") return send(res, 200, { threads: agentRuntime.threads() });
     const threadPath = path.match(/^\/api\/ai\/threads\/([0-9a-f-]+)$/);
@@ -109,6 +130,11 @@ const server = createServer(async (req, res) => {
     }
     const cancel = path.match(/^\/api\/tasks\/([0-9a-f-]+)\/cancel$/);
     if (req.method === "POST" && cancel) return send(res, 200, core.cancel(cancel[1]));
+
+    const codexSync = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/codex\/sync$/);
+    if (req.method === "POST" && codexSync) {
+      return send(res, 200, projectHub.publishCodex(codexSync[1], await readJson(req)));
+    }
 
     if (req.method === "POST" && path === "/api/workers/register") {
       return send(res, 201, core.registerWorker(await readJson(req)));
