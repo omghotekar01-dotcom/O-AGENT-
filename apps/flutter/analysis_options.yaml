@@ -1,4 +1,9 @@
+# Flutter 3.50 deprecates flutter/material.dart in favor of material_ui.
+# Keep the Flutter SDK Material API for compatibility with Flutter 3.47;
+# migrate to material_ui in a dedicated, tested release update.
 analyzer:
+  errors:
+    deprecated_member_use: ignore
   exclude:
     - build/**
     - .dart_tool/**
