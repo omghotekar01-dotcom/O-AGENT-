@@ -34,6 +34,10 @@ The audited foundation branch contains:
 
 The November 2026 follow-up adds the capability-aware **ProjectHub** service, real configured GitHub Actions/PR records, optional official Codex Cloud task snapshots, an approval-gated NEW Codex Cloud task submission capability, preview-only prompt enhancement, project-first Flutter UI and private Tailscale Serve access. The external connected-provider experience is **partial**. Existing ChatGPT Work chats, live managed browser control, document attachments and always-on hosted backend are **not** implemented. See [the clarified product contract](UNIFIED_AI_WORKSPACES.md) and [remote access](REMOTE_ACCESS.md).
 
+## Codex local workspace discovery (new)
+
+The second owner clarification prioritizes **Codex CLI/IDE sessions actually being worked on**, rather than GitHub repo lists or empty Codex Cloud task lists. The optional `codex app-server` JSON-RPC scanner runs on the Windows gateway, reads current account session metadata, groups sessions by `cwd` and shows real project history on Android. Explicit opt-in is separate from Codex Cloud sync. No independent live-session takeover, ChatGPT Work managed browsing, full history or phone-input routing has been implemented. See [Codex CLI workspace setup](CODEX_LOCAL_WORKSPACES.md).
+
 ## Decisions to preserve
 
 1. Treat OMIO-owned agents, provider-managed sessions and workspace workers as different runtime types.
