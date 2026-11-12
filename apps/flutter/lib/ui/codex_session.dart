@@ -66,6 +66,7 @@ class _CodexSessionState extends State<CodexSessionScreen> {
       'Folder: ' + widget.cwd +
       '\n\nMode: ' + mode +
       '\n\nA separate approval is required before execution.' +
+      '\n\nRead-only prevents file edits, but Codex may read other files accessible to your Windows account. Project edits permits writing inside the chosen workspace. Network access is disabled by the sandbox.' +
       '\n\nExact prompt:\n' + value, 'Create approval request');
     if (!yes || !mounted) return;
     setState(() => busy = true);
@@ -232,6 +233,8 @@ class _CodexSessionState extends State<CodexSessionScreen> {
               ChoiceChip(label: const Text('Project edits'), selected: mode == 'workspace_write',
                 onSelected: active ? null : (_) => setState(() => mode = 'workspace_write')),
             ]),
+            const Text('Read-only blocks changes, not all reads outside this folder.',
+              style: TextStyle(fontSize: 10, color: Colors.grey)),
             const SizedBox(height: 8),
             Row(children: [
               Expanded(child: TextField(controller: composer, maxLength: 4000,
