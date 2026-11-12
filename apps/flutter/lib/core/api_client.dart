@@ -54,7 +54,7 @@ class AgentApi {
     String? idempotencyKey,
   }) async {
     try {
-      final timeout = path == "/api/ai/chat" || path.endsWith("/messages") ? const Duration(seconds: 85) : const Duration(seconds: 15);
+      final timeout = path == "/api/ai/chat" || path == "/api/ai/refine" || path.endsWith("/messages") ? const Duration(seconds: 85) : const Duration(seconds: 15);
       final url = endpoint.resolve(path);
       final request = await _http.openUrl(method, url).timeout(timeout);
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
@@ -83,6 +83,18 @@ class AgentApi {
     } on HttpException catch (e) {
       throw ApiException('Network request failed: ${e.message}');
     }
+  }
+
+  /// Only returns a proposed prompt. Never dispatches a task or uses tools.
+  Future<String> refinePrompt(String message, {String target = 'generic'}) async {
+    final result = await _request('/api/ai/refine', method: 'POST', body: {
+      'message': message, 'target': target,
+    });
+    final proposed = result['proposed'];
+    if (proposed is! String || proposed.isEmpty) {
+      throw const ApiException('AI returned no proposed prompt');
+    }
+    return proposed;
   }
 
   /// Requests a NEW Codex Cloud task via a connected laptop CLI.
