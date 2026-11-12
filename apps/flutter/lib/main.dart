@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'core/controller.dart';
 import 'theme.dart';
-import 'ui/screens.dart';
+import 'ui/studio.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +29,7 @@ class _OAgentAppState extends State<OAgentApp> {
   Widget build(BuildContext context) => MaterialApp(
         title: 'O-AGENT',
         debugShowCheckedModeBanner: false,
-        theme: OTheme.dark(),
-        home: AgentShell(controller: controller),
+        theme: OTheme.studio(),
+        home: StudioShell(controller: controller),
       );
 }
