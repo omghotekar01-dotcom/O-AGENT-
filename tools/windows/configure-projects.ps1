@@ -42,9 +42,26 @@ Write-Host 'Codex Cloud can report YOUR task metadata via the official CLI if yo
 Write-Host 'It does NOT mirror ChatGPT Work chats or browser screens. Sync sends task titles/status/URLs to your O-AGENT backend.'
 $enabled = Read-Host 'Opt in to Codex Cloud task sync? [y/N]'
 $config | Add-Member -NotePropertyName 'CodexEnabled' -NotePropertyValue ($enabled -match '^[yY]') -Force
+
+Write-Host ''
+Write-Host 'IMPORTANT: Codex CLI / IDE project history is different from Codex Cloud tasks.' -ForegroundColor Cyan
+Write-Host 'It lists saved Codex CLI and IDE sessions on THIS Windows account, grouped by project folder.'
+Write-Host 'This sends working-directory names and short session previews to your private local O-AGENT backend.'
+Write-Host 'Your full transcript, credentials and auth files are NOT uploaded by this connector.'
+$localDefault = 'N'
+if (($config.PSObject.Properties.Name -contains 'CodexLocalEnabled') -and $config.CodexLocalEnabled) { $localDefault = 'Y' }
+$local = Read-Host "Sync MY local Codex CLI / IDE projects? [y/N] (previous: $localDefault)"
+if ([string]::IsNullOrWhiteSpace($local)) {
+  $localEnabled = $localDefault -eq 'Y'
+} else {
+  $localEnabled = $local -match '^[yY]'
+}
+$config | Add-Member -NotePropertyName 'CodexLocalEnabled' -NotePropertyValue $localEnabled -Force
 Save-OAgentConfig $config
 
 Write-Host ''
 Write-Host 'Saved new integration settings. Restart O-AGENT to activate.' -ForegroundColor Green
 Write-Host 'To authorize Codex CLI once, run: codex login'
 Write-Host 'To inspect available Codex tasks: codex cloud list --json --limit 20'
+
+Write-Host 'Codex CLI / IDE sessions will appear on the phone after the next successful worker sync, even if Codex Cloud tasks are empty.' -ForegroundColor Cyan
