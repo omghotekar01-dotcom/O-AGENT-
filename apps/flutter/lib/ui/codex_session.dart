@@ -155,7 +155,7 @@ class _CodexSessionState extends State<CodexSessionScreen> {
               color: OTheme.violet, fontSize: 10, letterSpacing: 1,
               fontWeight: FontWeight.w700)),
             const SizedBox(height: 9),
-            Text(widget.sessionTitle.replaceAll(RegExp(r'\\s+'), ' ').trim(),
+            Text(widget.sessionTitle.replaceAll(RegExp(r'\s+'), ' ').trim(),
               maxLines: 3, overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
                 color: OTheme.ink, height: 1.4)),
