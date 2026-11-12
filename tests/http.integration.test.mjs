@@ -23,7 +23,7 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
   const port = await unusedPort();
   const directory = mkdtempSync(join(tmpdir(), "oagent-test-"));
   const child = spawn(process.execPath, [resolve("apps/control-plane/src/server.mjs")], {
-    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), OAGENT_API_TOKEN: apiToken, OAGENT_WORKER_TOKEN: workerToken, OAGENT_DATA_FILE: join(directory, "state.json"), OAGENT_GITHUB_REPOS: "", OAGENT_ENABLE_CODEX_CLOUD_SYNC: "1" },
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), OAGENT_API_TOKEN: apiToken, OAGENT_WORKER_TOKEN: workerToken, OAGENT_DATA_FILE: join(directory, "state.json"), OAGENT_GITHUB_REPOS: "", OAGENT_ENABLE_CODEX_CLOUD_SYNC: "1", OAGENT_ENABLE_CODEX_LOCAL_SYNC: "1" },
     stdio: "ignore",
   });
   const url = `http://127.0.0.1:${port}`;
@@ -68,6 +68,24 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     const registered = await call("/api/workers/register", workerToken, "POST", { id: "ci-worker", name: "CI worker" });
     assert.equal(registered.status, 201);
     assert.equal(registered.payload.name, "CI worker");
+    const localSessions = { sessions: [
+      { id: "11111111-2222-4333-8444-555555555555",
+        cwd: "C:\\Users\\ASUS\\O-AGENT-", title: "Work on project",
+        state: "notLoaded", updatedAt: "2026-11-12T15:00:00Z" },
+    ] };
+    assert.equal((await call("/api/workers/ci-worker/codex/local/sync",
+      apiToken, "POST", localSessions)).status, 401);
+    const localSync = await call("/api/workers/ci-worker/codex/local/sync",
+      workerToken, "POST", localSessions);
+    assert.equal(localSync.status, 200);
+    assert.equal(localSync.payload.projectCount, 1);
+    const localFeed = await call("/api/projects", apiToken);
+    const workspace = localFeed.payload.projects.find(p => p.source === "codex_cli");
+    assert.equal(workspace.title, "O-AGENT-");
+    assert.equal(workspace.state, "history_available");
+    assert.equal((await call("/api/projects/" + workspace.id, apiToken)).payload.project.sessions[0].title,
+      "Work on project");
+
     const codexData = { tasks: [{ id: "abcd-1234", title: "Real external task metadata",
       status: "in_progress", url: "https://chatgpt.com/codex/tasks/abcd-1234" }] };
     assert.equal((await call("/api/workers/ci-worker/codex/sync", apiToken, "POST", codexData)).status, 401);
