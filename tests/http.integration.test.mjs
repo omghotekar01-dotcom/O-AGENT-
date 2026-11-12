@@ -23,7 +23,7 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
   const port = await unusedPort();
   const directory = mkdtempSync(join(tmpdir(), "oagent-test-"));
   const child = spawn(process.execPath, [resolve("apps/control-plane/src/server.mjs")], {
-    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), OAGENT_API_TOKEN: apiToken, OAGENT_WORKER_TOKEN: workerToken, OAGENT_DATA_FILE: join(directory, "state.json") },
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), OAGENT_API_TOKEN: apiToken, OAGENT_WORKER_TOKEN: workerToken, OAGENT_DATA_FILE: join(directory, "state.json"), OAGENT_GITHUB_REPOS: "", OAGENT_ENABLE_CODEX_CLOUD_SYNC: "1" },
     stdio: "ignore",
   });
   const url = `http://127.0.0.1:${port}`;
@@ -52,9 +52,30 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal(unconfiguredChat.status, 503);
     assert.match(unconfiguredChat.payload.error, /not configured/i);
 
+    assert.equal((await call("/api/projects", "wrong")).status, 401);
+    const initialHub = await call("/api/projects", apiToken);
+    assert.equal(initialHub.status, 200);
+    assert.equal(initialHub.payload.projects.length, 0);
+    const owned = await call("/api/projects", apiToken, "POST", { title: "My genuine project", description: "Acceptance test" });
+    assert.equal(owned.status, 201);
+    assert.equal(owned.payload.source, "oagent");
+    assert.equal((await call("/api/projects/" + owned.payload.id, apiToken)).payload.project.title, "My genuine project");
+    assert.equal((await call("/api/projects/" + owned.payload.id + "/messages", apiToken, "POST",
+      { agentId: "navigator", message: "Hello" })).status, 503);
+    assert.equal((await call("/api/projects/github%3Aunknown%2Frepo", apiToken)).status, 404);
+    assert.equal((await call("/api/integrations", apiToken)).payload.sources.some(s => s.id === "chatgpt_work" && s.status === "unsupported"), true);
+
     const registered = await call("/api/workers/register", workerToken, "POST", { id: "ci-worker", name: "CI worker" });
     assert.equal(registered.status, 201);
     assert.equal(registered.payload.name, "CI worker");
+    const codexData = { tasks: [{ id: "abcd-1234", title: "Real external task metadata",
+      status: "in_progress", url: "https://chatgpt.com/codex/tasks/abcd-1234" }] };
+    assert.equal((await call("/api/workers/ci-worker/codex/sync", apiToken, "POST", codexData)).status, 401);
+    const synced = await call("/api/workers/ci-worker/codex/sync", workerToken, "POST", codexData);
+    assert.equal(synced.status, 200);
+    assert.equal(synced.payload.accepted, 1);
+    const fullHub = await call("/api/projects", apiToken);
+    assert.ok(fullHub.payload.projects.some(p => p.source === "codex_cloud" && p.state === "in_progress"));
     const initial = await call("/api/state", apiToken);
     assert.equal(initial.payload.workers[0].status, "online");
     const task = await call("/api/tasks", apiToken, "POST", { workerId: "ci-worker", kind: "system_info" }, "http-test-task-0001");
