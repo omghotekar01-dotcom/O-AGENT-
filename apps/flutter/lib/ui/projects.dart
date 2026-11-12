@@ -229,6 +229,56 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
       if (mounted) setState(() => sending = false);
     }
   }
+  Future<void> _requestCodexTask(Map<String, dynamic> project) async {
+    final workers = widget.controller.snapshot?.machines.where((m) => m.online).toList() ?? [];
+    final id = project['workerId']?.toString();
+    if (id == null || !workers.any((m) => m.id == id)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('The Codex laptop connector is offline. Start O-AGENT on the laptop.')));
+      return;
+    }
+    final environment = TextEditingController(text: project['environmentId']?.toString() ?? '');
+    final content = TextEditingController();
+    final request = await showDialog<Map<String, String>>(context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Codex Cloud task'),
+        content: SingleChildScrollView(child: Column(
+          mainAxisSize: MainAxisSize.min, children: [
+            const Text('This creates a NEW task, not a reply to an existing Codex session. You will review and approve the full prompt afterward.',
+              style: TextStyle(fontSize: 12, color: muted)),
+            const SizedBox(height: 12),
+            TextField(controller: environment, maxLength: 120,
+              decoration: const InputDecoration(labelText: 'Cloud environment ID')),
+            const SizedBox(height: 9),
+            TextField(controller: content, maxLength: 2000, maxLines: 5, minLines: 2,
+              decoration: const InputDecoration(labelText: 'New task prompt')),
+          ],
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () {
+            if (environment.text.trim().isEmpty || content.text.trim().isEmpty) return;
+            Navigator.pop(ctx, {
+              'environmentId': environment.text.trim(), 'prompt': content.text.trim(),
+            });
+          }, child: const Text('Request approval')),
+        ],
+      ),
+    );
+    environment.dispose();
+    content.dispose();
+    if (request == null || !mounted) return;
+    try {
+      await widget.controller.client!.requestCodexTask(
+        workerId: id, environmentId: request['environmentId']!,
+        prompt: request['prompt']!);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Created approval request. Return to Approvals to authorize the exact task.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   Future<void> _openUrl(Object? raw) async {
     final url = Uri.tryParse(raw?.toString() ?? '');
     if (url == null || url.scheme != 'https' ||
@@ -283,8 +333,16 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
                 ? null : () => _openUrl(project['url']),
                 icon: const Icon(Icons.open_in_new), label: const Text('Open provider page')),
               const SizedBox(height: 10),
-              const Text('External status is read-only. Direct chat, browser viewing and provider approvals are unavailable for this connector.',
-                style: TextStyle(fontSize: 12, color: muted, height: 1.5)),
+              Text(source == 'codex_cloud'
+                ? 'Existing cloud tasks are read-only. A NEW Codex task can be submitted through your signed-in laptop after explicit approval.'
+                : 'This external source is read-only; browser viewing and provider approvals are not exposed.',
+                style: const TextStyle(fontSize: 12, color: muted, height: 1.5)),
+              if (source == 'codex_cloud') ...[
+                const SizedBox(height: 13),
+                FilledButton.icon(onPressed: () => _requestCodexTask(project),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Request new Codex Cloud task')),
+              ],
             ],
             if (runs.isNotEmpty) ...[
               const SizedBox(height: 24), const Heading('Workflow runs'),
