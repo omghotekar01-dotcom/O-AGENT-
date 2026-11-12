@@ -54,7 +54,7 @@ class AgentApi {
     String? idempotencyKey,
   }) async {
     try {
-      final url = endpoint.replace(path: path, query: null, fragment: null);
+      final url = endpoint.resolve(path);
       final request = await _http.openUrl(method, url).timeout(const Duration(seconds: 15));
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
       request.headers.set(HttpHeaders.acceptHeader, 'application/json');
