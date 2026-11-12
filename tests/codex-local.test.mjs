@@ -114,3 +114,19 @@ test("Official Codex JSON-RPC handshake reads local threads without requesting p
   assert.equal(requests[2].params.currentAccountOnly, true);
   assert.equal(requests[2].params.sortKey, "updated_at");
 });
+
+test("opting out drops stored working paths and session previews from persisted backend", async () => {
+  let persisted = null;
+  const core = new ControlPlane({}, data => { persisted = JSON.parse(JSON.stringify(data)); });
+  core.registerWorker({ id: "laptop", name: "OM-V16" });
+  const on = new ProjectHub(core, {}, { env: { OAGENT_ENABLE_CODEX_LOCAL_SYNC: "1" } });
+  on.publishCodexLocal("laptop", { sessions: normalizeCodexLocalSessions({
+    data: [thread("11111111-2222-4333-8444-555555555555",
+      "C:\\Private\\Work", "Private session preview")],
+  }) });
+  assert.match(JSON.stringify(core.data.codexLocalProjects), /Private session preview/);
+  const off = new ProjectHub(core, {}, { env: {} });
+  assert.equal((await off.list()).projects.length, 0);
+  assert.equal(Object.keys(persisted.codexLocalProjects).length, 0);
+  assert.equal(Object.keys(persisted.codexLocalSync).length, 0);
+});
