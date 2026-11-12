@@ -141,3 +141,5 @@ Write-Host 'Setup saved securely for this Windows user.' -ForegroundColor Green
 Write-Host "Settings: $path"
 Write-Host "Workspace: $workspace"
 Write-Host 'Next time, just double-click O-AGENT on your desktop.'
+Write-Host 'If any new tokens were generated, copy the OPERATOR token securely for your phone before continuing.' -ForegroundColor Yellow
+[void](Read-Host 'Press Enter when you are ready to start O-AGENT')
