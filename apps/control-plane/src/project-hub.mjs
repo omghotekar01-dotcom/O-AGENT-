@@ -185,6 +185,23 @@ export class ProjectHub {
     this.core.commit("project.message.completed", { projectId: id, threadId: thread.id });
     return { project: this.localView(project), thread };
   }
+  requestCodexTask(body, requestKey) {
+    if (this.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC !== "1") {
+      throw new DomainError(403, "Codex Cloud connector must be enabled explicitly");
+    }
+    const workerId = safeTitle(body?.workerId, "workerId", 100);
+    const worker = this.core.snapshot().workers.find(w => w.id === workerId);
+    if (!worker || worker.status !== "online") throw new DomainError(409, "Codex CLI laptop worker must be online");
+    // This is a NEW Codex Cloud task, not a follow-up to an existing session.
+    // The operator must explicitly approve its exact environment and prompt.
+    return this.core.createTask({
+      workerId,
+      kind: "codex_cloud_submit",
+      environmentId: body?.environmentId,
+      prompt: body?.prompt,
+    }, requestKey);
+  }
+
   // Codex metadata is accepted only from the authenticated worker route.
   publishCodex(workerId, body) {
     if (this.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC !== "1") {
