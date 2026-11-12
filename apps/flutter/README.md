@@ -4,6 +4,12 @@
 
 This application is a runnable Flutter client, not a simulated agent dashboard. Its data comes from the Node control plane and outbound laptop gateway already maintained in this repository. It does **not** implement every future feature in `docs/PRODUCT_REQUIREMENTS.md`.
 
+## Unified Projects tab and honest external-provider controls
+
+The app now opens **Projects**, showing actual provider sources and their capabilities. GitHub projects expose actual recent Actions workflow runs/PRs. Opt-in Codex Cloud reports task metadata from the user-authenticated Codex CLI and can create a **NEW** cloud task through an explicit backend human approval. Existing provider chat/session control and live cloud browser frames are not claimed. O-AGENT-owned projects have normal provider-backed chats.
+
+For remote Android use without USB, configure [private Tailscale HTTPS](../../docs/REMOTE_ACCESS.md); enter its https://...ts.net origin instead of Android loopback. For opt-in project-source settings, see [project connectors](../../docs/PROJECT_CONNECTORS.md). Prompt improvement requires the separately funded backend AI API; the app never stores model-provider keys.
+
 ## New: O-AGENT Studio and real AI-backed conversations
 
 The new default Flutter experience is **O-AGENT Studio**, a lighter, editorial UI with five sections: **Home, Agents, Chat, Activity, Approvals**. Three server-defined agent profiles (Navigator, Researcher and Operator) use a real, configurable OpenAI or Anthropic provider and backend tool registry.
