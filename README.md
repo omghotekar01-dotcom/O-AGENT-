@@ -1,3 +1,16 @@
+## Unified projects and private remote access (new)
+
+O-AGENT now prioritizes **existing provider projects and work** rather than a generic chatbot dashboard. The mobile **Projects** tab shows actual GitHub Actions runs and pull requests, opt-in Codex Cloud tasks from your authenticated laptop Codex CLI, and O-AGENT-owned projects/conversations. It never fabricates external sessions or claims access to the managed ChatGPT Work browser.
+
+**New supervised action:** request a **NEW Codex Cloud task** from the mobile app, optionally improve the prompt with your configured AI model, then approve the exact destination and prompt in Approvals. This uses the official Codex CLI and only works with an installed/signed-in CLI and explicitly enabled worker. It does not write into a pre-existing Codex/ChatGPT Work conversation.
+
+**No USB needed:** [private HTTPS with Tailscale Serve](docs/REMOTE_ACCESS.md). The laptop must stay online for the current local backend. A fully hosted cloud backend, production login, live browser streaming, arbitrary provider session control and attachments are not yet implemented.
+
+- [Master capability and roadmap document](docs/UNIFIED_AI_WORKSPACES.md)
+- [Private remote access setup](docs/REMOTE_ACCESS.md)
+- [Connect project sources on Windows](docs/PROJECT_CONNECTORS.md)
+- [AI provider setup](docs/AI_SETUP.md)
+
 ## One-click Windows startup (recommended)
 
 If you use Windows, **[follow the 1-time setup guide](docs/ONE_CLICK_WINDOWS.md)** and double-click `O-AGENT.cmd` in this repository. The launcher stores tokens under your Windows account using DPAPI, starts the real Node backend and laptop gateway, checks that your machine is online, establishes the USB ADB bridge when available and opens the local dashboard. Subsequent runs require just one double-click. To stop, use `STOP-O-AGENT.cmd`.
