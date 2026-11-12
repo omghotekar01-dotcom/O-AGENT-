@@ -4,6 +4,14 @@
 
 This application is a runnable Flutter client, not a simulated agent dashboard. Its data comes from the Node control plane and outbound laptop gateway already maintained in this repository. It does **not** implement every future feature in `docs/PRODUCT_REQUIREMENTS.md`.
 
+## New: O-AGENT Studio and real AI-backed conversations
+
+The new default Flutter experience is **O-AGENT Studio**, a lighter, editorial UI with five sections: **Home, Agents, Chat, Activity, Approvals**. Three server-defined agent profiles (Navigator, Researcher and Operator) use a real, configurable OpenAI or Anthropic provider and backend tool registry.
+
+**Important:** The app cannot produce AI responses until you configure an external API key *on the backend*. There is no API key field in Flutter, no demo-chat fallback, and no unsupported shell access. For a hands-on Windows + Android guide see [AI setup and testing](../../docs/AI_SETUP.md).
+
+Chat threads, user messages and assistant replies persist in the backend's local JSON development store. AI can report real machine states and queue supported read-only operations, while workspace inventories still need explicit approval. Production account login, live computer control, provider OAuth, MCP, multi-agent scheduling and push notifications remain future work.
+
 ## What you can test
 
 - Connect to your own backend using a **development operator token**.
@@ -15,7 +23,7 @@ This application is a runnable Flutter client, not a simulated agent dashboard. 
 - Refresh on demand, automatically every five seconds, and when the app resumes.
 - Disconnect and remove the token from application memory.
 
-Unsupported features are not hidden behind fake UI: AI chat, remote shell commands, live screen sharing, OAuth user login, cloud worker deployment, and push notifications are still future work.
+Unsupported features are not hidden behind fake UI: remote shell commands, live screen sharing, OAuth user login, cloud worker deployment, and push notifications are still future work. AI chat works only after configuring a paid/authorized provider key on the backend.
 
 ## Quick start (Android / iOS)
 
