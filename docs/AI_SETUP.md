@@ -10,6 +10,7 @@
 - An API key from **one** of:
   - [OpenAI API keys](https://platform.openai.com/api-keys) — uses the [Responses API tool-calling flow](https://developers.openai.com/api/docs/guides/function-calling).
   - [Anthropic Console](https://console.anthropic.com/) — uses the [Messages API tool-use flow](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview).
+  - [Google AI Studio](https://aistudio.google.com/apikey) — uses Gemini's official generateContent REST API (O-AGENT-owned sessions only, no machine tools in the Gemini adapter).
 
 Do not paste provider API keys into a chat, GitHub, your Flutter app, PowerShell screenshots, or this document.
 
@@ -46,7 +47,7 @@ npm start
 
 **Important:** If your operator/worker token environment variables are missing, restore the **same previously generated values** before `npm start`, or the mobile app and worker will stop authenticating. Do not generate new tokens unless you also update all clients.
 
-For **Anthropic**, use `$env:OAGENT_AI_PROVIDER = "anthropic"`, set an available model in `OAGENT_AI_MODEL` (e.g. `claude-sonnet-4-5` if your account supports it), and use `$env:ANTHROPIC_API_KEY` rather than `OPENAI_API_KEY`.
+For **Gemini**, select option **4** in the one-click Windows setup/reconfiguration, enter your Google AI Studio API key securely and choose a Gemini model available to your account. The key stays encrypted for your Windows account. This does NOT read your existing Gemini website conversations. Gemini API chats can answer questions and improve prompts but do not have O-AGENT machine-control tools yet.\n\nFor **Anthropic**, use `$env:OAGENT_AI_PROVIDER = "anthropic"`, set an available model in `OAGENT_AI_MODEL` (e.g. `claude-sonnet-4-5` if your account supports it), and use `$env:ANTHROPIC_API_KEY` rather than `OPENAI_API_KEY`.
 
 These are temporary process environment variables, not permanent Windows settings. Restarting PowerShell loses them. They are not committed to GitHub.
 
