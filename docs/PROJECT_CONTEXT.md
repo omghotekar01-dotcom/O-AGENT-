@@ -30,6 +30,10 @@ The audited foundation branch contains:
 
 **Not yet shipped:** production identity/RBAC, per-device enrollment, cloud workers, full remote desktop, unrestricted commands, autonomous browser control, provider OAuth, hosted persistence, production deployment, observability platform, signed iPhone IPA.
 
+## Unified project and remote supervisor iteration
+
+The November 2026 follow-up adds the capability-aware **ProjectHub** service, real configured GitHub Actions/PR records, optional official Codex Cloud task snapshots, an approval-gated NEW Codex Cloud task submission capability, preview-only prompt enhancement, project-first Flutter UI and private Tailscale Serve access. The external connected-provider experience is **partial**. Existing ChatGPT Work chats, live managed browser control, document attachments and always-on hosted backend are **not** implemented. See [the clarified product contract](UNIFIED_AI_WORKSPACES.md) and [remote access](REMOTE_ACCESS.md).
+
 ## Decisions to preserve
 
 1. Treat OMIO-owned agents, provider-managed sessions and workspace workers as different runtime types.
