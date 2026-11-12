@@ -19,6 +19,7 @@ export class ControlPlane {
       tasks: initial.tasks ?? {},
       events: initial.events ?? [],
       sequence: initial.sequence ?? 0,
+      agentThreads: initial.agentThreads ?? {},
     };
     this.persist = persist;
     this.clock = clock;
