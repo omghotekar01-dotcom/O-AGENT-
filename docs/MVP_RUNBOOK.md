@@ -1,5 +1,10 @@
 # Operational MVP runbook
 
+## Easier Windows alternative — one-click start
+
+Instead of opening two terminals every day, use the [one-time Windows launcher](ONE_CLICK_WINDOWS.md): double-click `O-AGENT.cmd` once to configure, then double-click the desktop shortcut to start the existing real backend and gateway again. It can also run the local ADB USB bridge. The manual commands below remain supported.
+
+
 This repository now includes a **development** control plane, a read-only laptop gateway, a live-data web dashboard, and a native Android control client. It is **not a production-ready remote agent platform**. No LLM integrations, arbitrary shell execution, full remote desktop, cloud worker provisioning, or production identity provider are claimed to work.
 
 ## Prerequisites
