@@ -97,6 +97,31 @@ class AgentApi {
     return proposed;
   }
 
+  /// Submit a turn to the exact saved Codex CLI session. The server requires
+  /// explicit initial approval and enforces per-action approvals during runs.
+  Future<Map<String, dynamic>> requestCodexLocalTurn({
+    required String projectId,
+    required String sessionId,
+    required String prompt,
+    required String mode,
+  }) => _request('/api/providers/codex/local/turns', method: 'POST', body: {
+    'projectId': projectId,
+    'sessionId': sessionId,
+    'prompt': prompt,
+    'mode': mode,
+  }, idempotencyKey: createIdempotencyKey());
+
+  Future<Map<String, dynamic>> taskDetail(String id) =>
+      _request('/api/tasks/${Uri.encodeComponent(id)}');
+
+  Future<Map<String, dynamic>> decideCodexAction({
+    required String taskId,
+    required String approvalId,
+    required bool approve,
+  }) => _request(
+    '/api/tasks/${Uri.encodeComponent(taskId)}/approvals/${Uri.encodeComponent(approvalId)}/decision',
+    method: 'POST', body: {'approve': approve});
+
   /// Requests a NEW Codex Cloud task via a connected laptop CLI.
   /// The backend must require a separate human approval before execution.
   Future<void> requestCodexTask({
