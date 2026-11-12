@@ -1,3 +1,11 @@
+## Codex CLI 0.167 compatibility fix + O-AGENT command-center refresh
+
+The Android error `readOnly.access is no longer supported; use permissionProfile` was caused by an obsolete Codex app-server `turn/start` sandbox shape. This release removes the rejected legacy fields, maintains a read-only default with network disabled, and preserves separately approved workspace-write turns. **Read-only prevents writes; it is not a read restriction on every other file your account can access.** A failed historical task stays failed. Use **Reuse prompt for new attempt** to prepare a fresh request, then approve it again.
+
+The mobile Projects view now prioritizes the **real project list** with connection indicators, readable session previews and an improved Codex activity console. O-AGENT-owned agent chat can use separately funded **OpenAI API, Claude/Anthropic API or Google Gemini API**, with keys stored only on the Windows backend. Select a new AI provider without resetting your mobile tokens via **CONFIGURE-AI-PROVIDER.cmd**.
+
+[Provider-by-provider honest connection guide](docs/MULTI_PROVIDER_CONTROL.md). Browser mirroring, arbitrary ChatGPT/Claude/Gemini web-session takeover, remote VS Code/Cursor tabs, file uploads and always-on hosted deployment remain separate, uncompleted integrations.
+
 ## Supervised live Codex CLI control from Android (new)
 
 O-AGENT now has a real **session-control workflow**, not just a read-only project card. With the existing signed-in Windows Codex CLI and the opted-in local connector, open Android **Projects → Codex CLI / IDE → project → saved session → Open Codex control and live activity**.
