@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit"]);
+const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn"]);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted", "rejected"]);
 const MAX_EVENTS = 5000;
 export class DomainError extends Error {
@@ -65,6 +65,16 @@ export class ControlPlane {
       const prompt = requiredString(body.prompt, "Codex Cloud prompt", 2000);
       parameters = { environmentId, prompt };
     }
+    if (kind === "codex_cli_turn") {
+      const projectId = requiredString(body.projectId, "Codex projectId", 160);
+      const sessionId = requiredString(body.sessionId, "Codex sessionId", 120);
+      if (!/^[a-zA-Z0-9_-]{8,120}$/.test(sessionId)) throw new DomainError(400, "Invalid Codex sessionId");
+      const cwd = requiredString(body.cwd, "Codex working folder", 600);
+      const prompt = requiredString(body.prompt, "Codex prompt", 4000);
+      const mode = body.mode || "read_only";
+      if (!["read_only", "workspace_write"].includes(mode)) throw new DomainError(400, "Invalid Codex execution mode");
+      parameters = { projectId, sessionId, cwd, prompt, mode };
+    }
     const key = requiredString(requestKey, "Idempotency-Key", 200);
     if (key.length < 12) throw new DomainError(400, "Idempotency-Key must be at least 12 characters");
     const existing = Object.values(this.data.tasks).find(t => t.requestKey === key);
@@ -74,7 +84,8 @@ export class ControlPlane {
     }
     const task = {
       id: randomUUID(), requestKey: key, workerId, kind, parameters,
-      status: ["workspace_inventory", "codex_cloud_submit"].includes(kind) ? "waiting_for_approval" : "queued",
+      status: ["workspace_inventory", "codex_cloud_submit", "codex_cli_turn"].includes(kind) ? "waiting_for_approval" : "queued",
+      updates: [], approvals: {},
       createdAt: this.clock(), updatedAt: this.clock(), result: null, error: null,
     };
     this.data.tasks[task.id] = task;
@@ -113,8 +124,79 @@ export class ControlPlane {
       task.error = requiredString(body.error, "error", 1000); task.status = "failed";
     }
     task.updatedAt = this.clock();
+    for (const approval of Object.values(task.approvals ?? {})) {
+      if (approval.state === "pending") approval.state = "expired";
+    }
     this.commit(body.ok ? "task.completed" : "task.failed", { taskId, workerId });
     return task;
+  }
+  appendTaskUpdate(workerId, taskId, body) {
+    const task = this.getTask(taskId);
+    if (task.workerId !== workerId) throw new DomainError(403, "Incorrect worker");
+    if (task.kind !== "codex_cli_turn" || task.status !== "running") throw new DomainError(409, "Not a running Codex turn");
+    const type = requiredString(body?.type, "event type", 60);
+    const allowed = new Set(["session_resumed","turn_started","agent_delta","tool_started","tool_finished","turn_completed","error","status"]);
+    if (!allowed.has(type)) throw new DomainError(400, "Unsupported Codex event type");
+    const text = body.text == null ? "" : requiredString(body.text, "event text", 2500);
+    if (task.updates.length >= 240) {
+      // Bounded storage. Latest updates are still available for reconnect.
+      task.updates.splice(0, task.updates.length - 239);
+    }
+    const event = { index: (task.nextUpdate ?? 0) + 1, type, text, at: new Date(this.clock()).toISOString() };
+    task.nextUpdate = event.index;
+    task.updates.push(event);
+    task.updatedAt = this.clock();
+    this.commit("codex.turn.event", { taskId, workerId, index: event.index, eventType: type });
+    return { accepted: true, index: event.index };
+  }
+  requestCodexApproval(workerId, taskId, body) {
+    const task = this.getTask(taskId);
+    if (task.workerId !== workerId) throw new DomainError(403, "Incorrect worker");
+    if (task.kind !== "codex_cli_turn" || task.status !== "running") throw new DomainError(409, "Not a running Codex turn");
+    if (Object.values(task.approvals ?? {}).filter(a => a.state === "pending").length > 3) throw new DomainError(429, "Too many pending approvals");
+    const id = requiredString(body?.id, "approval ID", 80);
+    if (!/^[a-zA-Z0-9_-]{8,80}$/.test(id)) throw new DomainError(400, "Invalid approval ID");
+    const kind = requiredString(body?.kind, "approval kind", 64);
+    if (!["command", "file_change", "permissions"].includes(kind)) throw new DomainError(400, "Unsupported approval kind");
+    const description = requiredString(body?.description, "approval description", 1200);
+    if (task.approvals?.[id]) throw new DomainError(409, "Approval already exists");
+    const approval = {
+      id, kind, description, state: "pending",
+      requestedAt: this.clock(), expiresAt: this.clock() + 180000,
+    };
+    task.approvals[id] = approval;
+    this.commit("codex.approval.requested", { taskId, workerId, approvalId: id, kind });
+    return approval;
+  }
+  decideCodexApproval(taskId, approvalId, approve) {
+    const task = this.getTask(taskId);
+    const approval = task.approvals?.[approvalId];
+    if (!approval) throw new DomainError(404, "Codex approval not found");
+    if (task.status !== "running" || approval.state !== "pending" || this.clock() > approval.expiresAt) {
+      if (approval.state === "pending") {
+        approval.state = "expired";
+        this.commit("codex.approval.expired", { taskId, approvalId });
+      }
+      throw new DomainError(409, "Approval is no longer active");
+    }
+    if (typeof approve !== "boolean") throw new DomainError(400, "approve must be boolean");
+    approval.state = approve ? "approved" : "denied";
+    approval.decidedAt = this.clock();
+    this.commit(approve ? "codex.approval.approved" : "codex.approval.denied", { taskId, approvalId });
+    return approval;
+  }
+  codexApprovalStatus(workerId, taskId, approvalId) {
+    const task = this.getTask(taskId);
+    if (task.workerId !== workerId) throw new DomainError(403, "Incorrect worker");
+    const approval = task.approvals?.[approvalId];
+    if (!approval) throw new DomainError(404, "Codex approval not found");
+    if (task.status !== "running" || this.clock() > approval.expiresAt) {
+      if (approval.state === "pending") {
+        approval.state = "expired";
+        this.commit("codex.approval.expired", { taskId, approvalId });
+      }
+    }
+    return { state: approval.state };
   }
   cancel(id) {
     const task = this.getTask(id);
