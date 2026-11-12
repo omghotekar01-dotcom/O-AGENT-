@@ -23,7 +23,7 @@ export async function readCodexCloudTasks(execImpl = execFileAsync) {
   const windows = process.platform === "win32";
   const bin = windows ? "powershell.exe" : "codex";
   const args = windows
-    ? ["-NoProfile", "-NonInteractive", "-Command", "& codex cloud list --json --limit 20"]
+    ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "& codex cloud list --json --limit 20"]
     : ["cloud", "list", "--json", "--limit", "20"];
   // No O-AGENT backend tokens or AI provider keys are passed to the CLI.
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -50,7 +50,7 @@ export async function submitCodexCloudTask(environmentId, prompt, execImpl = exe
   // treating user-supplied prompt text as shell source.
   const bin = windows ? "powershell.exe" : "codex";
   const args = windows
-    ? ["-NoProfile", "-NonInteractive", "-Command",
+    ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command",
        "& codex cloud exec --env $env:OAGENT_CODEX_ENV $env:OAGENT_CODEX_TASK_PROMPT"]
     : ["cloud", "exec", "--env", environmentId, prompt.trim()];
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
