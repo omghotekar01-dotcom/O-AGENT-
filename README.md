@@ -42,3 +42,18 @@ See [Architecture decisions](docs/ARCHITECTURE_DECISIONS.md), [Security baseline
 ## First release gates
 
 A feature is not done because a screen renders. It is done when the real backend operation is implemented, permission-checked, durably recorded, testable, recoverable and accurately represented in the UI. Cross-tenant access, credential leakage, approval mismatch, duplicate side effects, worker disconnect/reconnect and recovery tests are release blockers.
+
+## Working development MVP (new)
+
+The foundation branch now also includes a **real, local-development vertical slice**:
+
+- [Control-plane API](apps/control-plane/src/server.mjs): authenticated operator and worker endpoints, persistent JSON state, an ordered event feed and task approvals.
+- [Outbound laptop gateway](apps/gateway/src/worker.mjs): reports actual system data and an approval-protected top-level workspace inventory; **no arbitrary commands**.
+- [Web dashboard](apps/control-plane/public/index.html): connected machines, actual task records, task submission and approval decisions.
+- [Android Compose client](apps/android): native UI for machines, task submission, and approvals using actual backend endpoints.
+- [Automated control-plane tests](tests/control-plane.test.mjs) and CI workflows.
+
+**How to run:** [MVP runbook](docs/MVP_RUNBOOK.md). **Current state and boundaries:** [Project context](docs/PROJECT_CONTEXT.md).
+
+This is **not the complete O-AGENT product**. Production identity/device enrollment, Supabase-backed orchestration, live remote desktop, cloud workers, provider SDK adapters, MCP connections, and background push notifications remain future work. A reference design or UI screenshot is not evidence that those capabilities are implemented.
+
