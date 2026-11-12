@@ -79,6 +79,9 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/api/projects") {
       return send(res, 200, await projectHub.list());
     }
+    if (req.method === "POST" && path === "/api/providers/codex/tasks") {
+      return send(res, 201, projectHub.requestCodexTask(await readJson(req), req.headers["idempotency-key"]));
+    }
     if (req.method === "GET" && path === "/api/integrations") {
       return send(res, 200, { sources: projectHub.sources() });
     }
