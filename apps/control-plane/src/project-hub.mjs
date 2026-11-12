@@ -220,6 +220,7 @@ export class ProjectHub {
         id: projectId, source: "codex_cloud", title,
         description: shorten(item.summary, 300), sourceRef: taskId,
         state: shorten(item.status || "unknown", 40), updatedAt: item.updated_at || null,
+        environmentId: typeof item.environment_id === "string" ? item.environment_id.slice(0, 120) : null,
         url: cleanUrl(item.url, "chatgpt.com"), workerId,
         syncedAt: stamp, control: "read_only",
         capabilities: ["open_provider", "view_cloud_task_status"],
