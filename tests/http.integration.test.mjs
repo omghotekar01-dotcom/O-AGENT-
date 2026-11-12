@@ -86,6 +86,45 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal((await call("/api/projects/" + workspace.id, apiToken)).payload.project.sessions[0].title,
       "Work on project");
 
+    const localTurn = await call("/api/providers/codex/local/turns", apiToken, "POST", {
+      projectId: workspace.id, sessionId: "11111111-2222-4333-8444-555555555555",
+      prompt: "Read and summarize the code safely", mode: "workspace_write",
+    }, "codex-local-turn-http-123456");
+    assert.equal(localTurn.status, 201);
+    assert.equal(localTurn.payload.status, "waiting_for_approval");
+    assert.equal((await call("/api/tasks/" + localTurn.payload.id, "wrong")).status, 401);
+    assert.equal((await call("/api/workers/ci-worker/next", workerToken, "POST")).payload.task, null);
+    const approvalTurn = await call("/api/tasks/" + localTurn.payload.id + "/decision", apiToken,
+      "POST", { approve: true });
+    assert.equal(approvalTurn.payload.status, "queued");
+    const activeTurn = await call("/api/workers/ci-worker/next", workerToken, "POST");
+    assert.equal(activeTurn.payload.task.kind, "codex_cli_turn");
+    assert.equal(activeTurn.payload.task.parameters.cwd, "C:\\Users\\ASUS\\O-AGENT-");
+    assert.equal((await call("/api/workers/ci-worker/tasks/" + localTurn.payload.id + "/update",
+      apiToken, "POST", { type: "agent_delta", text: "Private text" })).status, 401);
+    const eventSent = await call("/api/workers/ci-worker/tasks/" + localTurn.payload.id + "/update",
+      workerToken, "POST", { type: "agent_delta", text: "Real Codex message" });
+    assert.equal(eventSent.status, 200);
+    const permission = await call("/api/workers/ci-worker/tasks/" + localTurn.payload.id + "/approvals",
+      workerToken, "POST", { id: "approval-real-123456", kind: "command", description: "Run npm test" });
+    assert.equal(permission.status, 201);
+    assert.equal(permission.payload.state, "pending");
+    assert.equal((await call("/api/workers/ci-worker/tasks/" + localTurn.payload.id +
+      "/approvals/approval-real-123456", workerToken)).payload.state, "pending");
+    assert.equal((await call("/api/tasks/" + localTurn.payload.id +
+      "/approvals/approval-real-123456/decision", "bad", "POST", { approve: true })).status, 401);
+    const decided = await call("/api/tasks/" + localTurn.payload.id +
+      "/approvals/approval-real-123456/decision", apiToken, "POST", { approve: false });
+    assert.equal(decided.payload.state, "denied");
+    assert.equal((await call("/api/workers/ci-worker/tasks/" + localTurn.payload.id +
+      "/approvals/approval-real-123456", workerToken)).payload.state, "denied");
+    const endedTurn = await call("/api/workers/ci-worker/tasks/" + localTurn.payload.id + "/finish",
+      workerToken, "POST", { ok: true, result: { providerStatus: "completed", output: "Real Codex message" } });
+    assert.equal(endedTurn.payload.status, "completed");
+    const reloadedTurn = await call("/api/tasks/" + localTurn.payload.id, apiToken);
+    assert.equal(reloadedTurn.payload.updates[0].text, "Real Codex message");
+    assert.equal(reloadedTurn.payload.result.output, "Real Codex message");
+
     const codexData = { tasks: [{ id: "abcd-1234", title: "Real external task metadata",
       status: "in_progress", url: "https://chatgpt.com/codex/tasks/abcd-1234" }] };
     assert.equal((await call("/api/workers/ci-worker/codex/sync", apiToken, "POST", codexData)).status, 401);
