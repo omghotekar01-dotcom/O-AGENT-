@@ -55,24 +55,31 @@ async function main() {
   await api("/api/workers/register", { id, name: hostname() });
   while (true) {
     try {
+      // Provider history queries can take 25-30 seconds. Run them off the
+      // heartbeat/task-claim loop so a slow CLI never makes the worker appear
+      // offline or delays human-approved tasks.
       if (process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC === "1" && Date.now() - lastLocalCodexSync > 45000) {
         lastLocalCodexSync = Date.now();
-        try {
-          const sessions = await readCodexLocalSessions();
-          await api(`/api/workers/${id}/codex/local/sync`, { sessions });
-        } catch {
-          console.error("Local Codex CLI sessions unavailable; check Codex app-server support and signed-in Windows user.");
-        }
+        void (async () => {
+          try {
+            const sessions = await readCodexLocalSessions();
+            await api(`/api/workers/${id}/codex/local/sync`, { sessions });
+          } catch {
+            console.error("Local Codex CLI sessions unavailable; check Codex app-server support and signed-in Windows user.");
+          }
+        })();
       }
       if (process.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC === "1" && Date.now() - lastCodexSync > 45000) {
         lastCodexSync = Date.now();
-        try {
-          const tasks = await readCodexCloudTasks();
-          await api(`/api/workers/${id}/codex/sync`, { tasks });
-        } catch {
-          // Never leak CLI output, browser cookies, provider sessions or credentials in worker logs.
-          console.error("Codex Cloud sync unavailable; check Codex CLI installation and login.");
-        }
+        void (async () => {
+          try {
+            const tasks = await readCodexCloudTasks();
+            await api(`/api/workers/${id}/codex/sync`, { tasks });
+          } catch {
+            // Never leak CLI output, browser cookies, provider sessions or credentials in logs.
+            console.error("Codex Cloud sync unavailable; check Codex CLI installation and login.");
+          }
+        })();
       }
       await api(`/api/workers/${id}/heartbeat`);
       const { task } = await api(`/api/workers/${id}/next`);
