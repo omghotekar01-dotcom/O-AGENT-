@@ -118,7 +118,9 @@ class ControlSnapshot {
 
   int get onlineCount => machines.where((m) => m.online).length;
   int get runningCount => tasks.where((t) => t.running).length;
-  int get pendingCount => tasks.where((t) => t.awaitingApproval).length;
+  int get pendingCount => tasks.where((t) => t.awaitingApproval).length +
+      tasks.fold<int>(0, (count, task) => count +
+        (task.approvals?.values.where((a) => a is Map && a['state'] == 'pending').length ?? 0));
   int get completedCount => tasks.where((t) => t.status == 'completed').length;
 
   factory ControlSnapshot.fromJson(Map<String, dynamic> json) {
