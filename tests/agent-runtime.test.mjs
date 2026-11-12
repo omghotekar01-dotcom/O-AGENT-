@@ -124,3 +124,39 @@ test("rate-limited model is not mislabeled connected even when a key exists", as
   assert.equal(rt.status().health, "rate_limited");
   assert.match(rt.status().lastError, /billing\/credits/);
 });
+
+test("Google Gemini API returns a real owned conversation and never receives machine tools", async () => {
+  const calls = [];
+  const runtime = new AgentRuntime(makeCore(), {
+    env: { OAGENT_AI_PROVIDER: "gemini", OAGENT_AI_MODEL: "gemini-2.5-flash",
+      GEMINI_API_KEY: "test-fake-key-not-real-123456789" },
+    fetchImpl: async (url, opts) => {
+      calls.push({ url, body: JSON.parse(opts.body), headers: opts.headers });
+      return fakeResponse({ candidates: [{ content: { parts: [{ text: "Verified simulated provider answer" }] } }] });
+    },
+  });
+  const first = await runtime.send({ agentId: "navigator", message: "Help me organize work" });
+  assert.equal(first.messages[1].content, "Verified simulated provider answer");
+  assert.equal(runtime.status().provider, "gemini");
+  assert.equal(runtime.status().health, "connected");
+  assert.equal(calls[0].url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
+  assert.equal(calls[0].headers["x-goog-api-key"], "test-fake-key-not-real-123456789");
+  assert.equal(calls[0].body.tools, undefined, "Gemini must not gain machine access without an audited tool adapter");
+  assert.equal(calls[0].body.contents[0].role, "user");
+  await runtime.send({ agentId: "navigator", threadId: first.id, message: "Continue" });
+  assert.equal(calls[1].body.contents[1].role, "model");
+  assert.equal(calls[1].body.contents[2].role, "user");
+  const suggestion = await runtime.refinePrompt({ message: "build a website", target: "codex_cloud" });
+  assert.match(suggestion.proposed, /simulated provider answer/);
+  assert.equal(calls[2].body.tools, undefined);
+});
+test("Gemini API quota exhaustion remains visible as a rate error, not a fake success", async () => {
+  const rt = new AgentRuntime(makeCore(), {
+    env: { OAGENT_AI_PROVIDER: "gemini", OAGENT_AI_MODEL: "gemini-2.5-flash",
+      GEMINI_API_KEY: "fake-test-key-long-enough-12345" },
+    fetchImpl: async () => ({ ok: false, status: 429 }),
+  });
+  await assert.rejects(rt.send({ agentId: "researcher", message: "Hello" }),
+    err => err.status === 503 && /429/.test(err.message));
+  assert.equal(rt.status().health, "rate_limited");
+});
