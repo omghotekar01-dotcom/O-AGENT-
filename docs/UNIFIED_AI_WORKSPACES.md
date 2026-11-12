@@ -23,7 +23,7 @@ The requested complete experience is a **target**, not a claim that every provid
 |---|---|---|---|
 | O-AGENT-owned projects | Existing backend and OpenAI/Anthropic APIs | Create, list, persist, project chat via real provider request | Durable workflows, attachments, full computer execution |
 | GitHub repositories / Actions | Official GitHub REST API | Configured repo metadata, latest actual workflow runs, PRs, failures | Controlling external coding agents or browser screens |
-| OpenAI Codex Cloud tasks | Authenticated official Codex CLI: cloud list --json | Opt-in read-only task titles, statuses, URLs synced by the worker | Prompt submission, interactive cloud browser view, direct provider approvals |
+| OpenAI Codex Cloud tasks | Authenticated official Codex CLI: cloud list --json | Opt-in task titles/status/URLs, plus creation of a NEW approved Codex Cloud task via authenticated CLI | Replies to existing tasks, interactive cloud browser view, direct provider approvals |
 | ChatGPT Work projects/browser | ChatGPT's own hosted Work experience | Explicitly marked unsupported | No verified third-party session-control API for pre-existing Work chats/browser |
 | Claude Agent SDK | Documented app-owned SDK process and permission hooks | Planned | Live supervised Claude agent sessions |
 | Windows desktop browser/control | Enrolled user-consented local executor | System health/inventory only | Interactive controlled browser capture, WebRTC, remote input |
@@ -94,7 +94,7 @@ These are **design selections requiring deployment and provider authorization**,
 ### P2 — Correct cross-provider routing
 
 - [ ] Provider-specific session identifiers, documented write capability and verified OAuth/SDK auth.
-- [ ] Prompt optimizer producing editable proposed instructions and target before dispatch.
+- [x] Preview-only AI prompt rewrite endpoint with editable proposed text and target before dispatch; requires working API quota.
 - [ ] Real image/PDF/document uploads, validation, encryption, retention and model/provider submission.
 - [ ] Reliable streaming of model output and tool/action events, pause/resume and follow-up messages.
 - [ ] User-scoped permissions enforced by a server canonical action hash and expiry.
@@ -127,6 +127,8 @@ These are **design selections requiring deployment and provider authorization**,
 - POST /api/projects/:id/messages : real AI prompt **only for O-AGENT-owned projects**.
 - GET /api/integrations : connector capability/status list.
 - POST /api/workers/:id/codex/sync : authenticated worker-only Codex CLI metadata (disabled by default).
+- POST /api/providers/codex/tasks : NEW cloud task requested by operator, must be approved before worker submits via official CLI.
+- POST /api/ai/refine : optional rewrite-only AI prompt proposal (no tools/side effects).
 
 The control plane enforces the existing operator/worker development bearer tokens. No real external provider or browser command is fabricated.
 
