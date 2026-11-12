@@ -98,9 +98,18 @@ export async function runCodexTurn(task, {
       const isCommand = method === "item/commandExecution/requestApproval";
       const isFile = method === "item/fileChange/requestApproval";
       const isPermission = method === "item/permissions/requestApproval";
-      if ((!isCommand && !isFile && !isPermission) || mode === "read_only") {
+      // Do not turn a vague request into a broad privilege grant. Additional
+      // filesystem/network permissions require a separate, richer UI and are
+      // denied rather than showing an incomplete approval summary.
+      const networkAccess = details.networkApprovalContext != null;
+      const additionalAccess = details.additionalPermissions != null;
+      const grantRoot = typeof details.grantRoot === "string" ? resolve(details.grantRoot) : "";
+      const outsideRoot = grantRoot && grantRoot.toLowerCase() !== resolve(root).toLowerCase();
+      const hasKnownCommand = typeof details.command === "string" && details.command.trim().length > 0;
+      if ((!isCommand && !isFile) || mode === "read_only" || isPermission ||
+          networkAccess || additionalAccess || outsideRoot || (isCommand && !hasKnownCommand)) {
         write({ id: msg.id, result: { decision: "decline" } });
-        enqueue("status", mode === "read_only" ? "Permission escalation denied in read-only mode" : "Unsupported provider permission request denied");
+        enqueue("status", "Provider requested unsupported or elevated access; denied safely");
         return;
       }
       const requestId = randomUUID();
@@ -109,6 +118,7 @@ export async function runCodexTurn(task, {
         clean(details.reason, 300),
         clean(details.command, 600),
         clean(details.cwd, 300),
+        clean(details.grantRoot, 300),
         isPermission ? "Requested extra filesystem or network permissions" : "",
       ].filter(Boolean);
       enqueue("status", "Codex is waiting for a device approval");
