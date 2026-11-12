@@ -118,8 +118,30 @@ class _ProjectHubState extends State<ProjectHubScreen> {
                     Text((source['status'] ?? 'unknown').toString().replaceAll('_',' '),
                       style: const TextStyle(color: muted, fontSize: 11)),
                   ])),
-                  Icon(source['status'] == 'unsupported' ? Icons.lock_outline : Icons.info_outline,
-                    size: 16, color: muted),
+                  IconButton(
+                    tooltip: 'Connection details',
+                    icon: Icon(source['status'] == 'unsupported'
+                      ? Icons.lock_outline : Icons.info_outline, size: 18, color: muted),
+                    onPressed: () => showDialog<void>(context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: Text(source['label']?.toString() ?? 'Connection'),
+                        content: SingleChildScrollView(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min, children: [
+                            Text('Status: ' + (source['status'] ?? 'unknown').toString().replaceAll('_', ' ')),
+                            const SizedBox(height: 13),
+                            Text(source['limitation']?.toString() ?? ''),
+                            if (source['id'] == 'codex_cli') ...[
+                              const SizedBox(height: 12),
+                              const Text('Windows setup: stop O-AGENT, open CONFIGURE-PROJECTS.cmd, choose Y at Sync MY local Codex CLI / IDE projects, then restart O-AGENT. Work in a project with codex to create genuine session history.'),
+                            ],
+                          ]),
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+                        ],
+                      )),
+                  ),
                 ]),
               )),
           ],
