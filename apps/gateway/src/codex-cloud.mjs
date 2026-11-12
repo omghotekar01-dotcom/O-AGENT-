@@ -14,6 +14,7 @@ export function normalizeCodexTasks(data) {
       status: typeof task.status === "string" ? task.status.slice(0, 40) : "unknown",
       updated_at: typeof task.updated_at === "string" ? task.updated_at : null,
       url: typeof task.url === "string" ? task.url : null,
+      environment_id: typeof task.environment_id === "string" ? task.environment_id.slice(0, 120) : null,
     }));
 }
 export async function readCodexCloudTasks(execImpl = execFileAsync) {
