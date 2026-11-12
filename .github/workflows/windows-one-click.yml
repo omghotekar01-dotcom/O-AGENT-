@@ -3,12 +3,16 @@ on:
   pull_request:
     paths:
       - "tools/windows/**"
+      - "apps/gateway/src/**"
+      - "apps/control-plane/src/**"
       - "*.cmd"
       - ".github/workflows/windows-one-click.yml"
   push:
     branches: [main]
     paths:
       - "tools/windows/**"
+      - "apps/gateway/src/**"
+      - "apps/control-plane/src/**"
       - "*.cmd"
       - ".github/workflows/windows-one-click.yml"
   workflow_dispatch:
