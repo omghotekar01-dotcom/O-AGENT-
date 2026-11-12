@@ -128,6 +128,8 @@ class _CodexSessionState extends State<CodexSessionScreen> {
     final approvals = asMap(task?['approvals']).values.map((x) => asMap(x))
       .where((a) => a['state'] == 'pending').toList();
     final events = asItems(task?['updates']);
+    final agentText = events.where((e) => e['type'] == 'agent_delta')
+      .map((e) => e['text']?.toString() ?? '').join();
     final result = asMap(task?['result']);
     return Scaffold(
       appBar: AppBar(title: const Text('Codex session'), actions: [
@@ -226,9 +228,22 @@ class _CodexSessionState extends State<CodexSessionScreen> {
           const SizedBox(height: 11),
           if (events.isEmpty)
             const InfoPanel(child: Text('No actual Codex events yet. Request and approve a turn below.')),
-          for (final e in events)
+          if (agentText.trim().isNotEmpty)
+            Padding(padding: const EdgeInsets.only(bottom: 11),
+              child: InfoPanel(background: OTheme.lavender,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Row(children: [
+                    Icon(Icons.auto_awesome_rounded, color: OTheme.violet, size: 17),
+                    SizedBox(width: 8),
+                    Text('CODEX RESPONSE', style: TextStyle(color: OTheme.violet,
+                      fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                  ]),
+                  const SizedBox(height: 10),
+                  SelectableText(agentText,
+                    style: const TextStyle(fontSize: 13, height: 1.55)),
+                ]))),
+          for (final e in events.where((event) => event['type'] != 'agent_delta'))
             Padding(padding: const EdgeInsets.only(bottom: 9), child: InfoPanel(
-              background: e['type'] == 'agent_delta' ? OTheme.lavender : Colors.white,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text((e['type'] ?? '').toString().replaceAll('_',' ').toUpperCase(),
                   style: const TextStyle(color: OTheme.violet, fontSize: 10,
@@ -238,7 +253,7 @@ class _CodexSessionState extends State<CodexSessionScreen> {
                   style: const TextStyle(fontSize: 12, height: 1.45)),
               ]),
             )),
-          if (result['output']?.toString().isNotEmpty == true) ...[
+          if (agentText.trim().isEmpty && result['output']?.toString().isNotEmpty == true) ...[
             const SizedBox(height: 15),
             const Heading('Final Codex reply'),
             const SizedBox(height: 9),
