@@ -8,7 +8,7 @@ This is the missing part of the original product concept: **the projects you wor
 - **Codex Cloud**: provider-hosted cloud tasks, listed via `codex cloud list --json --limit 20`. A legitimate empty result means there are no cloud tasks exposed to that signed-in account. It says nothing about local CLI/IDE history.
 - **ChatGPT Work projects/conversations**: a different product surface. O-AGENT cannot claim to read its managed chats or browser; this connector does not transfer those sessions.
 
-The O-AGENT mobile display shows saved sessions and last-updated times. **It does not prove a separate Codex process is active, mirror current browser screens, read the complete conversation, or send prompts into existing sessions.** Even a `notLoaded` session can still be active in a separate Codex app/CLI process.
+The O-AGENT mobile display shows saved sessions and last-updated times. A **new supervised turn** can be explicitly approved and started in a selected saved session, with actual Codex agent/tool events and separately approved permission requests. It does not inject into a separately running terminal or mirror a browser window. Even a `notLoaded` session can still be active in a separate Codex app/CLI process.
 
 ## Do this once on the same Windows account where Codex is signed in
 
@@ -29,6 +29,20 @@ The O-AGENT mobile display shows saved sessions and last-updated times. **It doe
 
 If no sessions appear, verify that you actually used `codex` within a project folder under the same Windows account. The Codex Cloud list can remain empty while local projects are present.
 
+## New: send a real prompt from your phone
+
+1. After updating both your Windows repo and Android APK, keep the signed-in Codex CLI worker online and Tailscale connected.
+2. On Android open **Projects → Codex CLI / IDE**, select a real project and one of its saved sessions.
+3. Tap **Open Codex control and live activity**.
+4. Enter a new prompt. Read-only mode is selected by default. To permit files inside that approved project to be modified, explicitly choose Project edits.
+5. Confirm the exact prompt, target session, working folder and sandbox mode. The backend records it as awaiting approval, without starting Codex.
+6. Approve the request in that screen or the central **Approvals** tab.
+7. The worker resumes the saved Codex thread in a separate official app-server process and starts a turn. The screen shows actual agent messages and tool activity, refreshed every few seconds.
+8. If a Project edits turn asks to execute a command or change permissions, inspect its exact request and Approve or Deny. Unanswered or unsupported requests are denied.
+9. Finished events and final provider status remain in local O-AGENT task history.
+
+If the original Codex process is actively using the thread, resume may fail rather than taking it over. A model/account rate-limit or unsupported Windows sandbox is also reported as an actual error. This is not consumer ChatGPT Work browser/control integration.
+
 ## What is shared and what stays private
 
 **Sent to your own O-AGENT backend after explicit opt-in:** up to 80 recent session IDs; project folder paths (cwd); brief session previews/titles; update timestamps and metadata. The backend currently stores this data in local development JSON and can serve it to your authenticated mobile app over your private Tailscale connection.
@@ -47,8 +61,8 @@ If no sessions appear, verify that you actually used `codex` within a project fo
 
 ## Next feature milestones
 
-1. Secure read-only Codex session transcript/event viewing with bounded data and per-project privacy options.
-2. Explicit user-approved `thread/resume` + `turn/start` via an O-AGENT-owned persistent app-server process with authenticated event streaming and sandbox/approval handling. No background command injection into existing independent user apps.
+1. Expand bounded live-turn events into durable per-project transcript read/replay, file diffs, interruption and recovery.
+2. Harden the implemented short-lived approved thread/resume + turn/start runner into a persistent and recoverable app-server-owned session with robust resource limits.
 3. Rich prompt/file composer and genuine provider-specific permissions.
 4. Account identity + multiple Codex accounts with revocable linking; currently the local Windows OS/CLI login is the one source.
 5. Always-on hosted O-AGENT so independent cloud providers can be supervised while the laptop is offline.
