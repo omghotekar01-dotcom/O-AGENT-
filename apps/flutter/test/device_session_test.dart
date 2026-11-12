@@ -55,6 +55,8 @@ void main() {
     final remember = find.widgetWithText(CheckboxListTile, 'Remember this device');
     expect(remember, findsOneWidget);
     expect(tester.widget<CheckboxListTile>(remember).value, isFalse);
+    await tester.ensureVisible(remember);
+    await tester.pumpAndSettle();
     await tester.tap(remember);
     await tester.pump();
     expect(tester.widget<CheckboxListTile>(remember).value, isTrue);
