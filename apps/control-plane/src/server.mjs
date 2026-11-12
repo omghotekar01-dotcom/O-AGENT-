@@ -66,6 +66,7 @@ const server = createServer(async (req, res) => {
     const path = url.pathname;
     if (req.method === "GET" && path === "/health") return send(res, 200, { status: "ok", service: "oagent-control-plane" });
     if (req.method === "GET" && path === "/") return staticFile(res, "index.html", "text/html; charset=utf-8");
+    if (req.method === "GET" && path === "/dashboard.css") return staticFile(res, "dashboard.css", "text/css; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.js") return staticFile(res, "dashboard.js", "text/javascript; charset=utf-8");
     const isWorkerRoute = path.startsWith("/api/workers/");
     if (!authorized(req, isWorkerRoute ? workerToken : apiToken)) throw new DomainError(401, "Invalid authorization token");
