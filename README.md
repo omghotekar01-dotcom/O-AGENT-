@@ -1,3 +1,11 @@
+## Your Codex CLI / IDE coding projects — newly supported
+
+**O-AGENT can now display the actual coding projects you work on via the signed-in Codex CLI and IDE.** Its opted-in laptop connector queries the official `codex app-server` `thread/list` API, groups your saved sessions by real working directory, and displays the session titles/last updates under **Projects → Codex CLI / IDE** on Android. This works even when `codex cloud list` returns `{"tasks":[]}`. It is not the same as GitHub repository configuration.
+
+One-time setup: [Connect local Codex CLI / IDE workspaces](docs/CODEX_LOCAL_WORKSPACES.md). After updating: stop O-AGENT, open `CONFIGURE-PROJECTS.cmd`, explicitly enable local session sync, then restart the launcher. Existing Tailscale no-USB access stays intact.
+
+**Privacy:** This shares only session IDs, short previews, folder paths and timestamps with your own backend. Full transcripts, files, account credentials and live screen capture are not accessed. Read-only session history does not yet support phone-driven resuming/command injection into independent terminal sessions.
+
 ## Unified projects and private remote access (new)
 
 O-AGENT now prioritizes **existing provider projects and work** rather than a generic chatbot dashboard. The mobile **Projects** tab shows actual GitHub Actions runs and pull requests, opt-in Codex Cloud tasks from your authenticated laptop Codex CLI, and O-AGENT-owned projects/conversations. It never fabricates external sessions or claims access to the managed ChatGPT Work browser.
