@@ -36,6 +36,14 @@ export class ProjectHub {
     core.data.externalProjects ??= {};
     core.data.codexLocalProjects ??= {};
     core.data.codexLocalSync ??= {};
+    // Opting out must stop exposing previously persisted session previews and
+    // cwd paths, not merely stop subsequent polling.
+    if (env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1" &&
+        (Object.keys(core.data.codexLocalProjects).length || Object.keys(core.data.codexLocalSync).length)) {
+      core.data.codexLocalProjects = {};
+      core.data.codexLocalSync = {};
+      core.commit("provider.codex_local.disabled");
+    }
     this.repoCache = new Map();
   }
   sources() {
