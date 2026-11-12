@@ -79,6 +79,9 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/api/projects") {
       return send(res, 200, await projectHub.list());
     }
+    if (req.method === "POST" && path === "/api/providers/codex/local/turns") {
+      return send(res, 201, projectHub.requestLocalCodexTurn(await readJson(req), req.headers["idempotency-key"]));
+    }
     if (req.method === "POST" && path === "/api/providers/codex/tasks") {
       return send(res, 201, projectHub.requestCodexTask(await readJson(req), req.headers["idempotency-key"]));
     }
@@ -128,6 +131,13 @@ const server = createServer(async (req, res) => {
       const value = core.createTask(await readJson(req), req.headers["idempotency-key"]);
       return send(res, 201, value);
     }
+    const codexDecision = path.match(/^\/api\/tasks\/([0-9a-f-]+)\/approvals\/([a-zA-Z0-9_-]+)\/decision$/);
+    if (req.method === "POST" && codexDecision) {
+      const body = await readJson(req);
+      return send(res, 200, core.decideCodexApproval(codexDecision[1], codexDecision[2], body.approve));
+    }
+    const taskDetail = path.match(/^\/api\/tasks\/([0-9a-f-]+)$/);
+    if (req.method === "GET" && taskDetail) return send(res, 200, core.getTask(taskDetail[1]));
     const decision = path.match(/^\/api\/tasks\/([0-9a-f-]+)\/decision$/);
     if (req.method === "POST" && decision) {
       const value = await readJson(req);
@@ -153,6 +163,18 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && heartbeat) return send(res, 200, core.heartbeat(heartbeat[1]));
     const next = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/next$/);
     if (req.method === "POST" && next) return send(res, 200, { task: core.claim(next[1]) });
+    const codexUpdate = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/tasks\/([0-9a-f-]+)\/update$/);
+    if (req.method === "POST" && codexUpdate) {
+      return send(res, 200, core.appendTaskUpdate(codexUpdate[1], codexUpdate[2], await readJson(req)));
+    }
+    const codexPermission = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/tasks\/([0-9a-f-]+)\/approvals$/);
+    if (req.method === "POST" && codexPermission) {
+      return send(res, 201, core.requestCodexApproval(codexPermission[1], codexPermission[2], await readJson(req)));
+    }
+    const codexPermissionStatus = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/tasks\/([0-9a-f-]+)\/approvals\/([a-zA-Z0-9_-]+)$/);
+    if (req.method === "GET" && codexPermissionStatus) {
+      return send(res, 200, core.codexApprovalStatus(codexPermissionStatus[1], codexPermissionStatus[2], codexPermissionStatus[3]));
+    }
     const finish = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/tasks\/([0-9a-f-]+)\/finish$/);
     if (req.method === "POST" && finish) return send(res, 200, core.finish(finish[1], finish[2], await readJson(req)));
     throw new DomainError(404, "Endpoint not found");
