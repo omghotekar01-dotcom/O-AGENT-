@@ -301,18 +301,23 @@ class _StudioShellState extends State<StudioShell> {
           const _EmptyState(icon: Icons.computer_outlined, title: 'No machine online',
             description: 'Start the O-AGENT worker on your laptop to connect it here.')
         else
-          ...online.map((machine) => Padding(padding: const EdgeInsets.only(bottom: 9),
-            child: _Tile(child: Row(children: [
-              Container(width: 42, height: 42, decoration: BoxDecoration(color: OTheme.sage, borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.laptop_rounded, color: OTheme.ink)),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(machine.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                Text(machine.id, style: const TextStyle(fontSize: 12, color: _muted)),
-              ])),
-              TextButton(onPressed: () => _machineActions(machine), child: const Text('Manage')),
-            ]))),
-          )),
+          for (final machine in online)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: _Tile(
+                child: Row(children: [
+                  Container(width: 42, height: 42,
+                    decoration: BoxDecoration(color: OTheme.sage, borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.laptop_rounded, color: OTheme.ink)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(machine.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    Text(machine.id, style: const TextStyle(fontSize: 12, color: _muted)),
+                  ])),
+                  TextButton(onPressed: () => _machineActions(machine), child: const Text('Manage')),
+                ]),
+              ),
+            ),
         const SizedBox(height: 26),
         _SectionHeading('Recent conversations', action: 'Open chat', onTap: () => setState(() => index = 2)),
         const SizedBox(height: 10),
@@ -320,15 +325,21 @@ class _StudioShellState extends State<StudioShell> {
           const _EmptyState(icon: Icons.edit_note_rounded, title: 'A blank page',
             description: 'Start your first conversation. Threads are stored by your local control plane.')
         else
-          ...threads.take(3).map((item) => Padding(padding: const EdgeInsets.only(bottom: 9),
-            child: _Tile(child: InkWell(onTap: () => _openThread(item['id'].toString()),
-              child: Row(children: [
-                const Icon(Icons.arrow_outward, size: 20, color: OTheme.violet),
-                const SizedBox(width: 12),
-                Expanded(child: Text(item['title']?.toString() ?? 'Conversation', maxLines: 2, overflow: TextOverflow.ellipsis)),
-                const Icon(Icons.chevron_right_rounded, color: _muted),
-              ]))),
-          )),
+          for (final item in threads.take(3))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
+              child: _Tile(
+                child: InkWell(
+                  onTap: () => _openThread(item['id'].toString()),
+                  child: Row(children: [
+                    const Icon(Icons.arrow_outward, size: 20, color: OTheme.violet),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(item['title']?.toString() ?? 'Conversation', maxLines: 2, overflow: TextOverflow.ellipsis)),
+                    const Icon(Icons.chevron_right_rounded, color: _muted),
+                  ]),
+                ),
+              ),
+            ),
       ]),
     );
   }
