@@ -76,6 +76,22 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal(synced.payload.accepted, 1);
     const fullHub = await call("/api/projects", apiToken);
     assert.ok(fullHub.payload.projects.some(p => p.source === "codex_cloud" && p.state === "in_progress"));
+    const codexRequest = await call("/api/providers/codex/tasks", apiToken, "POST", {
+      workerId: "ci-worker", environmentId: "test-cloud-env", prompt: "Create a website",
+    }, "codex-http-request-0001");
+    assert.equal(codexRequest.status, 201);
+    assert.equal(codexRequest.payload.status, "waiting_for_approval");
+    assert.equal((await call("/api/workers/ci-worker/next", workerToken, "POST")).payload.task, null);
+    const codexApproval = await call("/api/tasks/" + codexRequest.payload.id + "/decision", apiToken,
+      "POST", { approve: true });
+    assert.equal(codexApproval.payload.status, "queued");
+    const codexClaim = await call("/api/workers/ci-worker/next", workerToken, "POST");
+    assert.equal(codexClaim.payload.task.kind, "codex_cloud_submit");
+    assert.equal(codexClaim.payload.task.parameters.prompt, "Create a website");
+    const codexSent = await call("/api/workers/ci-worker/tasks/" + codexRequest.payload.id + "/finish",
+      workerToken, "POST", { ok: true, result: { state: "submitted_to_provider" } });
+    assert.equal(codexSent.payload.result.state, "submitted_to_provider");
+
     const initial = await call("/api/state", apiToken);
     assert.equal(initial.payload.workers[0].status, "online");
     const task = await call("/api/tasks", apiToken, "POST", { workerId: "ci-worker", kind: "system_info" }, "http-test-task-0001");
