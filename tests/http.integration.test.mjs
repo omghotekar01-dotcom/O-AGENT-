@@ -44,6 +44,14 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     }
     assert.equal(ready, true, "Control-plane HTTP server must start");
     assert.equal((await call("/api/state", "wrong")).status, 401);
+    assert.equal((await call("/api/ai/status", "wrong")).status, 401);
+    const providerStatus = await call("/api/ai/status", apiToken);
+    assert.equal(providerStatus.status, 200);
+    assert.equal(providerStatus.payload.configured, false);
+    const unconfiguredChat = await call("/api/ai/chat", apiToken, "POST", { agentId: "navigator", message: "Check machine status" });
+    assert.equal(unconfiguredChat.status, 503);
+    assert.match(unconfiguredChat.payload.error, /not configured/i);
+
     const registered = await call("/api/workers/register", workerToken, "POST", { id: "ci-worker", name: "CI worker" });
     assert.equal(registered.status, 201);
     assert.equal(registered.payload.name, "CI worker");
