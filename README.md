@@ -1,3 +1,12 @@
+## O-AGENT Studio — AI agents + Flutter mobile (November 2026)
+
+**[Start here: real AI provider setup and testing](docs/AI_SETUP.md).** The development backend now includes an authenticated model integration with OpenAI Responses API or Anthropic Messages API (choose one and provide your own server-side API key). Conversation threads are persisted locally; the model can use an allowlisted tool set to inspect real registered machines and tasks, request system health, and request a human-approved workspace inventory. No provider keys are shipped in APKs.
+
+**Flutter Android/iOS** now opens a purpose-designed, editorial agent studio with **Home, Agents, Chat, Activity and Approvals**. Chat messages are sent to the real provider from the laptop backend. Agent profiles are scoped prompts, not fake autonomous cloud agents. Tool execution stays bounded and user-controlled.
+
+A successful Flutter APK build or a configured-key flag is not proof that your external provider key works: perform the [real-device acceptance checks](docs/AI_SETUP.md) on your Windows laptop and Android phone. Chat requires an API key with active provider access and may incur charges.
+
+
 # OMIO AGENT HQ
 
 **A native Android-first command centre for a real, observable AI workforce.**
