@@ -1,3 +1,14 @@
+## Supervised live Codex CLI control from Android (new)
+
+O-AGENT now has a real **session-control workflow**, not just a read-only project card. With the existing signed-in Windows Codex CLI and the opted-in local connector, open Android **Projects → Codex CLI / IDE → project → saved session → Open Codex control and live activity**.
+
+Enter a prompt, choose **Read-only** (default) or **Project edits**, explicitly approve the exact session/folder/mode/prompt, and watch real Codex app-server model/tool events update approximately every 3 seconds. When Codex requests command/file permissions in Project edits mode, O-AGENT presents them for a separate operator decision, deny-by-default. No arbitrary shell forwarding; this uses documented Codex thread/resume and turn/start calls.
+
+The same CLI login can be used; no extra OpenAI API key is necessary to invoke Codex CLI itself. Provider/model allowance and an available Codex session still matter. This is not remote control of existing ChatGPT.com Projects/Work pages or their managed cloud browsers. Mobile file uploads, other provider SDK runtimes, always-on cloud hosting and screen viewing remain separate work.
+
+- [Deep provider research, capability boundaries and roadmap](docs/UNIVERSAL_REMOTE_AGENT_CONTROL.md)
+- [Real Codex CLI project setup](docs/CODEX_LOCAL_WORKSPACES.md)
+
 ## Your Codex CLI / IDE coding projects — newly supported
 
 **O-AGENT can now display the actual coding projects you work on via the signed-in Codex CLI and IDE.** Its opted-in laptop connector queries the official `codex app-server` `thread/list` API, groups your saved sessions by real working directory, and displays the session titles/last updates under **Projects → Codex CLI / IDE** on Android. This works even when `codex cloud list` returns `{"tasks":[]}`. It is not the same as GitHub repository configuration.
