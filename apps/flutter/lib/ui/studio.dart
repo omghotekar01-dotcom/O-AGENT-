@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
@@ -637,7 +636,7 @@ class StudioConnect extends StatefulWidget {
 }
 
 class _StudioConnectState extends State<StudioConnect> {
-  final url = TextEditingController(text: Platform.isAndroid ? 'http://10.0.2.2:8787' : 'http://127.0.0.1:8787');
+  final url = TextEditingController(text: 'http://127.0.0.1:8787');
   final token = TextEditingController();
   bool hidden = true;
   @override
