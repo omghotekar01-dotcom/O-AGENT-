@@ -35,6 +35,7 @@ class _StudioShellState extends State<StudioShell> {
 
   ControlController get c => widget.controller;
   bool get aiReady => status?['configured'] == true;
+  bool get aiVerified => status?['health'] == 'connected';
   List<Map<String, dynamic>> get agents {
     final raw = status?['agents'];
     if (raw is! List) return [];
@@ -126,6 +127,10 @@ class _StudioShellState extends State<StudioShell> {
       await c.refresh();
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
+      try {
+        final fresh = await api.aiStatus();
+        if (mounted) setState(() => status = fresh);
+      } catch (_) { /* preserve original provider error */ }
     } finally {
       if (mounted) setState(() => sending = false);
     }
@@ -266,7 +271,7 @@ class _StudioShellState extends State<StudioShell> {
             Row(children: [
               const Icon(Icons.forum_outlined, color: OTheme.violet, size: 21),
               const Spacer(),
-              _StatusLabel(label: aiReady ? 'AI READY' : 'SETUP REQUIRED', color: aiReady ? _ok : _alert),
+              _StatusLabel(label: aiVerified ? 'AI VERIFIED' : (aiReady ? 'AI UNVERIFIED' : 'SETUP REQUIRED'), color: aiVerified ? _ok : _alert),
             ]),
             const SizedBox(height: 18),
             const Text('Start a conversation', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.6)),
@@ -393,7 +398,7 @@ class _StudioShellState extends State<StudioShell> {
           const _Eyebrow('CONVERSATION'),
           const SizedBox(height: 5),
           Text(activeAgent['name'].toString(), style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w700, letterSpacing: -0.6)),
-          Text(aiReady ? 'Powered by ${status?['provider']} · ${status?['model']}' : 'Provider not configured',
+          Text(aiReady ? (aiVerified ? 'Provider connected · ' : 'Provider not verified · ') + status!['provider'].toString() + ' · ' + status!['model'].toString() : 'Provider not configured',
             style: const TextStyle(color: _muted, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
         ])),
         PopupMenuButton<String>(
