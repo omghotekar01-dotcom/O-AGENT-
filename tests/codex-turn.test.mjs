@@ -154,8 +154,12 @@ test("official Codex app-server actually resumes, starts turn, emits real deltas
   assert.equal(result.providerStatus, "completed");
   assert.equal(result.output, "Real Codex answer.");
   assert.ok(updates.some(e => e.type === "agent_delta" && e.text.includes("Real Codex")));
-  assert.equal(fake.sent.find(m => m.method === "turn/start").params.sandboxPolicy.type, "readOnly");
-  assert.equal(fake.sent.find(m => m.method === "turn/start").params.cwd, cwd);
+  // Regression: Codex CLI 0.167.2 rejects the legacy
+  // sandboxPolicy.readOnly.access object with an invalid-request error.
+  const start = fake.sent.find(m => m.method === "turn/start").params;
+  assert.deepEqual(start.sandboxPolicy, { type: "readOnly", networkAccess: false });
+  assert.equal(start.approvalPolicy, "on-request");
+  assert.equal(start.cwd, cwd);
   assert.equal(fake.turnStarted, true);
 });
 test("live provider tool approval only accepts a real human decision", async () => {
@@ -173,6 +177,11 @@ test("live provider tool approval only accepts a real human decision", async () 
   });
   assert.equal(result.providerStatus, "completed");
   assert.equal(fake.sent.find(m => m.id === 77 && !m.method).result.decision, "decline");
-  assert.equal(fake.sent.find(m => m.method === "turn/start").params.sandboxPolicy.networkAccess, false);
+  // Both readOnly.access and workspaceWrite.readOnlyAccess are obsolete.
+  // Project edits remain restricted to the user-approved workspace root.
+  const start = fake.sent.find(m => m.method === "turn/start").params;
+  assert.deepEqual(start.sandboxPolicy, {
+    type: "workspaceWrite", writableRoots: [cwd], networkAccess: false,
+  });
   assert.ok(updates.some(e => e.type === "status" && e.text.includes("denied")));
 });
