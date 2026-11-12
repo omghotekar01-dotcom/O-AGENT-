@@ -1,0 +1,30 @@
+name: Windows One-Click Launcher
+on:
+  pull_request:
+    paths:
+      - "tools/windows/**"
+      - "*.cmd"
+      - ".github/workflows/windows-one-click.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tools/windows/**"
+      - "*.cmd"
+      - ".github/workflows/windows-one-click.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-integration:
+    name: Windows PowerShell 5.1 launcher integration
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check Windows scripts and start actual Node backend/worker twice
+        shell: powershell
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/windows/self-test.ps1
