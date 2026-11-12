@@ -49,6 +49,7 @@ class _StudioShellState extends State<StudioShell> {
     super.initState();
     c.addListener(_handleConnection);
     if (c.connected) Future.microtask(_load);
+    else Future.microtask(c.reconnectSavedSession);
   }
 
   void _handleConnection() {
@@ -159,7 +160,7 @@ class _StudioShellState extends State<StudioShell> {
             const SizedBox(height: 16),
             Text(aiReady ? 'AI: ${status?['provider']} / ${status?['model']}' : 'AI provider not configured on backend'),
             const SizedBox(height: 10),
-            const Text('The operator token stays in app memory. Model keys stay on your backend; never paste a model key into this app.', style: TextStyle(fontSize: 12, color: _muted, height: 1.5)),
+            Text(c.hasSavedSession ? 'The operator token is protected in Android Keystore / iOS Keychain on this device. Disconnect deletes it. Model keys remain on your backend.' : 'The operator token is in app memory only. Model keys stay on your backend.', style: const TextStyle(fontSize: 12, color: _muted, height: 1.5)),
             const SizedBox(height: 22),
             SizedBox(width: double.infinity, child: OutlinedButton.icon(
               onPressed: () { Navigator.pop(ctx); c.disconnect(); },
@@ -639,6 +640,7 @@ class _StudioConnectState extends State<StudioConnect> {
   final url = TextEditingController(text: 'http://127.0.0.1:8787');
   final token = TextEditingController();
   bool hidden = true;
+  bool rememberDevice = false;
   @override
   void dispose() { url.dispose(); token.dispose(); super.dispose(); }
 
@@ -669,18 +671,37 @@ class _StudioConnectState extends State<StudioConnect> {
               prefixIcon: const Icon(Icons.key_outlined),
               suffixIcon: IconButton(tooltip: 'Toggle token visibility', icon: Icon(hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined),
                 onPressed: () => setState(() => hidden = !hidden)))),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            value: rememberDevice,
+            onChanged: (v) => setState(() => rememberDevice = v ?? false),
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('Remember this device', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            subtitle: const Text('Uses Android Keystore / iOS Keychain. Avoid on shared phones.', style: TextStyle(fontSize: 11)),
+          ),
+          const SizedBox(height: 8),
           SizedBox(width: double.infinity, child: FilledButton(
-            onPressed: widget.controller.connecting ? null : () async {
-              final ok = await widget.controller.connect(url.text, token.text);
+            onPressed: widget.controller.connecting || widget.controller.restoringSession ? null : () async {
+              final ok = await widget.controller.connect(url.text, token.text, remember: rememberDevice);
               if (ok) token.clear();
             },
             child: Text(widget.controller.connecting ? 'Connecting…' : 'Connect to O-AGENT'),
           )),
+          if (widget.controller.restoringSession)
+            const Padding(padding: EdgeInsets.only(top: 12),
+              child: Text('Restoring your saved connection…', style: TextStyle(color: _muted))),
+          if (widget.controller.hasSavedSession && !widget.controller.restoringSession)
+            Padding(padding: const EdgeInsets.only(top: 11),
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.lock_open_outlined),
+                onPressed: widget.controller.reconnectSavedSession,
+                label: const Text('Reconnect saved device'),
+              )),
           if (widget.controller.error != null) Padding(padding: const EdgeInsets.only(top: 12),
             child: Text(widget.controller.error!, style: const TextStyle(color: _alert))),
           const SizedBox(height: 25),
-          const _Note('Use the same operator token as your browser dashboard. Provider API keys belong only on your laptop backend. USB debugging with adb reverse can connect a physical Android phone to 127.0.0.1.'),
+          const _Note('First connection: use the operator token from the one-click Windows setup. Provider keys belong only on your laptop backend. The launcher configures USB reverse for a connected authorized phone.'),
         ],
       )),
     )))),
