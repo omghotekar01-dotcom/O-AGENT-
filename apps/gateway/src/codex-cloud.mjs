@@ -36,3 +36,38 @@ export async function readCodexCloudTasks(execImpl = execFileAsync) {
   });
   return normalizeCodexTasks(JSON.parse(stdout));
 }
+
+export async function submitCodexCloudTask(environmentId, prompt, execImpl = execFileAsync) {
+  if (typeof environmentId !== "string" || !/^[A-Za-z0-9_-]{3,120}$/.test(environmentId)) {
+    throw new Error("Invalid Codex Cloud environment");
+  }
+  if (typeof prompt !== "string" || prompt.trim().length < 1 || prompt.length > 2000) {
+    throw new Error("Invalid Codex Cloud task prompt");
+  }
+  const windows = process.platform === "win32";
+  // PowerShell expands environment variables as arguments rather than
+  // treating user-supplied prompt text as shell source.
+  const bin = windows ? "powershell.exe" : "codex";
+  const args = windows
+    ? ["-NoProfile", "-NonInteractive", "-Command",
+       "& codex cloud exec --env $env:OAGENT_CODEX_ENV $env:OAGENT_CODEX_TASK_PROMPT"]
+    : ["cloud", "exec", "--env", environmentId, prompt.trim()];
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
+    !/^(OAGENT_(API|WORKER)_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|OAGENT_GITHUB_TOKEN)$/i.test(key)
+  ));
+  env.OAGENT_CODEX_ENV = environmentId;
+  env.OAGENT_CODEX_TASK_PROMPT = prompt.trim();
+  try {
+    const { stdout } = await execImpl(bin, args, {
+      env, timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true,
+    });
+    return {
+      provider: "codex_cloud", environmentId,
+      state: "submitted_to_provider",
+      message: typeof stdout === "string" ? stdout.slice(0, 2500) : "",
+      submittedAt: new Date().toISOString(),
+    };
+  } catch {
+    throw new Error("Codex CLI could not submit the cloud task. Verify installation, login and environment access.");
+  }
+}
