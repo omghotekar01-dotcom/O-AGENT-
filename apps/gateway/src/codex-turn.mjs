@@ -149,11 +149,15 @@ export async function runCodexTurn(task, {
         if (msg.error) return failProvider("Could not resume this Codex session. It may be owned by another active process; close that turn and retry.");
         stage = 2;
         enqueue("session_resumed", "Resumed real Codex session " + sessionId.slice(0, 8));
+        // Codex 0.167.x removed the legacy sandboxPolicy.readOnly.access
+        // and workspaceWrite.readOnlyAccess objects. Do not silently fall back
+        // to danger-full-access. The stable policy prevents writes in readOnly
+        // and limits write roots in workspaceWrite; it is NOT a read-scope
+        // boundary. Folder-restricted reads require a separately supported
+        // permissions profile, which this connector does not claim.
         const sandboxPolicy = mode === "workspace_write"
-          ? { type: "workspaceWrite", writableRoots: [root], networkAccess: false,
-              readOnlyAccess: { type: "restricted", includePlatformDefaults: true, readableRoots: [root] } }
-          : { type: "readOnly",
-              access: { type: "restricted", includePlatformDefaults: true, readableRoots: [root] } };
+          ? { type: "workspaceWrite", writableRoots: [root], networkAccess: false }
+          : { type: "readOnly", networkAccess: false };
         request(3, "turn/start", {
           threadId: sessionId,
           input: [{ type: "text", text: prompt }],
