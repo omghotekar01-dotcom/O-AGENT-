@@ -2,6 +2,21 @@
 
 This is an optional **one-time configuration** on your own Windows user account. It does not transfer the GitHub/ChatGPT account connections used inside this ChatGPT conversation into O-AGENT automatically. A provider's authentication must happen in its own supported API/CLI.
 
+## First: your actual Codex CLI / IDE workspaces (local sessions)
+
+If `codex cloud list --json --limit 20` gives `{"tasks":[]}`, that only means no *Codex Cloud* tasks were returned. It does not tell us whether you have saved CLI/IDE coding sessions.
+
+**To show the coding projects you work on through Codex CLI:**
+
+1. Confirm `codex --version` and `codex login` have succeeded on your Windows account.
+2. If you have never opened Codex in a project directory, go into your coding project folder in PowerShell and run `codex` to create a real saved session. `codex login` alone doesn't create projects.
+3. Double-click `STOP-O-AGENT.cmd` and then `CONFIGURE-PROJECTS.cmd`.
+4. Keep the existing GitHub project list and any Codex Cloud setting. Answer **Y** to **Sync MY local Codex CLI / IDE projects?** (a separate consent from Codex Cloud sync).
+5. Restart `O-AGENT.cmd`; on Android open **Projects → Codex CLI / IDE** and refresh.
+6. Tap a workspace to see the actual saved session titles, last updates and last-observed app-server state. Session metadata may be stale if the worker cannot sync.
+
+See the full [Codex CLI workspace guide](CODEX_LOCAL_WORKSPACES.md) for privacy, limitations and recovery. These workspaces are not imported from GitHub account choices; they belong to the locally signed-in Codex CLI user. ChatGPT Work's managed chats are still a separate, unsupported surface.
+
 ## Part 1 — Public GitHub projects: immediate real data
 
 The one-click launcher includes your O-AGENT repository in the default public GitHub list. After updating and restarting the backend, open the Android app **Projects** tab. You should see O-AGENT and recent actual GitHub Actions workflows, or a genuine API error if GitHub cannot be reached.
