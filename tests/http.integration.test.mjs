@@ -1,0 +1,72 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+
+async function unusedPort() {
+  return new Promise((done, fail) => {
+    const server = createServer();
+    server.once("error", fail);
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      server.close(() => done(port));
+    });
+  });
+}
+const apiToken = "0123456789abcdef0123456789abcdef";
+const workerToken = "fedcba9876543210fedcba9876543210";
+
+test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeout: 20000 }, async () => {
+  const port = await unusedPort();
+  const directory = mkdtempSync(join(tmpdir(), "oagent-test-"));
+  const child = spawn(process.execPath, [resolve("apps/control-plane/src/server.mjs")], {
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), OAGENT_API_TOKEN: apiToken, OAGENT_WORKER_TOKEN: workerToken, OAGENT_DATA_FILE: join(directory, "state.json") },
+    stdio: "ignore",
+  });
+  const url = `http://127.0.0.1:${port}`;
+  async function call(path, token, method = "GET", body, key) {
+    const response = await fetch(url + path, {
+      method,
+      headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}), ...(key ? { "idempotency-key": key } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: response.status, payload: await response.json() };
+  }
+  try {
+    let ready = false;
+    for (let i = 0; i < 80; i++) {
+      if (child.exitCode !== null) throw Error("Control-plane process exited before startup");
+      try { ready = (await fetch(url + "/health")).ok; if (ready) break; } catch { /* startup pending */ }
+      await new Promise(r => setTimeout(r, 100));
+    }
+    assert.equal(ready, true, "Control-plane HTTP server must start");
+    assert.equal((await call("/api/state", "wrong")).status, 401);
+    const registered = await call("/api/workers/register", workerToken, "POST", { id: "ci-worker", name: "CI worker" });
+    assert.equal(registered.status, 201);
+    assert.equal(registered.payload.name, "CI worker");
+    const initial = await call("/api/state", apiToken);
+    assert.equal(initial.payload.workers[0].status, "online");
+    const task = await call("/api/tasks", apiToken, "POST", { workerId: "ci-worker", kind: "system_info" }, "http-test-task-0001");
+    assert.equal(task.status, 201);
+    assert.equal(task.payload.status, "queued");
+    const claimed = await call("/api/workers/ci-worker/next", workerToken, "POST");
+    assert.equal(claimed.payload.task.id, task.payload.id);
+    const finish = await call(`/api/workers/ci-worker/tasks/${task.payload.id}/finish`, workerToken, "POST", { ok: true, result: { measured: 42 } });
+    assert.equal(finish.payload.status, "completed");
+    const inventory = await call("/api/tasks", apiToken, "POST", { workerId: "ci-worker", kind: "workspace_inventory" }, "http-test-task-0002");
+    assert.equal(inventory.payload.status, "waiting_for_approval");
+    assert.equal((await call("/api/workers/ci-worker/next", workerToken, "POST")).payload.task, null);
+    const rejected = await call(`/api/tasks/${inventory.payload.id}/decision`, apiToken, "POST", { approve: false });
+    assert.equal(rejected.payload.status, "rejected");
+    const result = await call("/api/events?after=0", apiToken);
+    assert.ok(result.payload.events.some(event => event.type === "task.completed"));
+    const duplicate = await call("/api/tasks", apiToken, "POST", { workerId: "ci-worker", kind: "system_info" }, "http-test-task-0001");
+    assert.equal(duplicate.payload.id, task.payload.id);
+  } finally {
+    child.kill("SIGTERM");
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
