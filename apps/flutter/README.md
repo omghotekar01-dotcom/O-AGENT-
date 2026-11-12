@@ -25,6 +25,12 @@ Chat threads, user messages and assistant replies persist in the backend's local
 
 Unsupported features are not hidden behind fake UI: remote shell commands, live screen sharing, OAuth user login, cloud worker deployment, and push notifications are still future work. AI chat works only after configuring a paid/authorized provider key on the backend.
 
+## One-time mobile login: remember this device (opt-in)
+
+On a private Android or iOS device, the connection screen offers **Remember this device** (unchecked by default). When enabled, the backend origin and development operator token are encrypted and stored together using `flutter_secure_storage` (Android Keystore / Apple Keychain). On app launch, the phone tries to reconnect automatically; if your laptop is offline, start the [one-click Windows launcher](../../docs/ONE_CLICK_WINDOWS.md) and tap **Reconnect saved device**. **Disconnect** deletes the saved entry. Avoid this on shared phones: the development operator token has broad permissions. AI-provider keys stay only on your laptop backend.
+
+Android cloud backup of app data is disabled during platform scaffolding so encrypted tokens are not restored without the corresponding device key. The backend still must be reachable over authorized USB debugging or configured HTTPS.
+
 ## Quick start (Android / iOS)
 
 Prerequisites:
