@@ -44,7 +44,7 @@ function Save-OAgentConfig($config) {
     New-Item -ItemType Directory -Path $homeDir -Force | Out-Null
     $path = Get-OAgentConfigPath
     $json = $config | ConvertTo-Json -Depth 5
-    [IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding($false)))
+    [IO.File]::WriteAllText($path, $json, ([System.Text.UTF8Encoding]::new($false)))
 }
 
 function Get-OAgentNode {
@@ -91,7 +91,7 @@ function Save-OAgentPidState([int]$backendPid, [int]$workerPid, [int]$port) {
     $path = Join-Path (Get-OAgentHome) 'processes.json'
     [IO.File]::WriteAllText($path,
         (@{ BackendPid=$backendPid; WorkerPid=$workerPid; Port=$port; StartedAt=(Get-Date).ToString('o') } | ConvertTo-Json),
-        (New-Object System.Text.UTF8Encoding($false)))
+        ([System.Text.UTF8Encoding]::new($false)))
 }
 
 function Get-OAgentAdb {
