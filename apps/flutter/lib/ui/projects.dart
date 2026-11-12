@@ -255,6 +255,21 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
           ],
         )),
         actions: [
+          TextButton.icon(
+            onPressed: () async {
+              if (content.text.trim().isEmpty) return;
+              try {
+                final proposed = await widget.controller.client!.refinePrompt(
+                  content.text.trim(), target: 'codex_cloud');
+                content.text = proposed;
+              } catch (e) {
+                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('Cannot improve prompt: ' + e.toString())));
+              }
+            },
+            icon: const Icon(Icons.auto_fix_high_rounded),
+            label: const Text('Improve with AI'),
+          ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: () {
             if (environment.text.trim().isEmpty || content.text.trim().isEmpty) return;
