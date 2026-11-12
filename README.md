@@ -57,3 +57,16 @@ The foundation branch now also includes a **real, local-development vertical sli
 
 This is **not the complete O-AGENT product**. Production identity/device enrollment, Supabase-backed orchestration, live remote desktop, cloud workers, provider SDK adapters, MCP connections, and background push notifications remain future work. A reference design or UI screenshot is not evidence that those capabilities are implemented.
 
+
+## Flutter mobile application (Android + iOS)
+
+The preferred cross-platform mobile client is now in **[apps/flutter](apps/flutter/README.md)**. It connects to the real O-AGENT development control plane and supports machine status, system-information tasks, approval-protected workspace inventories, execution history, and task decisions.
+
+- [Flutter app source](apps/flutter/)
+- [Setup instructions and compatibility notes](apps/flutter/README.md)
+- [GitHub Actions builds and downloads](.github/workflows/flutter-mobile.yml): Flutter tests, Android debug APK, and unsigned iOS Simulator package.
+
+To generate the native platform scaffolds locally, run `flutter create --platforms=android,ios --org com.omiiii --project-name o_agent_mobile .` in `apps/flutter`, then `dart run tool/prepare_platforms.dart`. Use Flutter's official build tools to run the application.
+
+**Scope:** This is a functioning *development* client for the backend capabilities that currently exist. It is not a finished AI-agent cloud platform; it does not claim to provide production authentication, AI chat, desktop screen streaming, arbitrary remote shell access, or live cloud orchestration. The earlier native Kotlin prototype remains in `apps/android` for continuity.
+
