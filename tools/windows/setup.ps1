@@ -59,7 +59,7 @@ $operatorCipher = Get-OAgentInputSecret 'OPERATOR token' $env:OAGENT_API_TOKEN
 $workerCipher = Get-OAgentInputSecret 'WORKER token' $env:OAGENT_WORKER_TOKEN
 
 # Do not allow accidentally using the same secret for both roles.
-if ($operatorCipher -eq $workerCipher) { throw "Operator and worker tokens must be different." }
+if ((Unlock-OAgentSecret $operatorCipher) -ceq (Unlock-OAgentSecret $workerCipher)) { throw "Operator and worker tokens must be different." }
 
 $id = Read-Host 'Worker ID [my-laptop]'
 if ([string]::IsNullOrWhiteSpace($id)) { $id = 'my-laptop' }
