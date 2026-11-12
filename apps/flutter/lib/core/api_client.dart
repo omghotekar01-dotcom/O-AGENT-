@@ -85,6 +85,20 @@ class AgentApi {
     }
   }
 
+  /// Requests a NEW Codex Cloud task via a connected laptop CLI.
+  /// The backend must require a separate human approval before execution.
+  Future<void> requestCodexTask({
+    required String workerId,
+    required String environmentId,
+    required String prompt,
+  }) async {
+    await _request('/api/providers/codex/tasks', method: 'POST', body: {
+      'workerId': workerId,
+      'environmentId': environmentId,
+      'prompt': prompt,
+    }, idempotencyKey: createIdempotencyKey());
+  }
+
   /// Unified project feed: real GitHub/Codex metadata and locally owned projects.
   Future<Map<String, dynamic>> projects() => _request('/api/projects');
 
