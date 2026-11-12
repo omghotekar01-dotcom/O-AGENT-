@@ -59,7 +59,7 @@ async function providerJson(fetchImpl, url, headers, body) {
   }
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) throw new DomainError(502, "AI provider rejected the server API key or access permissions");
-    if (response.status === 429) throw new DomainError(503, "AI provider rate or credit limit reached");
+    if (response.status === 429) throw new DomainError(503, "AI provider returned HTTP 429: check API billing/credits or retry after a rate limit. This is not a working AI connection.");
     throw new DomainError(502, "AI provider request failed (HTTP " + response.status + ")");
   }
   try { return await response.json(); } catch { throw new DomainError(502, "Invalid AI provider response"); }
@@ -78,6 +78,9 @@ export class AgentRuntime {
     this.env = env;
     this.fetchImpl = fetchImpl;
     this.busy = new Set();
+    this.providerHealth = "unverified";
+    this.lastVerifiedAt = null;
+    this.lastError = null;
     core.data.agentThreads ??= {};
   }
 
@@ -86,8 +89,10 @@ export class AgentRuntime {
   get key() { return this.provider === "openai" ? this.env.OPENAI_API_KEY : this.env.ANTHROPIC_API_KEY; }
 
   status() {
-    return { configured: typeof this.key === "string" && this.key.length > 12, provider: this.provider, model: this.model, agents: AGENTS };
+    return { configured: typeof this.key === "string" && this.key.length > 12, provider: this.provider, model: this.model,
+      health: this.statusHealth(), lastVerifiedAt: this.lastVerifiedAt, lastError: this.lastError, agents: AGENTS };
   }
+  statusHealth() { return !this.key || this.key.length <= 12 ? "not_configured" : this.providerHealth; }
   threads() {
     return Object.values(this.core.data.agentThreads).map(t => ({
       id: t.id, agentId: t.agentId, title: t.title, updatedAt: t.updatedAt,
@@ -200,6 +205,9 @@ export class AgentRuntime {
     try {
       const requestMessages = [...thread.messages.slice(-MAX_MESSAGES + 1), { role: "user", content: prompt }];
       const reply = await this.generate(requestMessages, agent);
+      this.providerHealth = "connected";
+      this.lastError = null;
+      this.lastVerifiedAt = new Date().toISOString();
       const now = Date.now();
       thread.messages.push({ id: randomUUID(), role: "user", content: prompt, at: now });
       thread.messages.push({ id: randomUUID(), role: "assistant", content: reply.slice(0, 12000), at: Date.now() });
@@ -207,6 +215,11 @@ export class AgentRuntime {
       thread.updatedAt = Date.now();
       this.core.commit("ai.message.completed", { threadId: thread.id, agentId: agent.id });
       return thread;
+    } catch (error) {
+      this.lastError = error.status ? error.message : "AI provider request failed";
+      this.providerHealth = /429|credit|rate limit/i.test(this.lastError) ? "rate_limited"
+        : /rejected|permission|key/i.test(this.lastError) ? "invalid_credentials" : "degraded";
+      throw error;
     } finally {
       this.busy.delete(thread.id);
     }
