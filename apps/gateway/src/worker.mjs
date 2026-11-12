@@ -1,6 +1,7 @@
 import { hostname, platform, arch, cpus, totalmem, freemem, uptime } from "node:os";
 import { readdir, lstat, realpath } from "node:fs/promises";
 import { resolve, basename, join } from "node:path";
+import { readCodexCloudTasks } from "./codex-cloud.mjs";
 
 const endpoint = new URL(process.env.OAGENT_SERVER_URL || "http://127.0.0.1:8787");
 if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname))) {
@@ -42,9 +43,20 @@ async function execute(task) {
 }
 async function main() {
   console.log(`O-AGENT worker ${id} starting; workspace root: ${root}`);
+  let lastCodexSync = 0;
   await api("/api/workers/register", { id, name: hostname() });
   while (true) {
     try {
+      if (process.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC === "1" && Date.now() - lastCodexSync > 45000) {
+        lastCodexSync = Date.now();
+        try {
+          const tasks = await readCodexCloudTasks();
+          await api(`/api/workers/${id}/codex/sync`, { tasks });
+        } catch {
+          // Never leak CLI output, browser cookies, provider sessions or credentials in worker logs.
+          console.error("Codex Cloud sync unavailable; check Codex CLI installation and login.");
+        }
+      }
       await api(`/api/workers/${id}/heartbeat`);
       const { task } = await api(`/api/workers/${id}/next`);
       if (task) {
