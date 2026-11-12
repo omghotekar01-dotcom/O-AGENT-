@@ -95,3 +95,32 @@ test("invalid inputs and mismatched agent/thread are rejected", async () => {
   const thread = await rt.send({ agentId: "navigator", message: "Hi" });
   await assert.rejects(rt.send({ agentId: "operator", threadId: thread.id, message: "Hi" }), e => e.status === 409);
 });
+
+test("prompt improvement previews a real model rewrite without granting any tools", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push(JSON.parse(options.body));
+    return { ok: true, json: async () => ({
+      output: [{ type: "message", content: [{ type: "output_text", text: "Build a documented React landing page and run tests." }] }],
+    }) };
+  };
+  const rt = new AgentRuntime(makeCore(), { env, fetchImpl });
+  const result = await rt.refinePrompt({ target: "codex_cloud", message: "make website" });
+  assert.match(result.proposed, /React landing page/);
+  assert.equal(calls[0].tools, undefined, "Refiner must never invoke machine or provider tools");
+  assert.equal(calls[0].store, false);
+  assert.equal(rt.status().health, "connected");
+  assert.ok(rt.status().lastVerifiedAt);
+});
+test("rate-limited model is not mislabeled connected even when a key exists", async () => {
+  const rt = new AgentRuntime(makeCore(), {
+    env,
+    fetchImpl: async () => ({ ok: false, status: 429 }),
+  });
+  assert.equal(rt.status().configured, true);
+  assert.equal(rt.status().health, "unverified");
+  await assert.rejects(rt.refinePrompt({ message: "Improve this plan" }), err =>
+    err.status === 503 && /429/.test(err.message));
+  assert.equal(rt.status().health, "rate_limited");
+  assert.match(rt.status().lastError, /billing\/credits/);
+});
