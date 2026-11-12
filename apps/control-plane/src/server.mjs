@@ -97,6 +97,9 @@ const server = createServer(async (req, res) => {
       return send(res, 200, await projectHub.send(decodeURIComponent(projectMessage[1]), await readJson(req)));
     }
 
+    if (req.method === "POST" && path === "/api/ai/refine") {
+      return send(res, 200, await agentRuntime.refinePrompt(await readJson(req)));
+    }
     if (req.method === "GET" && path === "/api/ai/status") return send(res, 200, agentRuntime.status());
     if (req.method === "GET" && path === "/api/ai/threads") return send(res, 200, { threads: agentRuntime.threads() });
     const threadPath = path.match(/^\/api\/ai\/threads\/([0-9a-f-]+)$/);
