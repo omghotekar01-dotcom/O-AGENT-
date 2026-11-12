@@ -550,8 +550,18 @@ class _StudioShellState extends State<StudioShell> {
             const SizedBox(height: 6),
             Text('Machine: ${task.workerId}', style: const TextStyle(fontSize: 13, color: _muted)),
             const SizedBox(height: 7),
-            const Text('This request lists top-level workspace filenames only. It does not run commands or modify files.',
-              style: TextStyle(fontSize: 12, height: 1.5, color: _muted)),
+            Text(task.kind == 'codex_cloud_submit'
+                ? 'Creates a NEW Codex Cloud task in the environment listed below, potentially using API credits. Approval does not mean the provider will complete the task.'
+                : 'Lists the top-level workspace filenames only. It does not modify files.',
+              style: const TextStyle(fontSize: 12, height: 1.5, color: _muted)),
+            if (task.kind == 'codex_cloud_submit') ...[
+              const SizedBox(height: 8),
+              Text('Environment: ' + (task.parameters?['environmentId']?.toString() ?? 'Unknown'),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              SelectableText('Exact prompt: ' + (task.parameters?['prompt']?.toString() ?? ''),
+                style: const TextStyle(fontSize: 12, height: 1.5)),
+            ],
             const SizedBox(height: 16),
             Row(children: [
               Expanded(child: OutlinedButton(
@@ -565,7 +575,7 @@ class _StudioShellState extends State<StudioShell> {
           ]),
         )),
         const SizedBox(height: 12),
-        const _Note('Approving a workspace inventory only authorizes listing its top-level entries. The gateway has no arbitrary command or file-editing capability.'),
+        const _Note('Review the complete target and exact prompt before approving. Cloud task submissions may incur provider charges; O-AGENT approval only authorizes the specified request.'),
       ],
     ));
   }
@@ -573,7 +583,7 @@ class _StudioShellState extends State<StudioShell> {
   Future<void> _decide(AgentTask task, bool approve) async {
     final allowed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       title: Text(approve ? 'Approve this request?' : 'Reject this request?'),
-      content: Text('${task.title}\n\nMachine: ${task.workerId}\nTask ID: ${task.id}\n\nOnly top-level workspace filenames can be read.'),
+      content: Text('${task.title}\n\nMachine: ${task.workerId}\nTask ID: ${task.id}\n\nFor Codex tasks, this sends a NEW approved prompt to a cloud environment. For workspace inventories, it lists filenames only.'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Back')),
         FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(approve ? 'Approve' : 'Reject')),
@@ -598,6 +608,12 @@ class _StudioShellState extends State<StudioShell> {
             _StatusLabel(label: t.status.replaceAll('_', ' '), color: t.status == 'completed' ? _ok : _alert),
             const SizedBox(height: 12),
             SelectableText('Machine: ${t.workerId}\nTask ID: ${t.id}', style: const TextStyle(color: _muted, height: 1.6)),
+            if (t.parameters != null) ...[
+              const SizedBox(height: 16),
+              const Text('Approved action arguments', style: TextStyle(fontWeight: FontWeight.w700)),
+              SelectableText(const JsonEncoder.withIndent('  ').convert(t.parameters),
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+            ],
             if (t.result != null) ...[
               const SizedBox(height: 17),
               const Text('Verified worker output', style: TextStyle(fontWeight: FontWeight.w700)),
