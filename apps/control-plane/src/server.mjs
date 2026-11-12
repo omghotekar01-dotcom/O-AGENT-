@@ -39,12 +39,12 @@ function authorized(req, secret) {
   const expected = Buffer.from(secret);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
-function readJson(req) {
+function readJson(req, maxLength = 32768) {
   return new Promise((resolveBody, reject) => {
     let body = "";
     req.on("data", chunk => {
       body += chunk;
-      if (body.length > 32768) {
+      if (body.length > maxLength) {
         reject(new DomainError(413, "Request body too large"));
         req.destroy();
       }
@@ -137,6 +137,10 @@ const server = createServer(async (req, res) => {
     const cancel = path.match(/^\/api\/tasks\/([0-9a-f-]+)\/cancel$/);
     if (req.method === "POST" && cancel) return send(res, 200, core.cancel(cancel[1]));
 
+    const codexLocalSync = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/codex\/local\/sync$/);
+    if (req.method === "POST" && codexLocalSync) {
+      return send(res, 200, projectHub.publishCodexLocal(codexLocalSync[1], await readJson(req, 131072)));
+    }
     const codexSync = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/codex\/sync$/);
     if (req.method === "POST" && codexSync) {
       return send(res, 200, projectHub.publishCodex(codexSync[1], await readJson(req)));
