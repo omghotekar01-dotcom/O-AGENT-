@@ -1,7 +1,7 @@
 import { hostname, platform, arch, cpus, totalmem, freemem, uptime } from "node:os";
 import { readdir, lstat, realpath } from "node:fs/promises";
 import { resolve, basename, join } from "node:path";
-import { readCodexCloudTasks } from "./codex-cloud.mjs";
+import { readCodexCloudTasks, submitCodexCloudTask } from "./codex-cloud.mjs";
 
 const endpoint = new URL(process.env.OAGENT_SERVER_URL || "http://127.0.0.1:8787");
 if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname))) {
@@ -38,6 +38,12 @@ async function execute(task) {
       files.push({ name: basename(name), type: stat.isSymbolicLink() ? "symlink" : stat.isDirectory() ? "directory" : stat.isFile() ? "file" : "other", sizeBytes: stat.isFile() ? stat.size : null });
     }
     return { root: safeRoot, entries: files, truncated: (await readdir(safeRoot)).length > files.length };
+  }
+  if (task.kind === "codex_cloud_submit") {
+    if (process.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC !== "1") throw new Error("Codex Cloud connector is not enabled");
+    if (!task.parameters || typeof task.parameters !== "object") throw new Error("Missing approved task parameters");
+    // Only runs AFTER the operator has approved the exact immutable task.
+    return submitCodexCloudTask(task.parameters.environmentId, task.parameters.prompt);
   }
   throw new Error("Unsupported task");
 }
