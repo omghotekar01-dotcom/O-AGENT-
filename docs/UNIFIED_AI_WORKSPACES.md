@@ -95,6 +95,7 @@ These are **design selections requiring deployment and provider authorization**,
 ### P2 — Correct cross-provider routing
 
 - [ ] Provider-specific session identifiers, documented write capability and verified OAuth/SDK auth.
+- [x] Codex session control from Android: verified saved local thread selection, explicit approved turn, real agent/tool updates, and per-action human permission decisions via the official Codex app-server. Acceptance on the owner's actual CLI remains necessary.
 - [x] Preview-only AI prompt rewrite endpoint with editable proposed text and target before dispatch; requires working API quota.
 - [ ] Real image/PDF/document uploads, validation, encryption, retention and model/provider submission.
 - [ ] Reliable streaming of model output and tool/action events, pause/resume and follow-up messages.
