@@ -7,6 +7,80 @@ class OTheme {
   static const panel = Color(0xFF1D1C28);
   static const panelElevated = Color(0xFF29263A);
 
+  // O-AGENT Studio: quiet paper surfaces, editorial typography and measured
+  // accent colors rather than neon gradients and generic dashboard tiles.
+  static const paper = Color(0xFFF8F7F3);
+  static const ink = Color(0xFF202322);
+  static const violet = Color(0xFF6256A6);
+  static const lavender = Color(0xFFE9E4FB);
+  static const warm = Color(0xFFF0DDCF);
+  static const sage = Color(0xFFDDE6D7);
+  static const hairline = Color(0xFFE7E5E0);
+
+  static ThemeData studio() {
+    final colors = ColorScheme.fromSeed(
+      seedColor: violet,
+      brightness: Brightness.light,
+      surface: paper,
+    ).copyWith(
+      primary: violet,
+      onPrimary: Colors.white,
+      secondary: const Color(0xFF467862),
+      onSurface: ink,
+      outline: hairline,
+    );
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: colors,
+      scaffoldBackgroundColor: paper,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: paper, foregroundColor: ink,
+        elevation: 0, scrolledUnderElevation: 0,
+      ),
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(17),
+          side: const BorderSide(color: hairline),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: ink, foregroundColor: Colors.white,
+          minimumSize: const Size(0, 48),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: ink,
+          minimumSize: const Size(0, 46),
+          side: const BorderSide(color: hairline),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        border: OutlineInputBorder(
+          borderSide: const BorderSide(color: hairline),
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: paper,
+        indicatorColor: lavender,
+        height: 74,
+        labelTextStyle: WidgetStateProperty.all(
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+        ),
+      ),
+      dividerTheme: const DividerThemeData(color: hairline),
+    );
+  }
+
   static ThemeData dark() {
     final colors = ColorScheme.fromSeed(
       seedColor: purple,
