@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/controller.dart';
 import '../theme.dart';
+import 'codex_session.dart';
 
 const muted = Color(0xFF737771);
 Map<String, dynamic> asMap(Object? value) =>
@@ -373,7 +374,7 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
                 icon: const Icon(Icons.open_in_new), label: const Text('Open provider page')),
               const SizedBox(height: 10),
               Text(source == 'codex_cli'
-                ? 'These are actual Codex CLI / IDE saved sessions grouped by working folder. This connector cannot yet resume a session or stream what its agent is showing. Not loaded does not mean stopped.'
+                ? 'Saved CLI/IDE sessions are grouped by working folder. You can now request and approve a new Codex turn with real streamed output; this does not control an independent terminal or ChatGPT website tab. Not loaded does not mean stopped.'
                 : source == 'codex_cloud'
                   ? 'Existing cloud tasks are read-only. A NEW Codex task can be submitted through your signed-in laptop after explicit approval.'
                   : 'This external source is read-only; browser viewing and provider approvals are not exposed.',
@@ -412,6 +413,20 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
                           style: const TextStyle(fontSize: 10, color: muted),
                           overflow: TextOverflow.ellipsis)),
                       ]),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.chat_bubble_outline_rounded),
+                        label: const Text('Open Codex control and live activity'),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
+                          builder: (_) => CodexSessionScreen(
+                            controller: widget.controller,
+                            projectId: widget.projectId,
+                            sessionId: session['id'].toString(),
+                            sessionTitle: session['title']?.toString() ?? 'Codex session',
+                            cwd: project['cwd']?.toString() ?? '',
+                          ),
+                        )),
+                      ),
                     ]),
                   )),
             ],
