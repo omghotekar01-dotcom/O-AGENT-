@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn"]);
+const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"]);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted", "rejected"]);
 const MAX_EVENTS = 5000;
 export class DomainError extends Error {
@@ -100,6 +100,15 @@ export class ControlPlane {
         throw new DomainError(400, "Invalid SDK session ID");
       parameters = { cwd, prompt, mode, sessionId };
     }
+    if (kind === "vscode_open_file") {
+      const relativePath = requiredString(body.relativePath, "relative file path", 350);
+      if (relativePath.startsWith("/") || /^[A-Za-z]:/.test(relativePath) ||
+          relativePath.split(/[\\/]/).some(p => !p || p === "." || p === "..") ||
+          /[\x00-\x1f]/.test(relativePath)) {
+        throw new DomainError(400, "Open file path must be relative to the enrolled VS Code workspace");
+      }
+      parameters = { relativePath };
+    }
     const key = requiredString(requestKey, "Idempotency-Key", 200);
     if (key.length < 12) throw new DomainError(400, "Idempotency-Key must be at least 12 characters");
     const existing = Object.values(this.data.tasks).find(t => t.requestKey === key);
@@ -109,7 +118,7 @@ export class ControlPlane {
     }
     const task = {
       id: randomUUID(), requestKey: key, workerId, kind, parameters,
-      status: ["workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn"].includes(kind) ? "waiting_for_approval" : "queued",
+      status: ["workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"].includes(kind) ? "waiting_for_approval" : "queued",
       updates: [], approvals: {},
       createdAt: this.clock(), updatedAt: this.clock(), result: null, error: null,
     };
