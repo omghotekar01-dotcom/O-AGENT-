@@ -93,7 +93,7 @@ class AgentApi {
   }) async {
     final origin = validateEndpoint(backend);
     if (!const {'/api/auth/register', '/api/auth/verify', '/api/auth/login',
-      '/api/auth/forgot', '/api/auth/reset'}.contains(path)) {
+      '/api/auth/forgot', '/api/auth/reset', '/api/auth/resend'}.contains(path)) {
       throw const ApiException('Unsupported account action');
     }
     final http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
@@ -138,6 +138,24 @@ class AgentApi {
   Future<void> revokeMember(String id) async {
     await _request('/api/accounts/members/${Uri.encodeComponent(id)}', method: 'DELETE');
   }
+
+  Future<Map<String, dynamic>> githubStatus() => _request('/api/account/github');
+
+  Future<Map<String, dynamic>> connectGithub(String personalAccessToken) =>
+    _request('/api/account/github', method: 'PUT',
+      body: {'token': personalAccessToken});
+
+  Future<void> disconnectGithub() async {
+    await _request('/api/account/github', method: 'DELETE');
+  }
+
+  Future<List<Map<String, dynamic>>> githubRepos() async {
+    final result = await _request('/api/account/github/repos');
+    return (result['repos'] as List? ?? [])
+      .map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> githubReadmeStatus() => _request('/api/account/github');
 
   Future<List<Map<String, dynamic>>> accountAttachments() async {
     final data = await _request('/api/account/attachments');
@@ -191,10 +209,12 @@ class AgentApi {
     required String message,
     String? threadId,
     List<String> attachmentIds = const [],
+    String? githubRepository,
   }) => _request('/api/account/chat', method: 'POST', body: {
     'provider': provider, 'agentId': 'navigator', 'message': message,
     if (threadId != null) 'threadId': threadId,
     if (attachmentIds.isNotEmpty) 'attachmentIds': attachmentIds,
+    if (githubRepository != null) 'githubRepository': githubRepository,
   });
 
   /// Public pairing route; only works with a one-time owner-issued invitation.

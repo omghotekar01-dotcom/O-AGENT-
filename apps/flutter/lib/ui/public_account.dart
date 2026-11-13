@@ -44,6 +44,8 @@ class _PublicAccountScreenState extends State<PublicAccountScreen> {
           break;
         case 'Forgot password':
           path = '/api/auth/forgot'; body = {'email': email.text.trim()}; break;
+        case 'Resend code':
+          path = '/api/auth/resend'; body = {'email': email.text.trim()}; break;
         case 'Reset password':
           path = '/api/auth/reset';
           body = {'email': email.text.trim(), 'code': code.text.trim(),
@@ -71,7 +73,7 @@ class _PublicAccountScreenState extends State<PublicAccountScreen> {
       password.clear(); code.clear();
       setState(() {
         message = result['message']?.toString() ?? 'Account updated successfully.';
-        if (mode == 'Create account') mode = 'Verify email';
+        if (mode == 'Create account' || mode == 'Resend code') mode = 'Verify email';
         else if (mode == 'Forgot password') mode = 'Reset password';
         else mode = 'Sign in';
       });
@@ -83,7 +85,7 @@ class _PublicAccountScreenState extends State<PublicAccountScreen> {
   }
   @override
   Widget build(BuildContext context) {
-    const modes = ['Sign in','Create account','Verify email','Forgot password','Reset password'];
+    const modes = ['Sign in','Create account','Verify email','Resend code','Forgot password','Reset password'];
     final needsPassword = mode == 'Sign in' || mode == 'Create account' || mode == 'Reset password';
     return Scaffold(
       appBar: AppBar(title: const Text('Personal O-AGENT account')),
