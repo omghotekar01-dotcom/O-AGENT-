@@ -139,6 +139,23 @@ class AgentApi {
     await _request('/api/accounts/members/${Uri.encodeComponent(id)}', method: 'DELETE');
   }
 
+  Future<List<Map<String, dynamic>>> accountAttachments() async {
+    final data = await _request('/api/account/attachments');
+    return (data['attachments'] as List? ?? [])
+      .map((x) => Map<String, dynamic>.from(x as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> uploadAccountAttachment({
+    required String name, required String mimeType, required String base64,
+  }) => _request('/api/account/attachments', method: 'POST', body: {
+    'name': name, 'mimeType': mimeType, 'base64': base64,
+  });
+
+  Future<void> deleteAccountAttachment(String id) async {
+    await _request('/api/account/attachments/' + Uri.encodeComponent(id),
+      method: 'DELETE');
+  }
+
   Future<Map<String, dynamic>> accountConnections() =>
       _request('/api/account/connections');
 
@@ -173,9 +190,11 @@ class AgentApi {
     required String provider,
     required String message,
     String? threadId,
+    List<String> attachmentIds = const [],
   }) => _request('/api/account/chat', method: 'POST', body: {
     'provider': provider, 'agentId': 'navigator', 'message': message,
     if (threadId != null) 'threadId': threadId,
+    if (attachmentIds.isNotEmpty) 'attachmentIds': attachmentIds,
   });
 
   /// Public pairing route; only works with a one-time owner-issued invitation.

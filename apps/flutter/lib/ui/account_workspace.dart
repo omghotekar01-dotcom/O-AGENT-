@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/controller.dart';
@@ -19,6 +21,9 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
   List<Map<String, dynamic>> providers = [];
   List<Map<String, dynamic>> threads = [];
   List<Map<String, dynamic>> members = [];
+  List<Map<String, dynamic>> storedAttachments = [];
+  List<Map<String, dynamic>> stagedAttachments = [];
+  bool uploading = false;
   Map<String, dynamic>? conversation;
   Map<String, dynamic>? invite;
   String selectedProvider = 'openai';
@@ -49,12 +54,14 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
       final fetched = (response['providers'] as List? ?? [])
         .map((x) => Map<String, dynamic>.from(x as Map)).toList();
       final recent = await api.accountThreads();
+      final files = await api.accountAttachments();
       final people = owner ? await api.members() : <Map<String, dynamic>>[];
       if (!mounted) return;
       setState(() {
         providers = fetched;
         threads = recent;
         members = people;
+        storedAttachments = files;
         if (!providers.any((p) => p['id'] == selectedProvider && p['connected'] == true)) {
           for (final p in providers) {
             if (p['connected'] == true) {
@@ -189,6 +196,54 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
     }
   }
 
+  Future<void> _pickFile() async {
+    if (uploading || stagedAttachments.length >= 3) return;
+    try {
+      final selected = await FilePicker.platform.pickFiles(type: FileType.custom,
+        allowedExtensions: ['txt', 'md', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx'],
+        withData: true);
+      if (selected == null || selected.files.isEmpty) return;
+      final file = selected.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty || bytes.length > 1500000) {
+        throw const ApiException('Choose a file of 1.5 MB or less.');
+      }
+      const types = {
+        'txt': 'text/plain', 'md': 'text/markdown', 'pdf': 'application/pdf',
+        'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+        'webp': 'image/webp',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      };
+      final mime = types[file.extension?.toLowerCase()];
+      if (mime == null) throw const ApiException('File type unsupported');
+      setState(() { uploading = true; error = null; });
+      final saved = await widget.controller.client!.uploadAccountAttachment(
+        name: file.name, mimeType: mime, base64: base64Encode(bytes));
+      if (!mounted) return;
+      setState(() {
+        stagedAttachments.add(saved);
+        storedAttachments.insert(0, saved);
+      });
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => uploading = false);
+    }
+  }
+
+  Future<void> _deleteFile(String id) async {
+    try {
+      await widget.controller.client!.deleteAccountAttachment(id);
+      if (!mounted) return;
+      setState(() {
+        stagedAttachments.removeWhere((f) => f['id'] == id);
+        storedAttachments.removeWhere((f) => f['id'] == id);
+      });
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
+  }
+
   Future<void> _send() async {
     final prompt = message.text.trim();
     if (sending || prompt.isEmpty) return;
@@ -200,10 +255,11 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
     try {
       final next = await widget.controller.client!.accountChat(
         provider: selectedProvider, message: prompt,
+        attachmentIds: stagedAttachments.map((f) => f['id'].toString()).toList(),
         threadId: conversation?['id']?.toString());
       if (!mounted) return;
       message.clear();
-      setState(() => conversation = next);
+      setState(() { conversation = next; stagedAttachments.clear(); });
       threads = await widget.controller.client!.accountThreads();
       if (mounted) setState(() {});
     } catch (e) {
@@ -353,15 +409,31 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
   Widget _composer() => Container(padding: const EdgeInsets.fromLTRB(15, 10, 15, 16),
     decoration: const BoxDecoration(color: OTheme.paper,
       border: Border(top: BorderSide(color: OTheme.hairline))),
-    child: Row(children: [
-      Expanded(child: TextField(controller: message, minLines: 1, maxLines: 4,
-        maxLength: 4000, enabled: !sending,
-        decoration: const InputDecoration(hintText: 'Message your own AI',
-          counterText: ''))),
-      const SizedBox(width: 8),
-      IconButton.filled(onPressed: sending ? null : _send,
-        tooltip: 'Send to selected API provider',
-        icon: const Icon(Icons.arrow_upward_rounded)),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      if (stagedAttachments.isNotEmpty)
+        SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+          for (final file in stagedAttachments)
+            Padding(padding: const EdgeInsets.only(right: 5), child: InputChip(
+              label: Text(file['name']?.toString() ?? 'File'),
+              onDeleted: () => _deleteFile(file['id'].toString()))),
+        ])),
+      Row(children: [
+        IconButton(
+          tooltip: 'Attach image, PDF, text or DOCX (1.5 MB)',
+          onPressed: sending || uploading || stagedAttachments.length >= 3
+            ? null : _pickFile,
+          icon: uploading ? const SizedBox(width: 19, height: 19,
+            child: CircularProgressIndicator(strokeWidth: 2)) :
+            const Icon(Icons.attach_file_rounded)),
+        Expanded(child: TextField(controller: message, minLines: 1, maxLines: 4,
+          maxLength: 4000, enabled: !sending,
+          decoration: const InputDecoration(hintText: 'Message your own AI',
+            counterText: ''))),
+        const SizedBox(width: 8),
+        IconButton.filled(onPressed: sending || uploading ? null : _send,
+          tooltip: 'Send to selected API provider',
+          icon: const Icon(Icons.arrow_upward_rounded)),
+      ]),
     ]));
 
   Widget _connectionsView() => ListView(padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
@@ -483,6 +555,18 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
                   tooltip: 'Revoke member'),
           ),
       ],
+      const SizedBox(height: 20),
+      const Text('My uploaded files', style: TextStyle(fontSize: 19,
+        fontWeight: FontWeight.w800)),
+      const Text('Files are encrypted on this backend. Remove ones you no longer need.',
+        style: TextStyle(fontSize: 11, color: Colors.grey)),
+      for (final file in storedAttachments)
+        ListTile(contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.insert_drive_file_outlined),
+          title: Text(file['name']?.toString() ?? 'File'),
+          subtitle: Text(file['size'].toString() + ' bytes'),
+          trailing: IconButton(onPressed: () => _deleteFile(file['id'].toString()),
+            tooltip: 'Delete file', icon: const Icon(Icons.delete_outline_rounded))),
       const SizedBox(height: 24),
       OutlinedButton.icon(onPressed: () => widget.controller.disconnect(),
         icon: const Icon(Icons.logout_rounded), label: const Text('Disconnect this device')),
