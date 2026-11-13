@@ -164,6 +164,16 @@ const server = createServer(async (req, res) => {
       if (req.method === "GET" && cursorAgentRoute) {
         return send(res, 200, await accountHub.cursorAgent(userId, cursorAgentRoute[1]));
       }
+      const cursorArtifacts = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})\/artifacts$/);
+      if (cursorArtifacts && req.method === "GET") {
+        return send(res, 200, await accountHub.cursorArtifacts(userId,
+          cursorArtifacts[1]));
+      }
+      const cursorArtifactLink = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})\/artifacts\/download$/);
+      if (cursorArtifactLink && req.method === "GET") {
+        return send(res, 200, await accountHub.cursorArtifactLink(userId,
+          cursorArtifactLink[1], url.searchParams.get("path")));
+      }
       const cursorRunsRoute = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})\/runs$/);
       if (cursorRunsRoute && req.method === "GET") {
         return send(res, 200, await accountHub.cursorRuns(userId, cursorRunsRoute[1]));
