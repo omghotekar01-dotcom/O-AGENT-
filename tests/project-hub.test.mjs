@@ -165,7 +165,7 @@ test("owner remote overview reflects actual sessions, active task and approvals 
   assert.equal(overview.sessions[0].observedState, "saved_session");
   assert.equal(overview.sessions[0].lastKnownState, "notLoaded");
   assert.equal(overview.screenStreaming.supported, false);
-  assert.equal(overview.sources.find(s => s.id === "copilot_sdk").status, "not_implemented");
+  assert.equal(overview.sources.find(s => s.id === "copilot_sdk").status, "requires_setup");
   const projectId = overview.sessions[0].projectId;
   const task = hub.requestLocalCodexTurn({
     projectId, sessionId, prompt: "Run unit tests after review", mode: "workspace_write",
