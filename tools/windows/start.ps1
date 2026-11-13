@@ -123,7 +123,7 @@ try {
     catch { throw 'Backend token did not match saved operator token. Stop old server and reconfigure if needed.' }
 
     # Only the backend needs operator/provider keys. Do not pass them to the gateway.
-    Remove-Item Env:OAGENT_API_TOKEN, Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY, Env:OAGENT_GITHUB_TOKEN -ErrorAction SilentlyContinue
+    Remove-Item Env:OAGENT_API_TOKEN, Env:OPENAI_API_KEY, Env:ANTHROPIC_API_KEY, Env:GEMINI_API_KEY, Env:OAGENT_GITHUB_TOKEN, Env:OAGENT_VAULT_KEY_BASE64 -ErrorAction SilentlyContinue
     if ($workerPid -eq 0) {
         $otherWorkers = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
             Where-Object { $_.CommandLine -and (
