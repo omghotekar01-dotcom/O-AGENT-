@@ -1,3 +1,11 @@
+## Mobile user accounts and low-cost batched APK builds
+
+The owner can now tap **Settings → My AI accounts & invitations** to connect individual **OpenAI, Claude or Gemini API keys inside the phone**, test a provider, keep separate personal chats, and invite someone with a short-lived one-time code. Invited members receive their own identity and never inherit machine, project, approval or worker access. Windows securely generates an AES-256-GCM vault key encrypted with DPAPI on first updated launch; secrets are not committed or bundled into the APK.
+
+**Batched build policy:** Flutter analysis and tests run on ordinary PR commits, **but Android/iOS packages are skipped**. One consolidated **[mobile-release]** commit on main triggers **one Android build**; the iOS simulator build is manual only. This prevents repeated paid/limited native app generation. See [complete setup and security notes](docs/MOBILE_ACCOUNTS_AND_RELEASES.md).
+
+This is a private invitation-based development host, not public OAuth/SaaS. A member needs a trusted HTTPS/Tailscale route to the running laptop; fully hosted always-on access is not deployed.
+
 ## Codex CLI 0.167 compatibility fix + O-AGENT command-center refresh
 
 The Android error `readOnly.access is no longer supported; use permissionProfile` was caused by an obsolete Codex app-server `turn/start` sandbox shape. This release removes the rejected legacy fields, maintains a read-only default with network disabled, and preserves separately approved workspace-write turns. **Read-only prevents writes; it is not a read restriction on every other file your account can access.** A failed historical task stays failed. Use **Reuse prompt for new attempt** to prepare a fresh request, then approve it again.
