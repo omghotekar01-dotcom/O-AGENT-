@@ -99,6 +99,70 @@ class _CursorCloudState extends State<CursorCloudScreen> {
     catch (e) { if (mounted) setState(() => error = e.toString()); }
     await _refresh();
   }
+  Future<void> _createAgent() async {
+    final draft = await showModalBottomSheet<CursorCreateDraft>(
+      context: context, isScrollControlled: true, showDragHandle: true,
+      builder: (_) => const CursorCreateAgentSheet());
+    if (draft == null || !mounted) return;
+    final approved = await showDialog<bool>(context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create a real cloud agent?'),
+        content: SingleChildScrollView(child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Cursor will receive this task, access the selected '
+              'repository and may incur cloud-agent charges.',
+              style: TextStyle(fontSize: 13, height: 1.45)),
+            const SizedBox(height: 13),
+            Text('Repository: ' + draft.repoUrl,
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 5),
+            Text('Starting branch: ' +
+              (draft.startingRef.isEmpty ? 'Provider default' : draft.startingRef)),
+            Text('Mode: ' + draft.mode),
+            Text('Auto-create PR: ' + (draft.autoCreatePR ? 'Yes' : 'No')),
+            const SizedBox(height: 11),
+            const Text('Exact initial instruction:',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 5),
+            SelectableText(draft.prompt, style: const TextStyle(fontSize: 13)),
+          ],
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Create cloud agent')),
+        ],
+      ));
+    if (approved != true || !mounted) return;
+    final api = widget.controller.client;
+    if (api == null) return;
+    setState(() { busy = true; error = null; });
+    Map<String, dynamic>? newAgent;
+    try {
+      final result = await api.createCursorAgent(
+        prompt: draft.prompt, repoUrl: draft.repoUrl,
+        startingRef: draft.startingRef, mode: draft.mode,
+        autoCreatePR: draft.autoCreatePR);
+      if (!mounted) return;
+      if (result['agent'] is Map) {
+        newAgent = Map<String, dynamic>.from(result['agent'] as Map);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cursor accepted the new cloud agent.')));
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+    await _refresh();
+    if (mounted && newAgent != null && _value(newAgent['id']).isNotEmpty) {
+      _openAgent(newAgent);
+    }
+  }
+
   void _openAgent(Map<String, dynamic> agent) {
     Navigator.push(context, MaterialPageRoute<void>(
       builder: (_) => CursorAgentDetailScreen(
@@ -197,7 +261,15 @@ class _CursorCloudState extends State<CursorCloudScreen> {
                   style: TextStyle(fontSize: 11, height: 1.45,
                     color: OVisual.muted(context))),
               ])),
-            const OSectionTitle('Your agents'),
+            OSectionTitle('Your agents',
+              action: verified ? 'New agent' : null,
+              onAction: verified && !busy ? _createAgent : null),
+            if (verified) Padding(padding: const EdgeInsets.only(bottom: 13),
+              child: SizedBox(width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: busy ? null : _createAgent,
+                  icon: const Icon(CupertinoIcons.add, size: 18),
+                  label: const Text('Create a hosted coding agent')))),
             if (connected && busy && agents.isEmpty) const OLoadingState(
               message: 'Reading Cursor Cloud agents'),
             if (!connected) OEmptyState(
@@ -211,8 +283,8 @@ class _CursorCloudState extends State<CursorCloudScreen> {
             if (connected && agents.isEmpty && !busy)
               const OEmptyState(icon: CupertinoIcons.square_stack_3d_up,
                 title: 'No agents returned',
-                message: 'No Cloud Agents were returned by Cursor. Start an '
-                  'agent in Cursor and refresh to see it here.'),
+                message: 'No agents were returned by Cursor. Create one here '
+                  'or refresh after starting an agent in Cursor.'),
             for (final a in agents) _agentCard(a),
             const OSectionTitle('How this connection works'),
             const OIconTile(icon: CupertinoIcons.shield_lefthalf_fill,
@@ -293,6 +365,8 @@ class CursorAgentDetailScreen extends StatefulWidget {
 class _CursorAgentDetailState extends State<CursorAgentDetailScreen> {
   Map<String, dynamic>? details;
   List<Map<String, dynamic>> runs = [];
+  List<Map<String, dynamic>> artifacts = [];
+  String? artifactWarning;
   Timer? timer;
   bool busy = false;
   String? error;
@@ -312,8 +386,21 @@ class _CursorAgentDetailState extends State<CursorAgentDetailScreen> {
     try {
       final next = await api.cursorAgent(agentId);
       final nextRuns = await api.cursorRuns(agentId);
+      List<Map<String, dynamic>> nextArtifacts = [];
+      String? warning;
+      try { nextArtifacts = await api.cursorArtifacts(agentId); }
+      catch (e) {
+        // An unsupported artifact listing must not hide real run results.
+        warning = 'Artifact listing unavailable: ' + e.toString();
+      }
       if (!mounted || widget.controller.client != api) return;
-      setState(() { details = next; runs = nextRuns; error = null; });
+      setState(() {
+        details = next;
+        runs = nextRuns;
+        artifacts = nextArtifacts;
+        artifactWarning = warning;
+        error = null;
+      });
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     } finally {
@@ -416,6 +503,62 @@ class _CursorAgentDetailState extends State<CursorAgentDetailScreen> {
       if (mounted) setState(() => error = e.toString());
     }
   }
+  Future<void> _openArtifact(Map<String, dynamic> item) async {
+    final path = _value(item['path']);
+    if (path.isEmpty) return;
+    final api = widget.controller.client;
+    if (api == null) return;
+    try {
+      final result = await api.cursorArtifactLink(agentId, path);
+      final uri = Uri.tryParse(_value(result['url']));
+      if (uri == null || uri.scheme != 'https' ||
+          !uri.host.startsWith('cloud-agent-artifacts.') ||
+          !uri.host.endsWith('.amazonaws.com')) {
+        throw const FormatException('Untrusted cloud artifact link');
+      }
+      if (!mounted) return;
+      final file = path.split('/').last.toLowerCase();
+      final image = file.endsWith('.png') || file.endsWith('.jpg') ||
+        file.endsWith('.jpeg') || file.endsWith('.webp') || file.endsWith('.gif');
+      if (image) {
+        await showDialog<void>(context: context, builder: (ctx) => Dialog(
+          child: Padding(padding: const EdgeInsets.all(14),
+            child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(path.split('/').last,
+                  maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 12),
+                ConstrainedBox(constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(ctx).height * .67),
+                  child: InteractiveViewer(
+                    maxScale: 5,
+                    child: Image.network(uri.toString(),
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text('This image could not be loaded. '
+                          'Check your connection or refresh the artifact.')))),
+                ),
+                const SizedBox(height: 12),
+                Align(alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Close'))),
+              ]),
+          )));
+      } else {
+        if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+          throw const FormatException('Could not open this signed download');
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() =>
+        artifactWarning = 'Could not open this artifact: ' + e.toString());
+    }
+  }
+
   Future<void> _openProvider() async {
     final url = _value(details?['url'], _value(widget.agent['url']));
     final parsed = Uri.tryParse(url);
@@ -510,6 +653,33 @@ class _CursorAgentDetailState extends State<CursorAgentDetailScreen> {
                       label: const Text('Cancel run')),
                   ]),
                 ]))),
+            OSectionTitle('Generated files and previews',
+              action: 'Refresh', onAction: _refresh),
+            if (artifactWarning != null)
+              Padding(padding: const EdgeInsets.only(bottom: 10),
+                child: OSurface(child: Text(artifactWarning!,
+                  style: const TextStyle(color: OVisual.rose,
+                    fontSize: 12, height: 1.45)))),
+            if (artifacts.isEmpty && !busy && artifactWarning == null)
+              const OEmptyState(icon: CupertinoIcons.photo,
+                title: 'No generated files',
+                message: 'If Cursor saves screenshots, PDFs or project '
+                  'artifacts, they appear here. This is a saved artifact '
+                  'viewer, not live computer screen sharing.'),
+            for (final item in artifacts)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: OIconTile(
+                  icon: _value(item['path']).toLowerCase().endsWith('.png') ||
+                        _value(item['path']).toLowerCase().endsWith('.jpg') ||
+                        _value(item['path']).toLowerCase().endsWith('.webp')
+                    ? CupertinoIcons.photo : CupertinoIcons.doc,
+                  title: _value(item['path']).split('/').last,
+                  subtitle: _value(item['sizeBytes'], 'Unknown size') +
+                    ' bytes · ' + _value(item['updatedAt'], 'Saved file'),
+                  onTap: busy ? null : () => _openArtifact(item),
+                ),
+              ),
             const OSectionTitle('Permissions and limits'),
             const OIconTile(icon: CupertinoIcons.checkmark_shield,
               title: 'Cursor account permissions apply',
@@ -736,4 +906,128 @@ class _CursorLiveRunState extends State<CursorLiveRunScreen> {
         ]),
     ))),
   );
+}
+
+
+/// Explicitly reviewed creation of a billable provider agent. Launching a
+/// cloud agent is separate from controlling a user's existing IDE window.
+class CursorCreateDraft {
+  const CursorCreateDraft({
+    required this.prompt, required this.repoUrl,
+    required this.startingRef, required this.mode,
+    required this.autoCreatePR,
+  });
+  final String prompt, repoUrl, startingRef, mode;
+  final bool autoCreatePR;
+}
+class CursorCreateAgentSheet extends StatefulWidget {
+  const CursorCreateAgentSheet({super.key});
+  @override State<CursorCreateAgentSheet> createState() =>
+    _CursorCreateAgentSheetState();
+}
+class _CursorCreateAgentSheetState extends State<CursorCreateAgentSheet> {
+  final repo = TextEditingController();
+  final branch = TextEditingController(text: 'main');
+  final task = TextEditingController();
+  String mode = 'plan';
+  bool autoPR = false;
+  String? validation;
+  @override
+  void dispose() {
+    repo.dispose(); branch.dispose(); task.dispose(); super.dispose();
+  }
+  void _submit() {
+    final u = Uri.tryParse(repo.text.trim());
+    if (u == null || u.scheme != 'https' || u.host.isEmpty ||
+        u.userInfo.isNotEmpty || u.query.isNotEmpty || u.fragment.isNotEmpty ||
+        !u.pathSegments.where((p) => p.isNotEmpty).isNotEmpty) {
+      setState(() => validation = 'Enter an HTTPS URL to a repository.');
+      return;
+    }
+    if (task.text.trim().isEmpty || task.text.length > 4000) {
+      setState(() => validation = 'Enter an initial task (up to 4000 characters).');
+      return;
+    }
+    final ref = branch.text.trim();
+    if (ref.isNotEmpty &&
+        (!RegExp(r'^[A-Za-z0-9._/-]{1,120}$').hasMatch(ref) ||
+        ref.contains('..'))) {
+      setState(() => validation = 'Enter a valid branch name.');
+      return;
+    }
+    Navigator.pop(context, CursorCreateDraft(
+      prompt: task.text.trim(),
+      repoUrl: repo.text.trim(),
+      startingRef: ref, mode: mode, autoCreatePR: autoPR,
+    ));
+  }
+  @override
+  Widget build(BuildContext context) => SafeArea(child: Padding(
+    padding: EdgeInsets.fromLTRB(21, 9, 21,
+      MediaQuery.viewInsetsOf(context).bottom + 24),
+    child: SingleChildScrollView(child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('New cloud agent',
+          style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 7),
+        Text('This creates a real, possibly billable coding agent in your '
+          'Cursor account. It uses a new branch instead of pushing '
+          'directly to your existing branch.',
+          style: TextStyle(fontSize: 12, height: 1.5,
+            color: OVisual.muted(context))),
+        const SizedBox(height: 16),
+        TextField(controller: repo, autocorrect: false,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            labelText: 'Repository HTTPS URL',
+            hintText: 'https://github.com/owner/project',
+            prefixIcon: Icon(CupertinoIcons.folder))),
+        const SizedBox(height: 11),
+        TextField(controller: branch, autocorrect: false,
+          decoration: const InputDecoration(
+            labelText: 'Starting branch',
+            helperText: 'Leave blank for the provider default branch',
+            prefixIcon: Icon(CupertinoIcons.arrow_branch))),
+        const SizedBox(height: 11),
+        TextField(controller: task, minLines: 3, maxLines: 6, maxLength: 4000,
+          decoration: const InputDecoration(
+            labelText: 'Exact initial task',
+            hintText: 'Investigate the issue and suggest a safe fix…',
+            alignLabelWithHint: true)),
+        const SizedBox(height: 9),
+        Text('Execution mode', style: TextStyle(
+          color: OVisual.label(context), fontWeight: FontWeight.w700)),
+        const SizedBox(height: 7),
+        CupertinoSlidingSegmentedControl<String>(
+          groupValue: mode,
+          children: const {
+            'plan': Padding(padding: EdgeInsets.symmetric(
+              horizontal: 12, vertical: 8), child: Text('Plan first')),
+            'agent': Padding(padding: EdgeInsets.symmetric(
+              horizontal: 12, vertical: 8), child: Text('Implement')),
+          },
+          onValueChanged: (next) {
+            if (next != null) setState(() => mode = next);
+          }),
+        const SizedBox(height: 8),
+        SwitchListTile.adaptive(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Open a pull request when ready'),
+          subtitle: const Text('The provider may create a PR after the run '
+            'finishes. Direct pushes to your current branch are disabled.'),
+          value: autoPR, onChanged: (v) => setState(() => autoPR = v)),
+        if (validation != null) Padding(
+          padding: const EdgeInsets.only(top: 7),
+          child: Text(validation!, style: const TextStyle(
+            color: OVisual.rose, fontSize: 12))),
+        const SizedBox(height: 11),
+        SizedBox(width: double.infinity,
+          child: FilledButton.icon(onPressed: _submit,
+            icon: const Icon(CupertinoIcons.arrow_right, size: 17),
+            label: const Text('Review before creating'))),
+      ],
+    )),
+  ));
 }

@@ -1,0 +1,40 @@
+{
+  "name": "oagent-vscode-companion",
+  "displayName": "O-AGENT Workspace Companion",
+  "description": "Opt-in VS Code workspace presence and owner-approved file navigation",
+  "version": "0.1.0",
+  "publisher": "oagent-local",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "main": "./src/extension.cjs",
+  "activationEvents": [
+    "onCommand:oagent.configure",
+    "onCommand:oagent.start",
+    "onCommand:oagent.stop"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "oagent.configure",
+        "title": "O-AGENT: Configure Secure Companion"
+      },
+      {
+        "command": "oagent.start",
+        "title": "O-AGENT: Start Remote Workspace Companion"
+      },
+      {
+        "command": "oagent.stop",
+        "title": "O-AGENT: Stop Remote Workspace Companion"
+      }
+    ]
+  },
+  "categories": [
+    "Other"
+  ],
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "node --test ../../tests/vscode-companion.test.mjs"
+  }
+}

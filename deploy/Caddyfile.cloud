@@ -1,0 +1,10 @@
+{$OAGENT_DOMAIN} {
+  encode zstd gzip
+  header {
+    X-Content-Type-Options nosniff
+    Referrer-Policy no-referrer
+    X-Frame-Options DENY
+    Permissions-Policy camera=(), microphone=(), geolocation=()
+  }
+  reverse_proxy oagent:8787
+}

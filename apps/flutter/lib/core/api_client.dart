@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'models.dart';
 
@@ -123,6 +124,18 @@ class AgentApi {
     await _request('/api/auth/logout', method: 'POST');
   }
 
+  Future<Map<String, dynamic>> pushDeviceStatus() =>
+    _request('/api/account/push');
+
+  Future<Map<String, dynamic>> enrollPushDevice({
+    required String token, required String platform, required String label,
+  }) => _request('/api/account/push',method:'POST',
+    body:{'token':token,'platform':platform,'label':label});
+
+  Future<Map<String, dynamic>> revokePushDevice(String id) =>
+    _request('/api/account/push/devices/' + Uri.encodeComponent(id),
+      method:'DELETE');
+
   Future<Map<String, dynamic>> accountInfo() => _request('/api/me');
 
   /// Owner-only: one-use invitation; never display operator tokens to members.
@@ -164,6 +177,38 @@ class AgentApi {
     }
   }
 
+  /// View-only screen frames captured on the user's laptop with the native
+  /// browser display picker. No remote keyboard/mouse control is supported.
+  Future<Map<String, dynamic>> screenStatus() => _request('/api/screen/status');
+
+  Future<Map<String, dynamic>> stopScreenShare() =>
+    _request('/api/screen/stop', method: 'POST');
+
+  Future<Uint8List?> screenFrame() async {
+    final request = await _http.getUrl(endpoint.resolve('/api/screen/frame'))
+      .timeout(const Duration(seconds: 10));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
+    request.headers.set(HttpHeaders.acceptHeader, 'image/jpeg');
+    final response = await request.close().timeout(const Duration(seconds: 10));
+    if (response.statusCode == 404) {
+      await response.drain<void>();
+      return null;
+    }
+    if (response.statusCode != 200 ||
+        response.headers.contentType?.mimeType != 'image/jpeg') {
+      await response.drain<void>();
+      throw ApiException('Screen preview not available', response.statusCode);
+    }
+    final chunks = BytesBuilder(copy: false);
+    await for (final bytes in response) {
+      chunks.add(bytes);
+      if (chunks.length > 160000) {
+        throw const ApiException('Invalid oversized screen frame');
+      }
+    }
+    return chunks.takeBytes();
+  }
+
   /// Owner-only remote session, run and approval status.
   Future<Map<String, dynamic>> remoteAgentOverview() => _request('/api/remote/overview');
 
@@ -185,8 +230,40 @@ class AgentApi {
       (item) => Map<String, dynamic>.from(item as Map)).toList();
   }
 
+  /// Start a real provider-hosted coding agent. The caller has separately
+  /// reviewed the repo/branch, prompt and provider billing implications.
+  Future<Map<String, dynamic>> createCursorAgent({
+    required String prompt,
+    required String repoUrl,
+    String? startingRef,
+    String mode = 'plan',
+    bool autoCreatePR = false,
+    String? requestId,
+  }) {
+    final random = Random.secure();
+    final nonce = List<int>.generate(24, (_) => random.nextInt(256));
+    return _request('/api/account/cursor/agents', method: 'POST', body: {
+      'requestId': requestId ?? base64UrlEncode(nonce),
+      'prompt': prompt, 'repoUrl': repoUrl,
+      'mode': mode, 'autoCreatePR': autoCreatePR,
+      if (startingRef != null && startingRef.isNotEmpty) 'startingRef': startingRef,
+    });
+  }
+
   Future<Map<String, dynamic>> cursorAgent(String id) =>
     _request('/api/account/cursor/agents/' + Uri.encodeComponent(id));
+
+  Future<List<Map<String, dynamic>>> cursorArtifacts(String agentId) async {
+    final response = await _request('/api/account/cursor/agents/' +
+      Uri.encodeComponent(agentId) + '/artifacts');
+    return (response['artifacts'] as List? ?? [])
+      .map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> cursorArtifactLink(
+      String agentId, String artifactPath) =>
+    _request('/api/account/cursor/agents/' + Uri.encodeComponent(agentId) +
+      '/artifacts/download?path=' + Uri.encodeQueryComponent(artifactPath));
 
   Future<List<Map<String, dynamic>>> cursorRuns(String id) async {
     final response = await _request(
@@ -396,6 +473,33 @@ class AgentApi {
     'prompt': prompt,
     'mode': mode,
   }, idempotencyKey: createIdempotencyKey());
+
+  Future<Map<String, dynamic>> createSupervisedAgentTurn({
+    required String workerId, required String providerKind,
+    required String cwd, required String prompt,
+    required String mode, String? sessionId,
+  }) {
+    if (!const {'claude_agent_turn', 'copilot_sdk_turn'}.contains(providerKind)) {
+      throw const ApiException('Unknown agent bridge capability');
+    }
+    final random = Random.secure();
+    final key = base64UrlEncode(List<int>.generate(24, (_) => random.nextInt(256)));
+    return _request('/api/tasks', method: 'POST', idempotencyKey: key, body: {
+      'workerId': workerId, 'kind': providerKind, 'cwd': cwd,
+      'prompt': prompt, 'mode': mode,
+      if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId,
+    });
+  }
+
+  Future<Map<String, dynamic>> requestVscodeOpen({
+    required String workerId, required String relativePath,
+  }) {
+    final random = Random.secure();
+    final key = base64UrlEncode(List<int>.generate(24, (_) => random.nextInt(256)));
+    return _request('/api/tasks',method:'POST',idempotencyKey:key,body:{
+      'workerId':workerId,'kind':'vscode_open_file','relativePath':relativePath,
+    });
+  }
 
   Future<Map<String, dynamic>> taskDetail(String id) =>
       _request('/api/tasks/${Uri.encodeComponent(id)}');

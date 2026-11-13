@@ -66,7 +66,7 @@ export class CursorCloudClient {
   async request(key, path, { method = "GET", body } = {}) {
     nonempty(key, "Cursor API key", 1024);
     if (!path.startsWith("/v1/") || path.includes("..") ||
-        !/^[A-Za-z0-9/?=&_-]+$/.test(path)) {
+        !/^[A-Za-z0-9/?=&_%.-]+$/.test(path)) {
       throw new DomainError(400, "Invalid Cursor API path");
     }
     const controller = new AbortController();
@@ -122,6 +122,45 @@ export class CursorCloudClient {
       identity: text(me.userEmail, 200) || "Service account",
     };
   }
+  async createAgent(key, {
+    prompt, repoUrl, startingRef, mode = "plan",
+    autoCreatePR = false, agentId,
+  } = {}) {
+    // A new agent is a potentially billable run with repository write access.
+    // Never send an unchecked repo URL or allow direct pushes to its branch.
+    const p = nonempty(prompt, "agent prompt", 4000);
+    const target = nonempty(repoUrl, "repository URL", 350);
+    let parsed;
+    try { parsed = new URL(target); } catch { /* invalid URL */ }
+    if (!parsed || parsed.protocol !== "https:" ||
+        !parsed.hostname.includes(".") || parsed.username ||
+        parsed.password || parsed.port || parsed.search || parsed.hash ||
+        !/^\/[^/]+\/[^/]+(?:\/[^/]+)*\/?$/.test(parsed.pathname)) {
+      throw new DomainError(400, "Enter a valid HTTPS repository URL");
+    }
+    if (startingRef != null && (typeof startingRef !== "string" ||
+        !/^[A-Za-z0-9._/-]{1,120}$/.test(startingRef) ||
+        startingRef.includes(".."))) {
+      throw new DomainError(400, "Invalid starting branch");
+    }
+    if (mode !== "plan" && mode !== "agent")
+      throw new DomainError(400, "Invalid agent mode");
+    if (typeof autoCreatePR !== "boolean")
+      throw new DomainError(400, "Invalid PR setting");
+    if (typeof agentId !== "string" ||
+        !/^bc-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(agentId))
+      throw new DomainError(400, "Invalid idempotent agent identifier");
+    const raw = await this.request(key, "/v1/agents", {
+      method: "POST", body: {
+        agentId, prompt: { text: p },
+        repos: [{ url: parsed.toString(),
+          ...(startingRef ? { startingRef } : {}) }],
+        workOnCurrentBranch: false,
+        autoCreatePR, mode,
+      },
+    });
+    return { agent: oneAgent(raw.agent), run: oneRun(raw.run) };
+  }
   async listAgents(key) {
     const raw = await this.request(key, "/v1/agents?limit=" + LIMIT);
     if (!Array.isArray(raw.items)) throw new DomainError(502, "Invalid Cursor agent list");
@@ -140,6 +179,42 @@ export class CursorCloudClient {
     if (!Array.isArray(raw.items)) throw new DomainError(502, "Invalid Cursor run list");
     return { runs: raw.items.slice(0, 20).map(oneRun),
       nextCursorAvailable: !!raw.nextCursor };
+  }
+  async listArtifacts(key, agentId) {
+    const a = identifier(agentId, "agent ID");
+    const raw = await this.request(key, "/v1/agents/" + a + "/artifacts");
+    if (!Array.isArray(raw.items)) {
+      throw new DomainError(502, "Invalid Cursor artifacts response");
+    }
+    const valid = path => typeof path === "string" &&
+      path.startsWith("artifacts/") &&
+      /^[A-Za-z0-9._/-]{11,250}$/.test(path) && !path.includes("..");
+    return { artifacts: raw.items.filter(item => valid(item?.path))
+      .slice(0, 80).map(item => ({
+        path: item.path,
+        sizeBytes: Number.isSafeInteger(item?.sizeBytes) &&
+          item.sizeBytes >= 0 ? item.sizeBytes : null,
+        updatedAt: timestamp(item?.updatedAt),
+      })) };
+  }
+  async artifactLink(key, agentId, path) {
+    const a = identifier(agentId, "agent ID");
+    if (typeof path !== "string" || !path.startsWith("artifacts/") ||
+        !/^[A-Za-z0-9._/-]{11,250}$/.test(path) || path.includes(".."))
+      throw new DomainError(400, "Invalid Cursor artifact path");
+    const raw = await this.request(key, "/v1/agents/" + a +
+      "/artifacts/download?path=" + encodeURIComponent(path));
+    // Cursor returns a time-limited signed object URL; never let an
+    // arbitrary remote host or HTTP target become an app download link.
+    let target;
+    try { target = new URL(raw.url); } catch { /* invalid provider link */ }
+    if (!target || target.protocol !== "https:" ||
+        !/^cloud-agent-artifacts\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/.test(target.hostname) ||
+        target.username || target.password || target.hash ||
+        target.toString().length > 5000) {
+      throw new DomainError(502, "Untrusted Cursor artifact download target");
+    }
+    return { url: target.toString(), expiresAt: timestamp(raw.expiresAt) };
   }
   async getRun(key, agentId, runId) {
     const raw = await this.request(key, "/v1/agents/" +

@@ -3,6 +3,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import 'codex_session.dart';
+import 'agent_sdk_bridge.dart';
+import 'screen_preview.dart';
+import 'push_devices.dart';
+import 'vscode_remote.dart';
 import 'cursor_cloud.dart';
 import 'ios_components.dart';
 import 'projects.dart';
@@ -101,6 +105,18 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
         initialTaskId: taskId,
       )));
   }
+  void _openBridge([String? task]) => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      AgentSdkBridgeScreen(controller: widget.controller, taskId: task)));
+  void _openVsCode([String? task]) => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      VsCodeRemoteScreen(controller: widget.controller, taskId: task)));
+  void _openPush() => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      PushDeviceScreen(controller: widget.controller)));
+  void _openScreen() => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      ScreenPreviewScreen(controller: widget.controller)));
   void _openCursor() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       CursorCloudScreen(controller: widget.controller)));
@@ -172,7 +188,19 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
               style: const TextStyle(color: OVisual.gold,
                 fontSize: 12, fontWeight: FontWeight.w700))),
           const SizedBox(height: 11),
-          if (run['canOpenSession'] == true)
+          if (run['canOpenVscodeTask'] == true)
+            SizedBox(width: double.infinity, child: FilledButton.tonalIcon(
+              onPressed: () => _openVsCode(run['id']?.toString()),
+              icon: const Icon(CupertinoIcons.folder_open, size: 18),
+              label: const Text('Inspect VS Code open request')))
+          else if (run['canOpenBridgeTask'] == true)
+            SizedBox(width: double.infinity, child: FilledButton.tonalIcon(
+              onPressed: () => _openBridge(run['id']?.toString()),
+              icon: Icon(exactApproval ? CupertinoIcons.checkmark_shield
+                : CupertinoIcons.doc_text, size: 18),
+              label: Text(exactApproval ? 'Review provider permissions'
+                : 'Inspect live SDK run')))
+          else if (run['canOpenSession'] == true)
             SizedBox(width: double.infinity, child: FilledButton.tonalIcon(
               onPressed: () => _openCodex(session, taskId: run['id']?.toString()),
               icon: Icon(exactApproval ? CupertinoIcons.checkmark_shield
@@ -285,6 +313,19 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                   'authenticated using your own Cursor key',
                 onTap: _openCursor, color: OVisual.primary),
               const SizedBox(height: 10),
+              const SizedBox(height: 10),
+              OIconTile(icon: CupertinoIcons.chevron_left_slash_chevron_right,
+                title: 'Claude Agent SDK & GitHub Copilot',
+                subtitle: 'Run officially authenticated SDK sessions on '
+                  'a trusted laptop, with exact owner approvals',
+                onTap: () => _openBridge(), color: OVisual.primary),
+              const SizedBox(height: 10),
+              OIconTile(icon: CupertinoIcons.square_stack_3d_up,
+                title: 'VS Code workspace companion',
+                subtitle: 'Opt-in editor extension, owner-approved '
+                  'file navigation and separate local confirmation',
+                onTap: () => _openVsCode(), color: OVisual.primary),
+              const SizedBox(height: 10),
               OIconTile(icon: CupertinoIcons.folder_fill,
                 title: 'Projects and repositories',
                 subtitle: 'Browse verified projects, external work and Codex sessions',
@@ -366,12 +407,24 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                         color: OVisual.muted(context))),
                   ],
                 ])),
+              const OSectionTitle('Alerts and approvals'),
+              OIconTile(icon: CupertinoIcons.bell_fill,
+                title: 'Push notifications and device permissions',
+                subtitle: 'Opt into alerts for real agent approvals and '
+                  'status changes. Firebase setup required.',
+                onTap: _openPush, color: OVisual.primary),
+              const SizedBox(height: 9),
               const OSectionTitle('Desktop and browser viewing'),
-              const OIconTile(icon: CupertinoIcons.eye_slash,
-                title: 'Live screen sharing is not enabled',
-                subtitle: 'Real desktop viewing needs a consented Windows '
-                  'capture companion and securely authorized streaming. '
-                  'Agent logs are not desktop video.', color: OVisual.secondary),
+              OIconTile(icon: CupertinoIcons.desktopcomputer,
+                title: 'View consented laptop preview',
+                subtitle: 'See temporary real screen or window frames selected '
+                  'by the laptop user. Owner-only, view-only, no mouse control.',
+                onTap: _openScreen, color: OVisual.primary),
+              const SizedBox(height: 9),
+              const OIconTile(icon: CupertinoIcons.shield_lefthalf_fill,
+                title: 'Capture requires explicit human consent',
+                subtitle: 'Laptop browser selection and a visible sharing '
+                  'indicator are required. No silent desktop takeover.'),
             ],
           )),
       ))),

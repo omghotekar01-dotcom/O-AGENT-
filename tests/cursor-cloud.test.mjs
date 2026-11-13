@@ -186,3 +186,117 @@ test("expired Cursor SSE forces a fresh run read, unknown IDs are rejected", asy
       { lastEventId: "bad\r\nInjected-Header:foo" })) void event;
   }, /Invalid Cursor event cursor/);
 });
+
+
+test("new Cloud Agent uses a safe repo, new branch, plan mode and stable create ID", async () => {
+  const calls = [];
+  const transport = async (url, opts) => {
+    calls.push({ url, opts });
+    assert.equal(url, "https://api.cursor.com/v1/agents");
+    assert.equal(opts.method, "POST");
+    const body = JSON.parse(opts.body);
+    assert.equal(body.repos[0].url, "https://github.com/example/verified-repo");
+    assert.equal(body.repos[0].startingRef, "main");
+    assert.equal(body.mode, "plan");
+    assert.equal(body.autoCreatePR, false);
+    assert.equal(body.workOnCurrentBranch, false);
+    assert.match(body.agentId, /^bc-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    return { ok: true, status: 201, text: async () => JSON.stringify({
+      agent: { id: body.agentId, name: "Investigate", status: "ACTIVE" },
+      run: { id: run, agentId: body.agentId, status: "CREATING" },
+    }) };
+  };
+  const { hub, alice } = fixture();
+  hub.connectCursor(alice, { apiKey: "key-alice-123456789" });
+  hub.cursor = new CursorCloudClient({ fetchImpl: transport });
+  const draft = {
+    requestId: "stable-create-request-1234",
+    repoUrl: "https://github.com/example/verified-repo",
+    startingRef: "main",
+    prompt: "Plan a safe test upgrade",
+  };
+  const first = await hub.cursorCreateAgent(alice, draft);
+  assert.equal(first.run.status, "CREATING");
+  assert.equal(calls.length, 1);
+  const replay = await hub.cursorCreateAgent(alice, draft);
+  assert.deepEqual(replay, first);
+  assert.equal(calls.length, 1, "Double tap must not create duplicate cloud agents");
+  await assert.rejects(hub.cursorCreateAgent(alice,
+    { ...draft, prompt: "Push destructive changes" }), /reused/);
+  await assert.rejects(hub.cursorCreateAgent(alice,
+    { ...draft, requestId: "bad-repository-request-1234",
+      repoUrl: "http://localhost:8080/internal" }), /HTTPS repository URL/);
+  assert.equal(calls.length, 1);
+});
+
+test("lost Cursor create response is not retried or reported as success", async () => {
+  const { hub, alice } = fixture();
+  hub.connectCursor(alice, { apiKey: "key-alice-123456789" });
+  let attempts = 0;
+  hub.cursor = new CursorCloudClient({ fetchImpl: async () => {
+    attempts++;
+    throw Error("Upstream reply lost");
+  } });
+  const params = {
+    requestId: "uncertain-create-request-12345",
+    prompt: "Investigate issue",
+    repoUrl: "https://github.com/org/repo",
+  };
+  await assert.rejects(hub.cursorCreateAgent(alice, params),
+    /outcome|network unavailable/i);
+  await assert.rejects(hub.cursorCreateAgent(alice, params),
+    /creation outcome uncertain/i);
+  assert.equal(attempts, 1, "Ambiguous provider create must not be retried");
+});
+
+
+test("Cursor generated artifacts are only provider-listed safe paths", async () => {
+  const calls = [];
+  const client = new CursorCloudClient({ fetchImpl: async (url, opts) => {
+    calls.push({url, opts});
+    return {ok:true, status:200, text:async()=>JSON.stringify({
+      items: [
+        {path:"artifacts/screenshot.png", sizeBytes:22334,
+          updatedAt:"2026-11-13T13:00:00Z"},
+        {path:"artifacts/report.pdf", sizeBytes:902},
+        {path:"artifacts/../server.env", sizeBytes:25},
+        {path:"/opt/cursor/artifacts/absolute.png", sizeBytes:10},
+        {path:"artifacts/a\\private", sizeBytes:10},
+      ]})};
+  }});
+  const response = await client.listArtifacts("key-alice-123456789", agent);
+  assert.deepEqual(response.artifacts.map(a=>a.path),
+    ["artifacts/screenshot.png", "artifacts/report.pdf"]);
+  assert.equal(response.artifacts[0].sizeBytes,22334);
+  assert.equal(calls[0].url, "https://api.cursor.com/v1/agents/" + agent + "/artifacts");
+});
+
+test("Cursor artifact link is short-lived HTTPS with a restricted provider host", async () => {
+  const seen = [];
+  const url = "https://cloud-agent-artifacts.s3.us-east-1.amazonaws.com/test?X-Amz-Signature=example";
+  const client = new CursorCloudClient({ fetchImpl: async (path,opts) => {
+    seen.push(path);
+    return {ok:true,status:200,text:async()=>JSON.stringify({
+      url, expiresAt:"2026-11-13T13:15:00Z",
+    })};
+  } });
+  const link = await client.artifactLink("key-alice-123456789", agent,
+    "artifacts/screenshot.png");
+  assert.equal(link.url, url);
+  assert.equal(link.expiresAt, "2026-11-13T13:15:00Z");
+  assert.equal(seen[0], "https://api.cursor.com/v1/agents/" + agent +
+    "/artifacts/download?path=artifacts%2Fscreenshot.png");
+  await assert.rejects(client.artifactLink("key-alice-123456789", agent,
+    "artifacts/../../secrets.txt"), /Invalid Cursor artifact path/);
+  await assert.rejects(client.artifactLink("key-alice-123456789", agent,
+    "https://evil.example/secrets"), /Invalid Cursor artifact path/);
+  assert.equal(seen.length,1);
+  const evil = new CursorCloudClient({fetchImpl:async()=>({
+    ok:true,status:200,text:async()=>JSON.stringify({
+      url:"https://evil.example/download/steal",
+      expiresAt:"2026-11-13T13:15:00Z",
+    }),
+  })});
+  await assert.rejects(evil.artifactLink("key-alice-123456789",agent,
+    "artifacts/screenshot.png"), /Untrusted Cursor artifact download target/);
+});

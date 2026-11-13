@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn"]);
+const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"]);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted", "rejected"]);
 const MAX_EVENTS = 5000;
 export class DomainError extends Error {
@@ -45,7 +45,13 @@ export class ControlPlane {
     const name = requiredString(body.name, "worker name");
     const now = this.clock();
     const existing = this.data.workers[id];
-    this.data.workers[id] = { id, name, capabilities: [...TASK_TYPES], registeredAt: existing?.registeredAt ?? now, lastSeenAt: now };
+    const declared = Array.isArray(body.capabilities) ? body.capabilities : [
+      "system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn",
+    ];
+    if (declared.length > 8 || declared.some(c => typeof c !== "string" || !TASK_TYPES.has(c)))
+      throw new DomainError(400, "Invalid worker capabilities");
+    const capabilities = [...new Set(declared)];
+    this.data.workers[id] = { id, name, capabilities, registeredAt: existing?.registeredAt ?? now, lastSeenAt: now };
     this.commit("machine.online", { workerId: id });
     return this.data.workers[id];
   }
@@ -61,6 +67,8 @@ export class ControlPlane {
     const kind = requiredString(body.kind, "kind", 60);
     if (!TASK_TYPES.has(kind)) throw new DomainError(400, "Unsupported task capability");
     if (!this.data.workers[workerId]) throw new DomainError(404, "Worker is not registered");
+    if (!this.data.workers[workerId].capabilities?.includes(kind))
+      throw new DomainError(409, "This worker has not enrolled the requested capability");
     let parameters = null;
     if (kind === "codex_cloud_submit") {
       const environmentId = requiredString(body.environmentId, "Codex Cloud environmentId", 120);
@@ -78,6 +86,29 @@ export class ControlPlane {
       if (!["read_only", "workspace_write"].includes(mode)) throw new DomainError(400, "Invalid Codex execution mode");
       parameters = { projectId, sessionId, cwd, prompt, mode };
     }
+    if (["claude_agent_turn", "copilot_sdk_turn"].includes(kind)) {
+      const cwd = requiredString(body.cwd, "enrolled workspace folder", 600);
+      if (!/^(?:[A-Za-z]:[\\/]|\/)/.test(cwd) || /[\x00-\x1f]/.test(cwd))
+        throw new DomainError(400, "Expected absolute workspace path");
+      const prompt = requiredString(body.prompt, "agent instruction", 4000);
+      const mode = body.mode ?? "read_only";
+      if (!["read_only", "workspace_write"].includes(mode))
+        throw new DomainError(400, "Invalid provider permission mode");
+      const sessionId = body.sessionId ?? null;
+      if (sessionId != null && (typeof sessionId !== "string" ||
+          !/^[a-zA-Z0-9_-]{8,120}$/.test(sessionId)))
+        throw new DomainError(400, "Invalid SDK session ID");
+      parameters = { cwd, prompt, mode, sessionId };
+    }
+    if (kind === "vscode_open_file") {
+      const relativePath = requiredString(body.relativePath, "relative file path", 350);
+      if (relativePath.startsWith("/") || /^[A-Za-z]:/.test(relativePath) ||
+          relativePath.split(/[\\/]/).some(p => !p || p === "." || p === "..") ||
+          /[\x00-\x1f]/.test(relativePath)) {
+        throw new DomainError(400, "Open file path must be relative to the enrolled VS Code workspace");
+      }
+      parameters = { relativePath };
+    }
     const key = requiredString(requestKey, "Idempotency-Key", 200);
     if (key.length < 12) throw new DomainError(400, "Idempotency-Key must be at least 12 characters");
     const existing = Object.values(this.data.tasks).find(t => t.requestKey === key);
@@ -87,7 +118,7 @@ export class ControlPlane {
     }
     const task = {
       id: randomUUID(), requestKey: key, workerId, kind, parameters,
-      status: ["workspace_inventory", "codex_cloud_submit", "codex_cli_turn"].includes(kind) ? "waiting_for_approval" : "queued",
+      status: ["workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"].includes(kind) ? "waiting_for_approval" : "queued",
       updates: [], approvals: {},
       createdAt: this.clock(), updatedAt: this.clock(), result: null, error: null,
     };
@@ -136,7 +167,7 @@ export class ControlPlane {
   appendTaskUpdate(workerId, taskId, body) {
     const task = this.getTask(taskId);
     if (task.workerId !== workerId) throw new DomainError(403, "Incorrect worker");
-    if (task.kind !== "codex_cli_turn" || task.status !== "running") throw new DomainError(409, "Not a running Codex turn");
+    if (!["codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn"].includes(task.kind) || task.status !== "running") throw new DomainError(409, "Not a running supervised turn");
     const type = requiredString(body?.type, "event type", 60);
     const allowed = new Set(["session_resumed","turn_started","agent_delta","tool_started","tool_finished","turn_completed","error","status"]);
     if (!allowed.has(type)) throw new DomainError(400, "Unsupported Codex event type");
@@ -156,7 +187,7 @@ export class ControlPlane {
   requestCodexApproval(workerId, taskId, body) {
     const task = this.getTask(taskId);
     if (task.workerId !== workerId) throw new DomainError(403, "Incorrect worker");
-    if (task.kind !== "codex_cli_turn" || task.status !== "running") throw new DomainError(409, "Not a running Codex turn");
+    if (!["codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn"].includes(task.kind) || task.status !== "running") throw new DomainError(409, "Not a running supervised turn");
     if (task.parameters?.mode === "read_only") throw new DomainError(403, "Read-only Codex turns cannot request permission escalation");
     if (Object.values(task.approvals ?? {}).filter(a => a.state === "pending").length > 3) throw new DomainError(429, "Too many pending approvals");
     const id = requiredString(body?.id, "approval ID", 80);

@@ -8,6 +8,7 @@ import '../core/controller.dart';
 import '../core/api_client.dart';
 import '../theme.dart';
 import 'cursor_cloud.dart';
+import 'push_devices.dart';
 import 'ios_components.dart';
 
 /// Personal account workspace. Every operation is authenticated and scoped to
@@ -592,6 +593,13 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
 
   Widget _accountView() => ListView(padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
     children: [
+      OIconTile(icon: Icons.notifications_active_outlined,
+        title: 'Device notifications',
+        subtitle: 'Opt in to encrypted Firebase push registration for '
+          'agent activity. Each account controls its own devices.',
+        onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+          builder: (_) => PushDeviceScreen(controller: widget.controller)))),
+      const SizedBox(height: 15),
       const Text('ACCOUNT & PRIVACY', style: TextStyle(fontSize: 10,
         letterSpacing: 1.5, color: OTheme.violet, fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),

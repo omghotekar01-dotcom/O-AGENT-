@@ -17,6 +17,15 @@ void main() {
           '    <uses-permission android:name="android.permission.INTERNET" />',
     );
   }
+  // Android 13+ requires an explicit runtime permission for FCM alerts.
+  // The app asks only after the user selects Enable notifications.
+  if (!android.contains('android.permission.POST_NOTIFICATIONS')) {
+    android = android.replaceFirst(
+      '<application',
+      '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n'
+          '    <application',
+    );
+  }
   // Exclude app data from Android cloud backups: encrypted session state
   // cannot be restored with a different Android Keystore key.
   if (!android.contains('android:allowBackup=')) {

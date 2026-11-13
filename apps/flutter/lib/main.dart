@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'core/controller.dart';
+import 'core/push_bootstrap.dart';
 import 'theme.dart';
 import 'ui/studio.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await configureFirebaseMessaging();
   runApp(const OAgentApp());
 }
 
