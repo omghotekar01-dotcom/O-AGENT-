@@ -77,6 +77,37 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+  testWidgets('New cloud agent form chooses repo, plan mode and consent preferences',
+    (tester) async {
+      CursorCreateDraft? draft;
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body:
+        Builder(builder: (context) => TextButton(
+          onPressed: () async {
+            draft = await showModalBottomSheet<CursorCreateDraft>(
+              context: context, isScrollControlled: true,
+              builder: (_) => const CursorCreateAgentSheet());
+          },
+          child: const Text('Create cloud agent'),
+        )))));
+      await tester.tap(find.text('Create cloud agent'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNWidgets(3));
+      await tester.enterText(find.byType(TextField).at(0),
+        'https://github.com/example/project');
+      await tester.enterText(find.byType(TextField).at(1), 'development');
+      await tester.enterText(find.byType(TextField).at(2),
+        'Write a safe implementation plan');
+      await tester.ensureVisible(find.text('Review before creating'));
+      await tester.tap(find.text('Review before creating'));
+      await tester.pumpAndSettle();
+      expect(draft?.repoUrl, 'https://github.com/example/project');
+      expect(draft?.startingRef, 'development');
+      expect(draft?.prompt, 'Write a safe implementation plan');
+      expect(draft?.mode, 'plan');
+      expect(draft?.autoCreatePR, false);
+      expect(tester.takeException(), isNull);
+    });
+
   testWidgets('Project creation fields survive closing animation',
     (tester) async {
       Map<String, String>? saved;
