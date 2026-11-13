@@ -158,6 +158,89 @@ export class CursorCloudClient {
       delivery: text(raw.delivery, 40), runId: text(raw.runId, 120) || null,
     } : { run: oneRun(raw.run) };
   }
+  // Run-scoped Cursor SSE. This is verified provider output, NOT a desktop
+  // screenshot or hidden chain-of-thought stream. Thinking and raw tool
+  // results are intentionally not forwarded to reduce secret leakage.
+  async *streamRun(key, agentId, runId, { lastEventId, signal } = {}) {
+    const a = identifier(agentId, "agent ID");
+    const r = identifier(runId, "run ID");
+    if (lastEventId != null &&
+        (typeof lastEventId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(lastEventId)))
+      throw new DomainError(400, "Invalid Cursor event cursor");
+    const url = ORIGIN + "/v1/agents/" + a + "/runs/" + r + "/stream";
+    let response;
+    try {
+      response = await this.fetchImpl(url, {
+        method: "GET", redirect: "error", signal,
+        headers: {
+          Authorization: "Bearer " + nonempty(key, "Cursor key", 1024),
+          Accept: "text/event-stream",
+          ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
+        },
+      });
+    } catch {
+      if (signal?.aborted) return;
+      throw new DomainError(503, "Cursor live stream unavailable");
+    }
+    if (!response.ok) {
+      if (response.status === 410) throw new DomainError(410,
+        "Cursor stream expired; load the final run result instead");
+      throw new DomainError([401,403,404,429].includes(response.status)
+        ? response.status : 502, "Cursor live stream rejected");
+    }
+    if (!response.body || typeof response.body[Symbol.asyncIterator] !== "function")
+      throw new DomainError(502, "Cursor did not return a readable event stream");
+    const decoder = new TextDecoder();
+    let buffered = "", event = "message", id = null, data = [];
+    const normalize = () => {
+      let payload;
+      try { payload = JSON.parse(data.join("\n")); }
+      catch { return null; }
+      if (!payload || typeof payload !== "object") return null;
+      if (event === "assistant") return {
+        event, id, data: { text: text(payload.text, 3500) },
+      };
+      if (event === "status") return {
+        event, id, data: { status: text(payload.status, 50),
+          runId: text(payload.runId, 120) },
+      };
+      if (event === "tool_call") return {
+        event, id, data: { name: text(payload.name, 120),
+          status: text(payload.status, 50) },
+      };
+      if (event === "result") return {
+        event, id, data: { text: text(payload.text, 15000),
+          status: text(payload.status, 50) },
+      };
+      if (event === "done") return { event, id, data: {} };
+      return null;
+    };
+    for await (const chunk of response.body) {
+      if (signal?.aborted) return;
+      buffered += decoder.decode(chunk, { stream: true });
+      if (buffered.length > 65536) throw new DomainError(502,
+        "Cursor stream frame exceeded safe length");
+      let i;
+      while ((i = buffered.indexOf("\n")) >= 0) {
+        const line = buffered.slice(0, i).replace(/\r$/, "");
+        buffered = buffered.slice(i + 1);
+        if (!line) {
+          const result = normalize();
+          if (result) yield result;
+          event = "message"; id = null; data = [];
+        } else if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("id:")) id = line.slice(3).trim().slice(0, 160);
+        else if (line.startsWith("data:")) {
+          data.push(line.slice(5).trimStart());
+          if (data.join("").length > 18000)
+            throw new DomainError(502, "Cursor event exceeded safe length");
+        }
+      }
+    }
+    const last = normalize();
+    if (last) yield last;
+  }
+
   async cancelRun(key, agentId, runId) {
     const a = identifier(agentId, "agent ID"), r = identifier(runId, "run ID");
     const raw = await this.request(key, "/v1/agents/" + a + "/runs/" + r + "/cancel",
