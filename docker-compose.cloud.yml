@@ -1,0 +1,67 @@
+name: oagent-cloud
+services:
+  oagent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env.cloud
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8787"
+      OAGENT_DATA_FILE: /data/oagent-data.json
+    volumes:
+      - oagent_data:/data
+    expose:
+      - "8787"
+    networks: [internal]
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+  https:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    depends_on:
+      oagent:
+        condition: service_healthy
+    environment:
+      OAGENT_DOMAIN: ${OAGENT_DOMAIN:?Set OAGENT_DOMAIN}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./deploy/Caddyfile.cloud:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [internal]
+  cloud-worker:
+    profiles: ["worker"]
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      https:
+        condition: service_started
+    env_file: .env.cloud
+    environment:
+      OAGENT_WORKER_ID: cloud-worker-1
+      OAGENT_SERVER_URL: https://${OAGENT_DOMAIN:?Set OAGENT_DOMAIN}
+      OAGENT_WORKSPACE_ROOT: /workspaces
+      OAGENT_ENABLE_CODEX_LOCAL_SYNC: "0"
+      OAGENT_ENABLE_CODEX_CLOUD_SYNC: "0"
+    volumes:
+      - worker_repositories:/workspaces
+      - claude_auth:/home/node/.claude
+      - copilot_auth:/home/node/.copilot
+    networks: [internal]
+networks:
+  internal: {driver: bridge}
+volumes:
+  oagent_data:
+  caddy_data:
+  caddy_config:
+  worker_repositories:
+  claude_auth:
+  copilot_auth:
