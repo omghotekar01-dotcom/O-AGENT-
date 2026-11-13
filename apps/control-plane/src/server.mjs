@@ -10,6 +10,7 @@ import { AccountHub } from "./account-hub.mjs";
 import { PublicAuth } from "./public-auth.mjs";
 import { ScreenShare } from "./screen-share.mjs";
 import { RemoteInput } from "./remote-input.mjs";
+import { VscodePresence } from "./vscode-presence.mjs";
 import { PushHub } from "./push-hub.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
@@ -36,6 +37,7 @@ const accountHub = new AccountHub(core);
 const publicAuth = new PublicAuth(core);
 const screenShare = new ScreenShare();
 const remoteInput = new RemoteInput({ captureFresh: () => screenShare.status().fresh });
+const vscodePresence = new VscodePresence();
 const pushHub = new PushHub(core, accountHub);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
@@ -421,6 +423,10 @@ const server = createServer(async (req, res) => {
         return send(res, 200, remoteInput.stop(id));
       throw new DomainError(404, "Unknown Windows input-helper endpoint");
     }
+    if (req.method === "GET" && path === "/api/vscode/workspaces") {
+      if (!owner) throw new DomainError(403, "Owner-only editor workspace feed");
+      return send(res, 200, vscodePresence.list());
+    }
     if (req.method === "GET" && path === "/api/state") return send(res, 200, core.snapshot());
     if (req.method === "GET" && path === "/api/events") {
       const after = Number(url.searchParams.get("after") ?? 0);
@@ -466,6 +472,16 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "POST" && path === "/api/workers/register") {
       return send(res, 201, core.registerWorker(await readJson(req)));
+    }
+    const vscodeSnapshot = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/vscode\/snapshot$/);
+    if (vscodeSnapshot && req.method === "POST") {
+      const worker = core.data.workers[vscodeSnapshot[1]];
+      if (!worker?.capabilities?.includes("vscode_open_file"))
+        throw new DomainError(403, "An enrolled VS Code companion is required");
+      return send(res, 200, vscodePresence.publish(vscodeSnapshot[1], await readJson(req, 36000)));
+    }
+    if (vscodeSnapshot && req.method === "DELETE") {
+      return send(res, 200, vscodePresence.clear(vscodeSnapshot[1]));
     }
     const heartbeat = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/heartbeat$/);
     if (req.method === "POST" && heartbeat) return send(res, 200, core.heartbeat(heartbeat[1]));
