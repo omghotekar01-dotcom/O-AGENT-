@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:o_agent_mobile/ui/ios_components.dart';
 import 'package:o_agent_mobile/ui/cursor_cloud.dart';
 import 'package:o_agent_mobile/ui/projects.dart';
+import 'package:o_agent_mobile/core/controller.dart';
 
 void main() {
   testWidgets('Original iOS-style grouped components fit a compact display',
@@ -105,6 +106,35 @@ void main() {
       expect(draft?.prompt, 'Write a safe implementation plan');
       expect(draft?.mode, 'plan');
       expect(draft?.autoCreatePR, false);
+      expect(tester.takeException(), isNull);
+    });
+
+  testWidgets('Codex Cloud prompt dialog disposes fields after route closes',
+    (tester) async {
+      final controller = ControlController();
+      addTearDown(controller.dispose);
+      Map<String, String>? saved;
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body:
+        Builder(builder: (context) => TextButton(
+          onPressed: () async {
+            saved = await showDialog<Map<String, String>>(
+              context: context,
+              builder: (_) => CodexCloudTaskDialog(
+                controller: controller, environmentId: 'env-test-1234'),
+            );
+          },
+          child: const Text('New Codex task'),
+        )))));
+      await tester.tap(find.text('New Codex task'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cloud environment ID'), findsOneWidget);
+      expect(find.text('New task prompt'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).last,
+        'Propose safe tests before making changes');
+      await tester.tap(find.text('Request approval'));
+      await tester.pumpAndSettle();
+      expect(saved?['environmentId'], 'env-test-1234');
+      expect(saved?['prompt'], 'Propose safe tests before making changes');
       expect(tester.takeException(), isNull);
     });
 
