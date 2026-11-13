@@ -5,6 +5,7 @@ import '../core/controller.dart';
 import 'codex_session.dart';
 import 'agent_sdk_bridge.dart';
 import 'screen_preview.dart';
+import 'vscode_remote.dart';
 import 'cursor_cloud.dart';
 import 'ios_components.dart';
 import 'projects.dart';
@@ -106,6 +107,9 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   void _openBridge([String? task]) => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       AgentSdkBridgeScreen(controller: widget.controller, taskId: task)));
+  void _openVsCode([String? task]) => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      VsCodeRemoteScreen(controller: widget.controller, taskId: task)));
   void _openScreen() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       ScreenPreviewScreen(controller: widget.controller)));
@@ -180,7 +184,12 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
               style: const TextStyle(color: OVisual.gold,
                 fontSize: 12, fontWeight: FontWeight.w700))),
           const SizedBox(height: 11),
-          if (run['canOpenBridgeTask'] == true)
+          if (run['canOpenVscodeTask'] == true)
+            SizedBox(width: double.infinity, child: FilledButton.tonalIcon(
+              onPressed: () => _openVsCode(run['id']?.toString()),
+              icon: const Icon(CupertinoIcons.folder_open, size: 18),
+              label: const Text('Inspect VS Code open request')))
+          else if (run['canOpenBridgeTask'] == true)
             SizedBox(width: double.infinity, child: FilledButton.tonalIcon(
               onPressed: () => _openBridge(run['id']?.toString()),
               icon: Icon(exactApproval ? CupertinoIcons.checkmark_shield
@@ -306,6 +315,12 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                 subtitle: 'Run officially authenticated SDK sessions on '
                   'a trusted laptop, with exact owner approvals',
                 onTap: () => _openBridge(), color: OVisual.primary),
+              const SizedBox(height: 10),
+              OIconTile(icon: CupertinoIcons.square_stack_3d_up,
+                title: 'VS Code workspace companion',
+                subtitle: 'Opt-in editor extension, owner-approved '
+                  'file navigation and separate local confirmation',
+                onTap: () => _openVsCode(), color: OVisual.primary),
               const SizedBox(height: 10),
               OIconTile(icon: CupertinoIcons.folder_fill,
                 title: 'Projects and repositories',
