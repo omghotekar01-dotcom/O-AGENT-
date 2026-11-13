@@ -87,7 +87,7 @@ export async function runProviderTurn(task, {
   });
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
-  let session = null, client = null, completed = false, messages = 0, finalText = "", cost = null;
+  let session = null, sessionHandle = null, client = null, completed = false, messages = 0, finalText = "", cost = null;
   let updates = Promise.resolve(), deliveryFailure = null;
   const enqueue = (eventType, text = "") => {
     if (deliveryFailure) return;
@@ -193,19 +193,19 @@ export async function runProviderTurn(task, {
             : { kind: "reject", feedback: "Owner denied or timed out the request" };
         },
       };
-      session = sessionId
+      sessionHandle = sessionId
         ? await client.resumeSession(sessionId, options)
         : await client.createSession(options);
       const onDelta = event => {
         const chunk = safeDelta(event?.data?.deltaContent);
         if (chunk) { finalText = (finalText + chunk).slice(-8000); enqueue("agent_delta", chunk); }
       };
-      session.on("assistant.message_delta", onDelta);
-      session.on("tool.execution_start", event =>
+      sessionHandle.on("assistant.message_delta", onDelta);
+      sessionHandle.on("tool.execution_start", event =>
         enqueue("status", "Tool started: " + summarize(event?.data?.toolName, 80)));
-      const result = await session.sendAndWait({ prompt }, timeoutMs);
+      const result = await sessionHandle.sendAndWait({ prompt }, timeoutMs);
       finalText = summarize(result?.data?.content, 8000) || finalText;
-      session = session.sessionId ?? session.id ?? sessionId;
+      session = sessionHandle.sessionId ?? sessionHandle.id ?? sessionId;
       completed = true;
     }
     enqueue("turn_completed", "Provider completed the supervised turn");
@@ -219,8 +219,8 @@ export async function runProviderTurn(task, {
     abort.abort();
     // Copilot sessions must be shut down in a finally block even when a
     // permission request times out. No worker may stay attached silently.
-    if (session && typeof session === "object") {
-      try { await session.disconnect?.(); } catch {}
+    if (sessionHandle) {
+      try { await sessionHandle.disconnect?.(); } catch {}
     }
     try { await client?.stop?.(); } catch {}
   }
