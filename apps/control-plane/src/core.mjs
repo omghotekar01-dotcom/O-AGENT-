@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "codex_cli_history", "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"]);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted", "rejected"]);
 const MAX_EVENTS = 5000;
+const HISTORY_PREVIEW_TTL = 30 * 60 * 1000;
 export class DomainError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -29,6 +30,9 @@ export class ControlPlane {
     this.persist = persist;
     this.clock = clock;
     this.subscribers = new Set();
+    // Full saved Codex messages are deliberately NOT part of persistent
+    // tasks/events. A temporary in-memory preview expires automatically.
+    this.historyPreviews = new Map();
   }
   commit(type, detail = {}) {
     const event = { sequence: ++this.data.sequence, id: randomUUID(), type, at: new Date(this.clock()).toISOString(), ...detail };
@@ -160,7 +164,18 @@ export class ControlPlane {
     if (body.ok) {
       const result = JSON.stringify(body.result ?? {});
       if (result.length > 20000) throw new DomainError(413, "Result too large");
-      task.result = JSON.parse(result); task.status = "completed";
+      if (task.kind === "codex_cli_history") {
+        const until = this.clock() + HISTORY_PREVIEW_TTL;
+        this.historyPreviews.set(taskId, {
+          expiresAt: until,
+          result: JSON.parse(result),
+        });
+        // Persist only metadata, never a complete external conversation.
+        task.result = { temporary: true, expiresAt: until };
+      } else {
+        task.result = JSON.parse(result);
+      }
+      task.status = "completed";
     } else {
       task.error = requiredString(body.error, "error", 1000); task.status = "failed";
     }
@@ -253,6 +268,14 @@ export class ControlPlane {
   getTask(id) {
     const task = this.data.tasks[id];
     if (!task) throw new DomainError(404, "Unknown task");
+    if (task.kind === "codex_cli_history" && task.status === "completed") {
+      const preview = this.historyPreviews.get(id);
+      if (preview && preview.expiresAt > this.clock()) {
+        return { ...task, result: preview.result, historyExpired: false };
+      }
+      this.historyPreviews.delete(id);
+      return { ...task, result: null, historyExpired: true };
+    }
     return task;
   }
   snapshot() {
