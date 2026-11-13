@@ -157,7 +157,8 @@ export async function runCodexTurn(task, {
         if (msg.error) return failProvider(explainCodexError(msg.error,"initialization"));
         stage = 1;
         write({ method: "initialized", params: {} });
-        request(2, "thread/resume", { threadId: sessionId });
+        // Metadata-only resume avoids oversized responses on long-lived threads.
+        request(2, "thread/resume", { threadId: sessionId, excludeTurns: true });
         return;
       }
       if (msg.id === 2 && stage === 1) {
@@ -234,6 +235,6 @@ export async function runCodexTurn(task, {
       if (textBuffer.length > LIMIT_LINE) finish(new Error("Codex protocol line exceeded limit"));
     });
     child.stderr.on("data", () => {}); // Don't leak private CLI context to worker logs.
-    request(1, "initialize", { clientInfo: { name: "o_agent", title: "O-AGENT supervised session", version: "0.2.0" } });
+    request(1, "initialize", { clientInfo: { name: "o_agent", title: "O-AGENT supervised session", version: "0.6.2" }, capabilities: { experimentalApi: true } });
   });
 }
