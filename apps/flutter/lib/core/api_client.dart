@@ -479,6 +479,16 @@ class AgentApi {
     });
   }
 
+  Future<Map<String, dynamic>> requestVscodeOpen({
+    required String workerId, required String relativePath,
+  }) {
+    final random = Random.secure();
+    final key = base64UrlEncode(List<int>.generate(24, (_) => random.nextInt(256)));
+    return _request('/api/tasks',method:'POST',idempotencyKey:key,body:{
+      'workerId':workerId,'kind':'vscode_open_file','relativePath':relativePath,
+    });
+  }
+
   Future<Map<String, dynamic>> taskDetail(String id) =>
       _request('/api/tasks/${Uri.encodeComponent(id)}');
 

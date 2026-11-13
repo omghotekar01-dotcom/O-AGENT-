@@ -113,8 +113,10 @@ export class ProjectHub {
         limitation: "Cursor has an official CLI with headless and session operations; O-AGENT does not yet own or control a Cursor CLI session or active IDE tab.",
       },
       {
-        id: "vscode", label: "VS Code", status: "not_implemented",
-        capabilities: [],
+        id: "vscode", label: "VS Code",
+        status: hasCapability("vscode_open_file") ? "configured_unverified" : "requires_setup",
+        capabilities: hasCapability("vscode_open_file")
+          ? ["workspace_inventory","request_approved_open_file","local_confirm_open_file"] : [],
         limitation: "The VS Code extension API can expose workspace state through an explicitly installed extension. No IDE extension or screen-control bridge is currently installed.",
       },
       {
@@ -149,7 +151,7 @@ export class ProjectHub {
     }).slice(0, 80);
     const taskState = this.core.snapshot().tasks
       .filter(t => ["codex_cli_turn", "codex_cloud_submit",
-        "claude_agent_turn", "copilot_sdk_turn"].includes(t.kind))
+        "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"].includes(t.kind))
       .slice(0, 70);
     const runs = taskState.map(t => {
       const approvals = Object.values(t.approvals ?? {}).filter(a =>
@@ -175,6 +177,7 @@ export class ProjectHub {
         error: shorten(t.error, 300) || null,
         // Only a supervised O-AGENT turn can be resumed in our mobile console.
         canOpenBridgeTask: ["claude_agent_turn","copilot_sdk_turn"].includes(t.kind),
+        canOpenVscodeTask: t.kind === "vscode_open_file",
         canOpenSession: t.kind === "codex_cli_turn" &&
           typeof p.projectId === "string" && typeof p.sessionId === "string",
       };
