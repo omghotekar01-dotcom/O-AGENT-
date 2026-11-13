@@ -10,7 +10,8 @@ void main() {
   testWidgets('login screen is honest about backend connectivity', (tester) async {
     await tester.pumpWidget(const OAgentApp());
     expect(find.text('Connect to O-AGENT'), findsOneWidget);
-    expect(find.textContaining('Development connection'), findsOneWidget);
+    expect(find.textContaining('Choose your workspace connection'), findsOneWidget);
+    expect(find.textContaining('Public cloud account'), findsOneWidget);
     expect(find.textContaining('Only real machines'), findsOneWidget);
     expect(find.byType(TextField), findsNWidgets(2));
     expect(find.textContaining('demo'), findsNothing);
