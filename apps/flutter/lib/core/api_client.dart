@@ -139,6 +139,9 @@ class AgentApi {
     await _request('/api/accounts/members/${Uri.encodeComponent(id)}', method: 'DELETE');
   }
 
+  /// Owner-only remote session, run and approval status.
+  Future<Map<String, dynamic>> remoteAgentOverview() => _request('/api/remote/overview');
+
   Future<Map<String, dynamic>> githubStatus() => _request('/api/account/github');
 
   Future<Map<String, dynamic>> connectGithub(String personalAccessToken) =>
