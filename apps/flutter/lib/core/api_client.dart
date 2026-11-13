@@ -85,6 +85,94 @@ class AgentApi {
     }
   }
 
+  Future<Map<String, dynamic>> accountInfo() => _request('/api/me');
+
+  /// Owner-only: one-use invitation; never display operator tokens to members.
+  Future<Map<String, dynamic>> createInvitation(String label) =>
+      _request('/api/accounts/invitations', method: 'POST', body: {'label': label});
+
+  Future<List<Map<String, dynamic>>> members() async {
+    final response = await _request('/api/accounts/members');
+    return (response['members'] as List? ?? [])
+      .map((x) => Map<String, dynamic>.from(x as Map)).toList();
+  }
+
+  Future<void> revokeMember(String id) async {
+    await _request('/api/accounts/members/${Uri.encodeComponent(id)}', method: 'DELETE');
+  }
+
+  Future<Map<String, dynamic>> accountConnections() =>
+      _request('/api/account/connections');
+
+  Future<Map<String, dynamic>> setAccountConnection({
+    required String provider,
+    required String model,
+    String? apiKey,
+  }) => _request('/api/account/connections/${Uri.encodeComponent(provider)}',
+      method: 'PUT', body: {
+        'model': model,
+        if (apiKey != null && apiKey.isNotEmpty) 'apiKey': apiKey,
+      });
+
+  Future<Map<String, dynamic>> verifyAccountConnection(String provider) =>
+      _request('/api/account/connections/${Uri.encodeComponent(provider)}/verify',
+        method: 'POST');
+
+  Future<Map<String, dynamic>> deleteAccountConnection(String provider) =>
+      _request('/api/account/connections/${Uri.encodeComponent(provider)}',
+        method: 'DELETE');
+
+  Future<List<Map<String, dynamic>>> accountThreads() async {
+    final response = await _request('/api/account/threads');
+    return (response['threads'] as List? ?? [])
+      .map((x) => Map<String, dynamic>.from(x as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> accountThread(String id) =>
+      _request('/api/account/threads/${Uri.encodeComponent(id)}');
+
+  Future<Map<String, dynamic>> accountChat({
+    required String provider,
+    required String message,
+    String? threadId,
+  }) => _request('/api/account/chat', method: 'POST', body: {
+    'provider': provider, 'agentId': 'navigator', 'message': message,
+    if (threadId != null) 'threadId': threadId,
+  });
+
+  /// Public pairing route; only works with a one-time owner-issued invitation.
+  /// The claimed credential is saved by the controller in platform secure storage.
+  static Future<String> claimInvitation({
+    required String backend,
+    required String invitationCode,
+    required String displayName,
+  }) async {
+    final origin = validateEndpoint(backend);
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    try {
+      final req = await client.postUrl(origin.resolve('/api/accounts/claim'))
+        .timeout(const Duration(seconds: 15));
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode({
+        'invitationCode': invitationCode.trim(), 'displayName': displayName.trim(),
+      }));
+      final response = await req.close().timeout(const Duration(seconds: 15));
+      final data = jsonDecode(await utf8.decoder.bind(response).join()) as Map;
+      if (response.statusCode != 201) {
+        throw ApiException(data['error']?.toString() ?? 'Invitation rejected', response.statusCode);
+      }
+      final token = data['token'];
+      if (token is! String || token.length < 40) {
+        throw const ApiException('Server returned an invalid member session');
+      }
+      return token;
+    } on SocketException {
+      throw const ApiException('Cannot reach the backend. Check Tailscale and HTTPS URL.');
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   /// Only returns a proposed prompt. Never dispatches a task or uses tools.
   Future<String> refinePrompt(String message, {String target = 'generic'}) async {
     final result = await _request('/api/ai/refine', method: 'POST', body: {
