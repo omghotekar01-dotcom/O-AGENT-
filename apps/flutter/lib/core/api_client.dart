@@ -213,6 +213,49 @@ class AgentApi {
         if (steer) 'delivery': 'steer'});
   }
 
+  /// The private backend forwards only verified Cursor assistant/status/tool
+  /// summaries. The event ID allows reconnect without replaying every delta.
+  Stream<Map<String, dynamic>> cursorRunEvents(String agentId, String runId,
+      {String? lastEventId}) async* {
+    final path = '/api/account/cursor/agents/' + Uri.encodeComponent(agentId) +
+      '/runs/' + Uri.encodeComponent(runId) + '/stream';
+    final request = await _http.getUrl(endpoint.resolve(path))
+      .timeout(const Duration(seconds: 20));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    if (lastEventId != null && lastEventId.isNotEmpty) {
+      request.headers.set('Last-Event-ID', lastEventId);
+    }
+    final response = await request.close().timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw ApiException('Cursor live stream unavailable', response.statusCode);
+    }
+    var name = 'message';
+    String? cursor;
+    final data = <String>[];
+    await for (final line in utf8.decoder.bind(response).transform(const LineSplitter())) {
+      if (line.isEmpty) {
+        if (data.isNotEmpty) {
+          try {
+            final raw = jsonDecode(data.join('\n'));
+            if (raw is Map) {
+              yield <String, dynamic>{
+                'event': name, 'id': cursor, ...Map<String, dynamic>.from(raw),
+              };
+            }
+          } catch (_) { /* Invalid event; keep the real-state fallback. */ }
+        }
+        name = 'message'; cursor = null; data.clear();
+      } else if (line.startsWith('event:')) {
+        name = line.substring(6).trim();
+      } else if (line.startsWith('id:')) {
+        cursor = line.substring(3).trim();
+      } else if (line.startsWith('data:')) {
+        if (data.join('').length < 20000) data.add(line.substring(5).trimLeft());
+      }
+    }
+  }
+
   Future<Map<String, dynamic>> cursorCancel(String agentId, String runId) =>
     _request('/api/account/cursor/agents/' + Uri.encodeComponent(agentId) +
       '/runs/' + Uri.encodeComponent(runId) + '/cancel', method: 'POST');
