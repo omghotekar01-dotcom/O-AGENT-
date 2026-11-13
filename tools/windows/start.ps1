@@ -51,6 +51,22 @@ try {
     $env:OAGENT_API_TOKEN = $apiToken
     $env:OAGENT_WORKER_TOKEN = $workerToken
     $env:OAGENT_DATA_FILE = Join-Path $root '.local\oagent-data.json'
+    # Secure persistent BYOK vault master key, DPAPI-wrapped for this Windows
+    # account. This is generated only once, never printed or committed.
+    if (-not (($config.PSObject.Properties.Name -contains 'VaultKeyEncrypted') -and $config.VaultKeyEncrypted)) {
+        $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+        $bytes = New-Object byte[] 32
+        try { $rng.GetBytes($bytes) }
+        finally { $rng.Dispose() }
+        $secretText = [Convert]::ToBase64String($bytes)
+        [Array]::Clear($bytes, 0, $bytes.Length)
+        $secure = ConvertTo-SecureString -String $secretText -AsPlainText -Force
+        try {
+            $config | Add-Member -NotePropertyName 'VaultKeyEncrypted' -NotePropertyValue (ConvertFrom-SecureString -SecureString $secure) -Force
+        } finally { $secure.Dispose(); $secretText = $null }
+        Save-OAgentConfig $config
+    }
+    $env:OAGENT_VAULT_KEY_BASE64 = Unlock-OAgentSecret $config.VaultKeyEncrypted
     $env:OAGENT_WORKER_ID = $config.WorkerId
     $env:OAGENT_WORKSPACE_ROOT = $config.Workspace
 
