@@ -152,7 +152,8 @@ async function main() {
               if (["codex_cli_turn","claude_agent_turn","copilot_sdk_turn"].includes(task.kind) &&
                   result.providerStatus !== "completed") {
                 await api(`/api/workers/${id}/tasks/${task.id}/finish`,
-                  { ok: false, error: "Agent turn ended with provider status: " + result.providerStatus });
+                  { ok: false, error: result.providerFailure ||
+                    ("Agent turn ended with provider status: " + result.providerStatus) });
               } else {
                 await api(`/api/workers/${id}/tasks/${task.id}/finish`, { ok: true, result });
               }
