@@ -6,6 +6,7 @@ import { timingSafeEqual } from "node:crypto";
 import { ControlPlane, DomainError } from "./core.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
 import { ProjectHub } from "./project-hub.mjs";
+import { AccountHub } from "./account-hub.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
 const workerToken = process.env.OAGENT_WORKER_TOKEN ?? "";
@@ -27,6 +28,7 @@ const initial = existsSync(dbPath) ? JSON.parse(readFileSync(dbPath, "utf8")) : 
 const core = new ControlPlane(initial, persist);
 const agentRuntime = new AgentRuntime(core);
 const projectHub = new ProjectHub(core, agentRuntime);
+const accountHub = new AccountHub(core);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
   res.writeHead(code, JSON_HEADERS);
@@ -72,8 +74,74 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/") return staticFile(res, "index.html", "text/html; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.css") return staticFile(res, "dashboard.css", "text/css; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.js") return staticFile(res, "dashboard.js", "text/javascript; charset=utf-8");
+    // Joining requires a previously authorized one-time invitation. No
+    // public self-registration or bearer token sharing between members.
+    if (req.method === "POST" && path === "/api/accounts/claim") {
+      return send(res, 201, accountHub.claimInvitation(await readJson(req, 4096)));
+    }
     const isWorkerRoute = path.startsWith("/api/workers/");
-    if (!authorized(req, isWorkerRoute ? workerToken : apiToken)) throw new DomainError(401, "Invalid authorization token");
+    const owner = authorized(req, apiToken);
+    const worker = isWorkerRoute && authorized(req, workerToken);
+    const authHeader = req.headers.authorization ?? "";
+    const member = !owner && !worker && typeof authHeader === "string" &&
+      authHeader.startsWith("Bearer ") ? accountHub.authenticate(authHeader.slice(7)) : null;
+    if (isWorkerRoute ? !worker : (!owner && !member)) throw new DomainError(401, "Invalid authorization token");
+    const userId = owner ? "owner" : member?.id;
+
+    if (req.method === "GET" && path === "/api/me") {
+      return send(res, 200, owner
+        ? { id: "owner", displayName: "Workspace owner", role: "owner", vaultReady: accountHub.vaultReady }
+        : { ...member, vaultReady: accountHub.vaultReady });
+    }
+    if (owner && req.method === "POST" && path === "/api/accounts/invitations") {
+      return send(res, 201, accountHub.createInvitation(await readJson(req, 4096)));
+    }
+    if (owner && req.method === "GET" && path === "/api/accounts/members") {
+      return send(res, 200, { members: accountHub.members() });
+    }
+    const revokeMember = path.match(/^\/api\/accounts\/members\/([0-9a-f-]+)$/);
+    if (owner && req.method === "DELETE" && revokeMember) {
+      return send(res, 200, accountHub.revokeMember(revokeMember[1]));
+    }
+    if (!isWorkerRoute && path.startsWith("/api/account/")) {
+      if (req.method === "GET" && path === "/api/account/connections") {
+        return send(res, 200, accountHub.listConnections(userId));
+      }
+      const connectionPath = path.match(/^\/api\/account\/connections\/(openai|anthropic|gemini)$/);
+      if (connectionPath && req.method === "PUT") {
+        return send(res, 200, accountHub.saveConnection(userId, connectionPath[1], await readJson(req, 4096)));
+      }
+      if (connectionPath && req.method === "DELETE") {
+        return send(res, 200, accountHub.deleteConnection(userId, connectionPath[1]));
+      }
+      const verifyPath = path.match(/^\/api\/account\/connections\/(openai|anthropic|gemini)\/verify$/);
+      if (verifyPath && req.method === "POST") {
+        return send(res, 200, await accountHub.verifyConnection(userId, verifyPath[1]));
+      }
+      if (req.method === "GET" && path === "/api/account/threads") {
+        return send(res, 200, { threads: accountHub.threads(userId) });
+      }
+      const userThread = path.match(/^\/api\/account\/threads\/([0-9a-f-]+)$/);
+      if (req.method === "GET" && userThread) {
+        return send(res, 200, accountHub.thread(userId, userThread[1]));
+      }
+      if (req.method === "POST" && path === "/api/account/chat") {
+        return send(res, 200, await accountHub.send(userId, await readJson(req, 8192)));
+      }
+      throw new DomainError(404, "Account API endpoint not found");
+    }
+    if (!owner && !worker) {
+      // Member tokens never unlock legacy project, worker, task, event or
+      // admin endpoints. A minimal snapshot lets an invited mobile user
+      // connect without seeing the owner's machines, files or approvals.
+      if (req.method === "GET" && path === "/api/state") {
+        return send(res, 200, { workers: [], tasks: [], nextSequence: 1 });
+      }
+      if (req.method === "GET" && path === "/api/events") {
+        return send(res, 200, { events: [], nextSequence: 1 });
+      }
+      throw new DomainError(403, "This account is not authorized to operate the owner's workspace");
+    }
 
     // Unified, capability-aware project registry: no simulated external work.
     if (req.method === "GET" && path === "/api/projects") {
