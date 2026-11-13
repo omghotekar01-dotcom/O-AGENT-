@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import 'codex_session.dart';
 import 'agent_sdk_bridge.dart';
+import 'screen_preview.dart';
 import 'cursor_cloud.dart';
 import 'ios_components.dart';
 import 'projects.dart';
@@ -105,6 +106,9 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   void _openBridge([String? task]) => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       AgentSdkBridgeScreen(controller: widget.controller, taskId: task)));
+  void _openScreen() => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      ScreenPreviewScreen(controller: widget.controller)));
   void _openCursor() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       CursorCloudScreen(controller: widget.controller)));
@@ -385,11 +389,16 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                   ],
                 ])),
               const OSectionTitle('Desktop and browser viewing'),
-              const OIconTile(icon: CupertinoIcons.eye_slash,
-                title: 'Live screen sharing is not enabled',
-                subtitle: 'Real desktop viewing needs a consented Windows '
-                  'capture companion and securely authorized streaming. '
-                  'Agent logs are not desktop video.', color: OVisual.secondary),
+              OIconTile(icon: CupertinoIcons.desktopcomputer,
+                title: 'View consented laptop preview',
+                subtitle: 'See temporary real screen or window frames selected '
+                  'by the laptop user. Owner-only, view-only, no mouse control.',
+                onTap: _openScreen, color: OVisual.primary),
+              const SizedBox(height: 9),
+              const OIconTile(icon: CupertinoIcons.shield_lefthalf_fill,
+                title: 'Capture requires explicit human consent',
+                subtitle: 'Laptop browser selection and a visible sharing '
+                  'indicator are required. No silent desktop takeover.'),
             ],
           )),
       ))),
