@@ -147,7 +147,15 @@ class _CodexConversationPanelState extends State<CodexConversationPanel> {
             TextButton(onPressed:fetching?null:_load,
               child:const Text('Try again')),
           ]))),
-      if (state=='completed' && items.isEmpty) const Padding(
+      if (history?['historyExpired'] == true)
+        const Padding(padding: EdgeInsets.symmetric(vertical: 12),
+          child: Text('For your privacy, this temporary preview expired '
+            'or the laptop backend restarted. Tap Refresh chat to read '
+            'the saved messages again.',
+            style: TextStyle(fontSize: 12, height: 1.5,
+              color: Color(0xFF656575)))),
+      if (state=='completed' && items.isEmpty &&
+          history?['historyExpired'] != true) const Padding(
         padding:EdgeInsets.symmetric(vertical:14),
         child:Text('Codex returned no stored user/assistant text for this '
           'conversation. You may be viewing a project record without '
@@ -188,8 +196,8 @@ class _CodexConversationPanelState extends State<CodexConversationPanel> {
             style:TextStyle(fontSize:12,color:Color(0xFF656575)))),
       if (historyTaskId!=null) const Text(
         'History is a saved snapshot, not a live mirror. '
-        'Preview text is retained in your private O-AGENT backend task history; '
-        'do not use an untrusted host.',
+        'Messages are held temporarily in server memory (not the permanent '
+        'task database) and expire after 30 minutes. Use a trusted backend.',
         style:TextStyle(fontSize:11,height:1.5,color:Color(0xFF777786))),
     ]);
   }

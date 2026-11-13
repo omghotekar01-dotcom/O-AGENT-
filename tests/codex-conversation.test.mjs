@@ -122,6 +122,12 @@ test("one-tap phone history is owner scoped and read-only, with no extra approva
     provider:"codex_cli",sessionId,messages:[{role:"user",text:"Real text"}],
   }});
   assert.equal(core.getTask(claimed.id).result.messages[0].text,"Real text");
+  assert.doesNotMatch(JSON.stringify(core.data), /Real text/,
+    "Saved conversation text must never enter durable backend tasks");
+  now += 30 * 60 * 1000 + 1;
+  assert.equal(core.getTask(claimed.id).result, null);
+  assert.equal(core.getTask(claimed.id).historyExpired, true);
+  now -= 30 * 60 * 1000 + 1;
   assert.throws(()=>hub.requestLocalCodexHistory({
     projectId:project.id,sessionId:"another-session-123456"},
     "invalid-history-key-1234"),/not among/);
