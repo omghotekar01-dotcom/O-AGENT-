@@ -167,6 +167,56 @@ class AgentApi {
   /// Owner-only remote session, run and approval status.
   Future<Map<String, dynamic>> remoteAgentOverview() => _request('/api/remote/overview');
 
+  // Cursor Cloud Agents v1 is scoped to the signed-in personal account.
+  Future<Map<String, dynamic>> cursorStatus() => _request('/api/account/cursor');
+
+  Future<Map<String, dynamic>> connectCursor(String apiKey) =>
+    _request('/api/account/cursor', method: 'PUT', body: {'apiKey': apiKey});
+
+  Future<Map<String, dynamic>> verifyCursor() =>
+    _request('/api/account/cursor/verify', method: 'POST');
+
+  Future<Map<String, dynamic>> disconnectCursor() =>
+    _request('/api/account/cursor', method: 'DELETE');
+
+  Future<List<Map<String, dynamic>>> cursorAgents() async {
+    final response = await _request('/api/account/cursor/agents');
+    return (response['agents'] as List? ?? []).map(
+      (item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> cursorAgent(String id) =>
+    _request('/api/account/cursor/agents/' + Uri.encodeComponent(id));
+
+  Future<List<Map<String, dynamic>>> cursorRuns(String id) async {
+    final response = await _request(
+      '/api/account/cursor/agents/' + Uri.encodeComponent(id) + '/runs');
+    return (response['runs'] as List? ?? []).map(
+      (item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> cursorRun(String agentId, String runId) =>
+    _request('/api/account/cursor/agents/' + Uri.encodeComponent(agentId) +
+      '/runs/' + Uri.encodeComponent(runId));
+
+  Future<Map<String, dynamic>> cursorFollowUp({
+    required String agentId,
+    required String prompt,
+    bool steer = false,
+    String? requestId,
+  }) {
+    final random = Random.secure();
+    final nonce = List<int>.generate(24, (_) => random.nextInt(256));
+    return _request('/api/account/cursor/agents/' + Uri.encodeComponent(agentId) + '/runs',
+      method: 'POST',
+      body: {'prompt': prompt, 'requestId': requestId ?? base64UrlEncode(nonce),
+        if (steer) 'delivery': 'steer'});
+  }
+
+  Future<Map<String, dynamic>> cursorCancel(String agentId, String runId) =>
+    _request('/api/account/cursor/agents/' + Uri.encodeComponent(agentId) +
+      '/runs/' + Uri.encodeComponent(runId) + '/cancel', method: 'POST');
+
   Future<Map<String, dynamic>> githubStatus() => _request('/api/account/github');
 
   Future<Map<String, dynamic>> connectGithub(String personalAccessToken) =>
