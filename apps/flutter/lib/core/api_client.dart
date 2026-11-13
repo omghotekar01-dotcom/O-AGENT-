@@ -462,6 +462,14 @@ class AgentApi {
 
   /// Submit a turn to the exact saved Codex CLI session. The server requires
   /// explicit initial approval and enforces per-action approvals during runs.
+  /// Fetch only saved user/assistant conversation text, without resuming a
+  /// possibly-active Codex thread. Owner-triggered read; no API key required.
+  Future<Map<String, dynamic>> loadCodexConversation({
+    required String projectId, required String sessionId,
+  }) => _request('/api/providers/codex/local/history',
+    method:'POST',idempotencyKey:createIdempotencyKey(),
+    body:{'projectId':projectId,'sessionId':sessionId});
+
   Future<Map<String, dynamic>> requestCodexLocalTurn({
     required String projectId,
     required String sessionId,
@@ -473,6 +481,16 @@ class AgentApi {
     'prompt': prompt,
     'mode': mode,
   }, idempotencyKey: createIdempotencyKey());
+
+  /// User confirms one exact read/edit prompt; turn is queued in the same
+  /// authenticated request. Individual provider write approvals remain.
+  Future<Map<String,dynamic>> sendConfirmedCodexTurn({
+    required String projectId, required String sessionId,
+    required String prompt, required String mode,
+  }) => _request('/api/providers/codex/local/turns/confirm',
+    method:'POST',idempotencyKey:createIdempotencyKey(),
+    body:{'projectId':projectId,'sessionId':sessionId,'prompt':prompt,
+      'mode':mode,'consent':'authorize-exact-prompt'});
 
   Future<Map<String, dynamic>> createSupervisedAgentTurn({
     required String workerId, required String providerKind,

@@ -329,6 +329,28 @@ export class ProjectHub {
     this.core.commit("project.message.completed", { projectId: id, threadId: thread.id });
     return { project: this.localView(project), thread };
   }
+  requestLocalCodexHistory(body, requestKey) {
+    if (this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1")
+      throw new DomainError(403, "Codex saved conversation connector is disabled");
+    const projectId = safeTitle(body?.projectId, "Codex project ID", 160);
+    const sessionId = safeTitle(body?.sessionId, "Codex conversation ID", 120);
+    const project = this.core.data.codexLocalProjects[projectId];
+    if (!project || !project.sessions.some(s => s.id === sessionId))
+      throw new DomainError(404, "This saved conversation is not among your laptop's discovered projects. Refresh the project list.");
+    if (this.now() - project.syncedAt >= 120000)
+      throw new DomainError(409, "Codex conversation list is stale. Check that O-AGENT is running on the laptop and refresh.");
+    const worker = this.core.snapshot().workers.find(w => w.id === project.workerId);
+    if (!worker || worker.status !== "online")
+      throw new DomainError(409, "Your laptop is offline. Connect it to O-AGENT before loading conversation history.");
+    const existing = Object.values(this.core.data.tasks).find(t =>
+      t.kind === "codex_cli_history" && t.parameters?.sessionId === sessionId &&
+      t.workerId === project.workerId &&
+      ["queued","running"].includes(t.status));
+    if (existing) return existing;
+    return this.core.createTask({
+      workerId: project.workerId, kind:"codex_cli_history",projectId,sessionId,
+    },requestKey);
+  }
   requestLocalCodexTurn(body, requestKey) {
     if (this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1") throw new DomainError(403, "Codex CLI connector disabled");
     const projectId = safeTitle(body?.projectId, "Codex project ID", 160);
@@ -348,6 +370,17 @@ export class ProjectHub {
       projectId, sessionId, cwd: project.cwd,
       prompt: body.prompt, mode: body.mode || "read_only",
     }, requestKey);
+  }
+
+  confirmLocalCodexTurn(body, requestKey) {
+    // The owner already reviewed and accepted the exact immutable prompt in
+    // the phone confirmation dialog. This is a single, idempotent consent
+    // transaction; project-edit tool approvals remain individually required.
+    if (body?.consent !== "authorize-exact-prompt")
+      throw new DomainError(400, "You must explicitly confirm the exact Codex instruction");
+    const task = this.requestLocalCodexTurn(body, requestKey);
+    if (task.status === "waiting_for_approval") return this.core.decide(task.id, true);
+    return task; // Idempotent replay of an already approved or terminal task.
   }
 
   requestCodexTask(body, requestKey) {
@@ -415,7 +448,7 @@ export class ProjectHub {
         // An independent scanner cannot determine what another active Codex
         // process is currently doing. No false running indicator.
         state: "history_available", liveBrowser: false,
-        control: "approval_gated", capabilities: ["view_session_metadata", "request_supervised_turn", "view_turn_events", "decide_permission_requests"],
+        control: "approval_gated", capabilities: ["view_session_metadata", "read_saved_conversation", "request_supervised_turn", "view_turn_events", "decide_permission_requests"],
       };
     }
     // A successful empty sync clears previous sessions for this worker.

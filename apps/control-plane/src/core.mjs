@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"]);
+const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "codex_cli_history", "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"]);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted", "rejected"]);
 const MAX_EVENTS = 5000;
+const HISTORY_PREVIEW_TTL = 30 * 60 * 1000;
 export class DomainError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
@@ -29,6 +30,9 @@ export class ControlPlane {
     this.persist = persist;
     this.clock = clock;
     this.subscribers = new Set();
+    // Full saved Codex messages are deliberately NOT part of persistent
+    // tasks/events. A temporary in-memory preview expires automatically.
+    this.historyPreviews = new Map();
   }
   commit(type, detail = {}) {
     const event = { sequence: ++this.data.sequence, id: randomUUID(), type, at: new Date(this.clock()).toISOString(), ...detail };
@@ -46,7 +50,7 @@ export class ControlPlane {
     const now = this.clock();
     const existing = this.data.workers[id];
     const declared = Array.isArray(body.capabilities) ? body.capabilities : [
-      "system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn",
+      "system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "codex_cli_history",
     ];
     if (declared.length > 8 || declared.some(c => typeof c !== "string" || !TASK_TYPES.has(c)))
       throw new DomainError(400, "Invalid worker capabilities");
@@ -75,6 +79,13 @@ export class ControlPlane {
       if (!/^[A-Za-z0-9_-]{3,120}$/.test(environmentId)) throw new DomainError(400, "Invalid Codex Cloud environmentId");
       const prompt = requiredString(body.prompt, "Codex Cloud prompt", 2000);
       parameters = { environmentId, prompt };
+    }
+    if (kind === "codex_cli_history") {
+      const projectId = requiredString(body.projectId, "Codex projectId", 160);
+      const sessionId = requiredString(body.sessionId, "Codex conversation ID", 120);
+      if (!/^[a-zA-Z0-9_-]{8,120}$/.test(sessionId))
+        throw new DomainError(400, "Invalid Codex conversation ID");
+      parameters = { projectId, sessionId };
     }
     if (kind === "codex_cli_turn") {
       const projectId = requiredString(body.projectId, "Codex projectId", 160);
@@ -153,7 +164,25 @@ export class ControlPlane {
     if (body.ok) {
       const result = JSON.stringify(body.result ?? {});
       if (result.length > 20000) throw new DomainError(413, "Result too large");
-      task.result = JSON.parse(result); task.status = "completed";
+      if (task.kind === "codex_cli_history") {
+        const until = this.clock() + HISTORY_PREVIEW_TTL;
+        for (const [key, value] of this.historyPreviews) {
+          if (value.expiresAt <= this.clock()) this.historyPreviews.delete(key);
+        }
+        // Bound even fresh histories, so repeated chats cannot exhaust RAM.
+        while (this.historyPreviews.size >= 24) {
+          this.historyPreviews.delete(this.historyPreviews.keys().next().value);
+        }
+        this.historyPreviews.set(taskId, {
+          expiresAt: until,
+          result: JSON.parse(result),
+        });
+        // Persist only metadata, never a complete external conversation.
+        task.result = { temporary: true, expiresAt: until };
+      } else {
+        task.result = JSON.parse(result);
+      }
+      task.status = "completed";
     } else {
       task.error = requiredString(body.error, "error", 1000); task.status = "failed";
     }
@@ -246,6 +275,14 @@ export class ControlPlane {
   getTask(id) {
     const task = this.data.tasks[id];
     if (!task) throw new DomainError(404, "Unknown task");
+    if (task.kind === "codex_cli_history" && task.status === "completed") {
+      const preview = this.historyPreviews.get(id);
+      if (preview && preview.expiresAt > this.clock()) {
+        return { ...task, result: preview.result, historyExpired: false };
+      }
+      this.historyPreviews.delete(id);
+      return { ...task, result: null, historyExpired: true };
+    }
     return task;
   }
   snapshot() {

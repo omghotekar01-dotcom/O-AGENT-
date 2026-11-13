@@ -4,6 +4,7 @@ import { resolve, basename, join } from "node:path";
 import { readCodexCloudTasks, submitCodexCloudTask } from "./codex-cloud.mjs";
 import { readCodexLocalSessions } from "./codex-local.mjs";
 import { runCodexTurn } from "./codex-turn.mjs";
+import { readCodexHistory } from "./codex-history.mjs";
 import { runProviderTurn } from "./provider-turn.mjs";
 
 const endpoint = new URL(process.env.OAGENT_SERVER_URL || "http://127.0.0.1:8787");
@@ -19,7 +20,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const capabilities = [
   "system_info", "workspace_inventory",
   ...(process.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC === "1" ? ["codex_cloud_submit"] : []),
-  ...(process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC === "1" ? ["codex_cli_turn"] : []),
+  ...(process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC === "1" ? ["codex_cli_turn","codex_cli_history"] : []),
   ...(process.env.OAGENT_ENABLE_CLAUDE_AGENT_SDK === "1" ? ["claude_agent_turn"] : []),
   ...(process.env.OAGENT_ENABLE_COPILOT_SDK === "1" ? ["copilot_sdk_turn"] : []),
 ];
@@ -74,6 +75,11 @@ async function execute(task) {
         return false;
       },
     });
+  }
+  if (task.kind === "codex_cli_history") {
+    if (process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1")
+      throw new Error("Codex conversation reading has not been enabled on this laptop");
+    return readCodexHistory(task);
   }
   if (task.kind === "codex_cli_turn") {
     if (process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1") throw new Error("Codex CLI session control is disabled");
@@ -146,7 +152,7 @@ async function main() {
               if (["codex_cli_turn","claude_agent_turn","copilot_sdk_turn"].includes(task.kind) &&
                   result.providerStatus !== "completed") {
                 await api(`/api/workers/${id}/tasks/${task.id}/finish`,
-                  { ok: false, error: "Codex turn ended with provider status: " + result.providerStatus });
+                  { ok: false, error: "Agent turn ended with provider status: " + result.providerStatus });
               } else {
                 await api(`/api/workers/${id}/tasks/${task.id}/finish`, { ok: true, result });
               }

@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
+import { explainCodexError } from "./codex-errors.mjs";
+import { codexChildEnv } from "./codex-env.mjs";
 
 const LIMIT_LINE = 1024 * 1024;
 const LIMIT_TOTAL = 16 * 1024 * 1024;
@@ -40,9 +42,7 @@ export async function runCodexTurn(task, {
   }
   // Avoid leaking O-AGENT operator, worker or independent AI API keys to the
   // child process, while retaining official local Codex account auth.
-  const childEnv = Object.fromEntries(Object.entries(env).filter(([key]) =>
-    !/^(OAGENT_(API|WORKER)_TOKEN|OAGENT_GITHUB_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|OAGENT_CODEX_TASK_PROMPT)$/i.test(key)
-  ));
+  const childEnv = codexChildEnv(env);
   const bin = isWindows ? "powershell.exe" : "codex";
   const argv = isWindows
     ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "& codex app-server"]
@@ -154,14 +154,14 @@ export async function runCodexTurn(task, {
         return;
       }
       if (msg.id === 1 && stage === 0) {
-        if (msg.error) return failProvider("Codex app-server initialization rejected");
+        if (msg.error) return failProvider(explainCodexError(msg.error,"initialization"));
         stage = 1;
         write({ method: "initialized", params: {} });
         request(2, "thread/resume", { threadId: sessionId });
         return;
       }
       if (msg.id === 2 && stage === 1) {
-        if (msg.error) return failProvider("Could not resume this Codex session. It may be owned by another active process; close that turn and retry.");
+        if (msg.error) return failProvider(explainCodexError(msg.error,"resume"));
         stage = 2;
         enqueue("session_resumed", "Resumed real Codex session " + sessionId.slice(0, 8));
         // Codex 0.167.x removed the legacy sandboxPolicy.readOnly.access
@@ -181,7 +181,7 @@ export async function runCodexTurn(task, {
         return;
       }
       if (msg.id === 3 && stage === 2) {
-        if (msg.error) return failProvider("Codex rejected turn/start: " + clean(msg.error.message, 220));
+        if (msg.error) return failProvider(explainCodexError(msg.error,"turn/start"));
         turnId = msg.result?.turn?.id ?? null;
         if (!turnId) return failProvider("Codex returned no running turn ID");
         stage = 3;

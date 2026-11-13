@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
 import { basename, normalize } from "node:path";
+import { codexChildEnv } from "./codex-env.mjs";
 
 const MAX_SESSIONS = 80;
 const MAX_LINE = 2 * 1024 * 1024;
-const EXCLUDED_ENV = /^(OAGENT_(API|WORKER)_TOKEN|OAGENT_GITHUB_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|OAGENT_CODEX_TASK_PROMPT)$/i;
 
 /**
  * Discovers genuine local Codex CLI/IDE sessions via the official
@@ -22,7 +22,7 @@ export async function readCodexLocalSessions({
   const args = isWindows
     ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "& codex app-server"]
     : ["app-server"];
-  const childEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !EXCLUDED_ENV.test(key)));
+  const childEnv = codexChildEnv(env);
   return new Promise((resolve, reject) => {
     let child;
     try {

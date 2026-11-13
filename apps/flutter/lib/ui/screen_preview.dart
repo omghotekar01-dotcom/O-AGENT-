@@ -21,7 +21,7 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
   @override void initState() {
     super.initState();
     _refresh();
-    timer = Timer.periodic(const Duration(milliseconds: 1400), (_) => _refresh());
+    timer = Timer.periodic(const Duration(milliseconds: 1000), (_) => _refresh());
   }
   @override void dispose() { timer?.cancel(); super.dispose(); }
   Future<void> _refresh() async {
@@ -99,7 +99,7 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
                     style: TextStyle(fontWeight: FontWeight.w700,
                       color: OVisual.label(context)))),
                   OStatePill(live ? 'online' : sharing ? 'waiting' : 'offline',
-                    label: live ? 'Live preview' : sharing ? 'Waiting for frames'
+                    label: live ? 'Receiving images' : sharing ? 'No recent images'
                       : 'Not sharing'),
                 ]),
                 const SizedBox(height: 15),
@@ -113,7 +113,8 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
                   child: frame == null
                     ? const Center(child: Padding(
                       padding: EdgeInsets.all(32),
-                      child: Text('No consented preview is available.',
+                      child: Text('No current image. Select a screen on the laptop '
+                        'and keep the sharing browser page running.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.white70))))
                     : Image.memory(frame!, fit: BoxFit.contain,
@@ -121,6 +122,17 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
                       errorBuilder: (_, __, ___) =>
                         const Center(child: Text('Preview could not be decoded.'))),
                 ),
+                if (sharing && !live) Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text('The laptop has not sent a fresh image. '
+                    'Check that the laptop browser is still sharing, that '
+                    'the laptop is awake, and that the phone is connected '
+                    'to the same private Tailscale backend. If it remains '
+                    'stuck, tap Stop immediately and start a new browser '
+                    'sharing session. Browser background throttling can '
+                    'still reduce frame rate.',
+                    style: TextStyle(color: OVisual.muted(context),
+                      fontSize: 12, height: 1.55))),
                 if (status?['lastFrameAt'] != null) Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Text('Last frame: ' + status!['lastFrameAt'].toString(),
