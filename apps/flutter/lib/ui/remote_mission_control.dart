@@ -5,6 +5,7 @@ import '../core/controller.dart';
 import 'codex_session.dart';
 import 'agent_sdk_bridge.dart';
 import 'screen_preview.dart';
+import 'push_devices.dart';
 import 'vscode_remote.dart';
 import 'cursor_cloud.dart';
 import 'ios_components.dart';
@@ -110,6 +111,9 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   void _openVsCode([String? task]) => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       VsCodeRemoteScreen(controller: widget.controller, taskId: task)));
+  void _openPush() => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      PushDeviceScreen(controller: widget.controller)));
   void _openScreen() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       ScreenPreviewScreen(controller: widget.controller)));
@@ -403,6 +407,13 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                         color: OVisual.muted(context))),
                   ],
                 ])),
+              const OSectionTitle('Alerts and approvals'),
+              OIconTile(icon: CupertinoIcons.bell_fill,
+                title: 'Push notifications and device permissions',
+                subtitle: 'Opt into alerts for real agent approvals and '
+                  'status changes. Firebase setup required.',
+                onTap: _openPush, color: OVisual.primary),
+              const SizedBox(height: 9),
               const OSectionTitle('Desktop and browser viewing'),
               OIconTile(icon: CupertinoIcons.desktopcomputer,
                 title: 'View consented laptop preview',

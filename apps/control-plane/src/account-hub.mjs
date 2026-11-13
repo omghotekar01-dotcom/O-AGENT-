@@ -106,6 +106,7 @@ export class AccountHub {
     delete this.data.attachments?.[memberId];
     delete this.data.integrations?.[memberId];
     delete this.data.cursorSubmissions?.[memberId];
+    delete this.data.pushDevices?.[memberId];
     this.commit("account.member.revoked", { memberId });
     return { revoked: true };
   }
