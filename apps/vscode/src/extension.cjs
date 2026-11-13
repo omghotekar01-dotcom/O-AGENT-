@@ -39,6 +39,24 @@ async function api(path, body, method = "POST") {
   if (!result.ok) throw Error(explainHttpFailure(result.status, path));
   return json;
 }
+async function checkBackend() {
+  const { url } = await settings();
+  let response;
+  // Verify the configured service before sending the worker token anywhere.
+  try {
+    response = await fetch(new URL("/health", url), {
+      method: "GET", signal: AbortSignal.timeout(7000),
+      cache: "no-store", redirect: "error",
+    });
+  } catch (error) {
+    throw Error(explainFetchFailure(error, url));
+  }
+  if (!response.ok) throw Error(
+    "O-AGENT health check failed (HTTP " + response.status + "). Check the backend address.");
+  const data = await response.json().catch(() => ({}));
+  if (data?.service !== "oagent-control-plane" || data?.status !== "ok")
+    throw Error("The configured address is not the O-AGENT backend. Use http://127.0.0.1:8787 on the laptop.");
+}
 async function currentWorkspace() {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
   if (!root) throw Error("Open and trust a workspace folder in VS Code first");
@@ -166,6 +184,7 @@ async function start() {
   }
   try {
     await settings();
+    await checkBackend();
     const confirm = await vscode.window.showInformationMessage(
       "Enroll this VS Code workspace? O-AGENT may send a short list of changed "
       + "and unsaved file names (NEVER file contents) to your private owner backend "
