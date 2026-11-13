@@ -17,6 +17,9 @@ class ControlController extends ChangeNotifier with WidgetsBindingObserver {
   bool _busyRefreshing = false;
 
   String? endpoint;
+  String accountRole = 'owner';
+  String accountDisplayName = 'Workspace owner';
+  bool get isMember => accountRole == 'member';
   String? error;
   ControlSnapshot? snapshot;
   List<DomainEvent> events = const [];
@@ -72,6 +75,15 @@ class ControlController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       pending = AgentApi(origin, token.trim());
       final state = await pending.readState();
+      Map<String, dynamic> profile;
+      try {
+        profile = await pending.accountInfo();
+      } on ApiException catch (e) {
+        // Legacy backends without the new /api/me can still be reached by
+        // the existing operator token during a rolling phone/backend update.
+        if (e.statusCode != 404) rethrow;
+        profile = {'role': 'owner', 'displayName': 'Workspace owner'};
+      }
       if (generation != _generation) {
         pending.close();
         return false;
@@ -79,6 +91,8 @@ class ControlController extends ChangeNotifier with WidgetsBindingObserver {
       _api?.close();
       _api = pending;
       endpoint = pending.endpoint.toString();
+      accountRole = profile['role']?.toString() == 'member' ? 'member' : 'owner';
+      accountDisplayName = profile['displayName']?.toString() ?? 'Account';
       snapshot = state;
       selectedMachineId = null;
       events = const [];
