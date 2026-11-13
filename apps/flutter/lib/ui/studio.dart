@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../core/controller.dart';
+import '../core/api_client.dart';
+import 'account_workspace.dart';
 import '../core/models.dart';
 import '../theme.dart';
 import 'projects.dart';
@@ -50,12 +52,12 @@ class _StudioShellState extends State<StudioShell> {
   void initState() {
     super.initState();
     c.addListener(_handleConnection);
-    if (c.connected) Future.microtask(_load);
+    if (c.connected && !c.isMember) Future.microtask(_load);
     else Future.microtask(c.reconnectSavedSession);
   }
 
   void _handleConnection() {
-    if (c.connected && !loaded && !loading) Future.microtask(_load);
+    if (c.connected && !c.isMember && !loaded && !loading) Future.microtask(_load);
     if (!c.connected) {
       loaded = false;
       status = null;
@@ -167,7 +169,17 @@ class _StudioShellState extends State<StudioShell> {
             Text(aiReady ? 'AI: ${status?['provider']} / ${status?['model']}' : 'AI provider not configured on backend'),
             const SizedBox(height: 10),
             Text(c.hasSavedSession ? 'The operator token is protected in Android Keystore / iOS Keychain on this device. Disconnect deletes it. Model keys remain on your backend.' : 'The operator token is in app memory only. Model keys stay on your backend.', style: const TextStyle(fontSize: 12, color: _muted, height: 1.5)),
-            const SizedBox(height: 22),
+            const SizedBox(height: 15),
+            SizedBox(width: double.infinity, child: FilledButton.tonalIcon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(context, MaterialPageRoute<void>(
+                  builder: (_) => AccountWorkspaceScreen(controller: c)));
+              },
+              icon: const Icon(Icons.hub_outlined),
+              label: const Text('My AI accounts & invitations'),
+            )),
+            const SizedBox(height: 15),
             SizedBox(width: double.infinity, child: OutlinedButton.icon(
               onPressed: () { Navigator.pop(ctx); c.disconnect(); },
               icon: const Icon(Icons.logout), label: const Text('Disconnect'),
@@ -191,6 +203,7 @@ class _StudioShellState extends State<StudioShell> {
       animation: c,
       builder: (context, _) {
         if (!c.connected) return StudioConnect(controller: c);
+        if (c.isMember) return AccountWorkspaceScreen(controller: c);
         return Scaffold(
           appBar: AppBar(
             titleSpacing: 22,
@@ -735,10 +748,13 @@ class StudioConnect extends StatefulWidget {
 class _StudioConnectState extends State<StudioConnect> {
   final url = TextEditingController(text: 'http://127.0.0.1:8787');
   final token = TextEditingController();
+  final inviteCode = TextEditingController();
+  final displayName = TextEditingController();
+  bool joining = false;
   bool hidden = true;
   bool rememberDevice = false;
   @override
-  void dispose() { url.dispose(); token.dispose(); super.dispose(); }
+  void dispose() { url.dispose(); token.dispose(); inviteCode.dispose(); displayName.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(animation: widget.controller, builder: (context, _) =>
@@ -758,11 +774,27 @@ class _StudioConnectState extends State<StudioConnect> {
             style: TextStyle(fontSize: 14, color: _muted, height: 1.5)),
           const SizedBox(height: 31),
           const Text('Development connection', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const SizedBox(height: 11),
+          Row(children: [
+            Expanded(child: ChoiceChip(label: const Text('My owner workspace'),
+              selected: !joining, onSelected: (_) => setState(() => joining = false))),
+            const SizedBox(width: 9),
+            Expanded(child: ChoiceChip(label: const Text('Join with invitation'),
+              selected: joining, onSelected: (_) => setState(() => joining = true))),
+          ]),
           const SizedBox(height: 14),
           TextField(controller: url, keyboardType: TextInputType.url,
-            decoration: const InputDecoration(labelText: 'Backend URL', prefixIcon: Icon(Icons.link))),
+            decoration: const InputDecoration(labelText: 'Backend HTTPS URL', prefixIcon: Icon(Icons.link))),
           const SizedBox(height: 13),
-          TextField(controller: token, obscureText: hidden, autocorrect: false, enableSuggestions: false,
+          if (joining) ...[
+            TextField(controller: displayName, maxLength: 80,
+              decoration: const InputDecoration(labelText: 'Your display name',
+                prefixIcon: Icon(Icons.person_outline))),
+            const SizedBox(height: 10),
+            TextField(controller: inviteCode, autocorrect: false, enableSuggestions: false,
+              decoration: const InputDecoration(labelText: 'One-time invitation code',
+                prefixIcon: Icon(Icons.mail_outline))),
+          ] else TextField(controller: token, obscureText: hidden, autocorrect: false, enableSuggestions: false,
             decoration: InputDecoration(labelText: 'Operator token',
               prefixIcon: const Icon(Icons.key_outlined),
               suffixIcon: IconButton(tooltip: 'Toggle token visibility', icon: Icon(hidden ? Icons.visibility_outlined : Icons.visibility_off_outlined),
@@ -779,10 +811,26 @@ class _StudioConnectState extends State<StudioConnect> {
           const SizedBox(height: 8),
           SizedBox(width: double.infinity, child: FilledButton(
             onPressed: widget.controller.connecting || widget.controller.restoringSession ? null : () async {
-              final ok = await widget.controller.connect(url.text, token.text, remember: rememberDevice);
-              if (ok) token.clear();
+              if (joining) {
+                try {
+                  final personalToken = await AgentApi.claimInvitation(
+                    backend: url.text, invitationCode: inviteCode.text,
+                    displayName: displayName.text);
+                  final ok = await widget.controller.connect(url.text, personalToken,
+                    remember: rememberDevice);
+                  if (ok) inviteCode.clear();
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(e.toString())));
+                }
+              } else {
+                final ok = await widget.controller.connect(url.text, token.text,
+                  remember: rememberDevice);
+                if (ok) token.clear();
+              }
             },
-            child: Text(widget.controller.connecting ? 'Connecting…' : 'Connect to O-AGENT'),
+            child: Text(widget.controller.connecting ? 'Connecting…'
+              : joining ? 'Join my private AI workspace' : 'Connect to O-AGENT'),
           )),
           if (widget.controller.restoringSession)
             const Padding(padding: EdgeInsets.only(top: 12),
@@ -797,7 +845,7 @@ class _StudioConnectState extends State<StudioConnect> {
           if (widget.controller.error != null) Padding(padding: const EdgeInsets.only(top: 12),
             child: Text(widget.controller.error!, style: const TextStyle(color: _alert))),
           const SizedBox(height: 25),
-          const _Note('First connection: use the operator token from the one-click Windows setup. Provider keys belong only on your laptop backend. The launcher configures USB reverse for a connected authorized phone.'),
+          const _Note('Owners use their original operator token. Invited users enter a 15-minute one-time code from the owner and receive a separate personal token. API keys can then be added privately in the mobile Connections tab. Use trusted HTTPS remote access.'),
         ],
       )),
     )))),
