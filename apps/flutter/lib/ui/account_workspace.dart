@@ -199,12 +199,14 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
   Future<void> _pickFile() async {
     if (uploading || stagedAttachments.length >= 3) return;
     try {
-      final selected = await FilePicker.platform.pickFiles(type: FileType.custom,
-        allowedExtensions: ['txt', 'md', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx'],
-        withData: true);
-      if (selected == null || selected.files.isEmpty) return;
-      final file = selected.files.first;
-      final bytes = file.bytes;
+      final file = await FilePicker.pickFile(type: FileType.custom,
+        allowedExtensions: ['txt', 'md', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx']);
+      if (file == null) return;
+      final length = file.lengthSync() ?? await file.length();
+      if (length == null || length < 1 || length > 1500000) {
+        throw const ApiException('Choose a file of 1.5 MB or less.');
+      }
+      final bytes = await file.readAsBytes();
       if (bytes == null || bytes.isEmpty || bytes.length > 1500000) {
         throw const ApiException('Choose a file of 1.5 MB or less.');
       }
