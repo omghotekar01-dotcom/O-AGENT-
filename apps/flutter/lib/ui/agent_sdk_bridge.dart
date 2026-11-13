@@ -259,6 +259,6 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
               'require separate, expiring decisions. Unrelated website chats, '
               'unknown tools and unauthorized folders cannot be controlled.'),
         ])),
-    ))),
+    )),
   );
 }
