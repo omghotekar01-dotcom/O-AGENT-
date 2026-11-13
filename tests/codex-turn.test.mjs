@@ -168,6 +168,39 @@ test("official Codex app-server actually resumes, starts turn, emits real deltas
   assert.equal(start.cwd, cwd);
   assert.equal(fake.turnStarted, true);
 });
+test("Codex quota failure is reported accurately without exposing raw account errors", async () => {
+  const process = new EventEmitter();
+  process.stdout = new EventEmitter();
+  process.stderr = new EventEmitter();
+  process.kill = () => true;
+  const respond = v => queueMicrotask(() =>
+    process.stdout.emit("data",Buffer.from(JSON.stringify(v)+"\n")));
+  process.stdin = {write(line) {
+    const m=JSON.parse(line);
+    if(m.id===1) respond({id:1,result:{}});
+    if(m.id===2) respond({id:2,result:{thread:{id:sessionId}}});
+    if(m.id===3){
+      respond({id:3,result:{turn:{id:"turn-quota"}}});
+      respond({method:"item/started",params:{threadId:sessionId,item:{type:"userMessage"}}});
+      respond({method:"item/completed",params:{threadId:sessionId,item:{type:"userMessage"}}});
+      respond({method:"error",params:{threadId:sessionId,error:{
+        message:"You've hit your usage limit. Account PRIVATE_USAGE_ID"
+      }}});
+      respond({method:"turn/completed",params:{threadId:sessionId,
+        turn:{id:"turn-quota",status:"failed"}}});
+    }
+  },end(){}};
+  const updates=[];
+  const result=await runCodexTurn(makeTask("read_only"),{
+    spawnImpl:()=>process,realpathImpl:async()=>cwd,isWindows:true,
+    sendUpdate:async x=>updates.push(x),timeoutMs:2500,
+  });
+  assert.equal(result.providerStatus,"failed");
+  assert.match(result.providerFailure,/CODEX_USAGE_LIMIT/);
+  assert.doesNotMatch(result.providerFailure,/PRIVATE_USAGE_ID/);
+  assert.equal(updates.some(e=>e.type==="tool_started" && e.text==="userMessage"),false);
+});
+
 test("live provider tool approval only accepts a real human decision", async () => {
   const fake = fakeCodexServer(true);
   const updates = [];
