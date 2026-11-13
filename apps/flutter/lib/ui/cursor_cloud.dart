@@ -492,6 +492,14 @@ class _CursorAgentDetailState extends State<CursorAgentDetailScreen> {
                       fontSize: 11)),
                   const SizedBox(height: 13),
                   Wrap(spacing: 9, runSpacing: 8, children: [
+                    if (_active(r['status'])) FilledButton.tonalIcon(
+                      onPressed: () => Navigator.push(context,
+                        MaterialPageRoute<void>(builder: (_) =>
+                          CursorLiveRunScreen(
+                            controller: widget.controller,
+                            agentId: agentId, runId: _value(r['id'])))),
+                      icon: const Icon(CupertinoIcons.waveform_path, size: 17),
+                      label: const Text('Watch live')),
                     OutlinedButton.icon(
                       onPressed: busy ? null : () => _openRun(_value(r['id'])),
                       icon: const Icon(CupertinoIcons.doc_text, size: 16),
@@ -568,4 +576,164 @@ class _CursorPromptSheetState extends State<CursorPromptSheet> {
       ],
     )),
   ));
+}
+
+
+/// Run-specific live progress through Cursor's documented SSE endpoint.
+/// This is a provider event feed, not a hidden display-capture or reasoning
+/// transcript. It runs only while the phone screen is open.
+class CursorLiveRunScreen extends StatefulWidget {
+  const CursorLiveRunScreen({super.key, required this.controller,
+    required this.agentId, required this.runId});
+  final ControlController controller;
+  final String agentId, runId;
+  @override State<CursorLiveRunScreen> createState() => _CursorLiveRunState();
+}
+class _CursorLiveRunState extends State<CursorLiveRunScreen> {
+  StreamSubscription<Map<String, dynamic>>? subscription;
+  Map<String, dynamic>? result;
+  List<Map<String, String>> toolEvents = [];
+  String output = '';
+  String? lastEventId;
+  String? error;
+  String status = 'CREATING';
+  bool streaming = false;
+  @override
+  void initState() { super.initState(); _start(); }
+  @override
+  void dispose() { subscription?.cancel(); super.dispose(); }
+  Future<void> _start() async {
+    subscription?.cancel();
+    subscription = null;
+    await _readCurrent();
+    if (!mounted || const {'FINISHED','ERROR','CANCELLED','EXPIRED'}
+        .contains(status)) return;
+    _connect();
+  }
+  Future<void> _readCurrent() async {
+    final api = widget.controller.client;
+    if (api == null) return;
+    try {
+      final next = await api.cursorRun(widget.agentId, widget.runId);
+      if (!mounted || api != widget.controller.client) return;
+      setState(() {
+        result = next;
+        status = _value(next['status'], status);
+        if (const {'FINISHED','ERROR','CANCELLED','EXPIRED'}
+          .contains(status) && next['result'] != null) {
+          output = _value(next['result']);
+        }
+        error = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
+  }
+  void _connect() {
+    final api = widget.controller.client;
+    if (api == null || subscription != null) return;
+    setState(() { streaming = true; error = null; });
+    subscription = api.cursorRunEvents(widget.agentId, widget.runId,
+      lastEventId: lastEventId).listen((message) {
+      if (!mounted || api != widget.controller.client) return;
+      final kind = _value(message['event']);
+      final eventId = _value(message['id']);
+      setState(() {
+        if (eventId.isNotEmpty) lastEventId = eventId;
+        switch (kind) {
+          case 'assistant':
+            output += _value(message['text']);
+            if (output.length > 16000) output = output.substring(output.length - 16000);
+          case 'tool_call':
+            toolEvents.add({
+              'name': _value(message['name'], 'Tool operation'),
+              'status': _value(message['status'], 'unknown'),
+            });
+            if (toolEvents.length > 80) toolEvents.removeAt(0);
+          case 'status':
+            status = _value(message['status'], status);
+          case 'result':
+            status = _value(message['status'], status);
+            if (message['text'] != null) output = _value(message['text']);
+          case 'error':
+            error = _value(message['message'], 'Provider stream unavailable');
+            lastEventId = null;
+          case 'done':
+            streaming = false;
+        }
+      });
+      if (kind == 'done' || kind == 'result') _readCurrent();
+    }, onError: (Object e) {
+      if (mounted) setState(() {
+        streaming = false;
+        error = 'Live stream disconnected. Refresh for the official run state.';
+      });
+      subscription = null;
+      _readCurrent();
+    }, onDone: () {
+      if (mounted) setState(() => streaming = false);
+      subscription = null;
+      _readCurrent();
+    }, cancelOnError: true);
+  }
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: OVisual.canvas(context),
+    appBar: AppBar(title: const Text('Live agent output'), actions: [
+      IconButton(tooltip: 'Reload run and reconnect',
+        onPressed: _start, icon: const Icon(CupertinoIcons.refresh)),
+    ]),
+    body: SafeArea(child: Center(child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 730),
+      child: ListView(padding: const EdgeInsets.fromLTRB(19, 16, 19, 32),
+        children: [
+          const OScreenTitle(eyebrow: 'Cursor / authenticated event stream',
+            title: 'Watch the work.',
+            subtitle: 'Live assistant text and sanitized tool statuses '
+              'from this single Cursor Cloud run. No desktop capture.'),
+          const SizedBox(height: 18),
+          OSurface(child: Row(children: [
+            Icon(streaming ? CupertinoIcons.waveform_path
+              : CupertinoIcons.pause_circle,
+              color: streaming ? OVisual.primary : OVisual.secondary),
+            const SizedBox(width: 10),
+            Expanded(child: Text(streaming ? 'Receiving live events'
+              : 'Stream paused or complete', style: TextStyle(
+                color: OVisual.label(context), fontWeight: FontWeight.w700,
+                fontSize: 12))),
+            OStatePill(status),
+          ])),
+          if (error != null) Padding(
+            padding: const EdgeInsets.only(top: 11),
+            child: OSurface(tint: const Color(0xFFFFF1F1),
+              child: Text(error!, style: const TextStyle(
+                color: Color(0xFFAA4B51), fontSize: 12)))),
+          const OSectionTitle('Assistant output'),
+          OSurface(child: SelectableText(output.isEmpty
+            ? 'No assistant text received yet. The final result is also '
+              'available from Cursor once this run finishes.' : output,
+            style: TextStyle(color: OVisual.label(context),
+              fontSize: 14, height: 1.55))),
+          const OSectionTitle('Tool activity'),
+          if (toolEvents.isEmpty) const OEmptyState(
+            icon: CupertinoIcons.hammer,
+            title: 'No tool events yet',
+            message: 'Only provider-reported tool names and statuses appear '
+              'here. Raw tool arguments and model reasoning are not forwarded.'),
+          for (final e in toolEvents)
+            Padding(padding: const EdgeInsets.only(bottom: 8),
+              child: OIconTile(icon: CupertinoIcons.hammer,
+                title: e['name'] ?? 'Tool', subtitle: e['status'] ?? '')),
+          const SizedBox(height: 15),
+          OutlinedButton.icon(
+            onPressed: _start,
+            icon: const Icon(CupertinoIcons.arrow_clockwise),
+            label: const Text('Refresh official run status')),
+          if (result != null) Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text('Run ID: ' + widget.runId,
+              style: TextStyle(color: OVisual.muted(context), fontSize: 11))),
+        ]),
+    ))),
+  );
 }
