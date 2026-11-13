@@ -98,6 +98,21 @@ export async function runCodexTurn(task, {
       const isCommand = method === "item/commandExecution/requestApproval";
       const isFile = method === "item/fileChange/requestApproval";
       const isPermission = method === "item/permissions/requestApproval";
+      if (isPermission) {
+        // Codex app-server permission requests have a distinct protocol shape:
+        // granting an empty subset denies all extra requested privileges.
+        // Returning {decision: "decline"} here is not a valid response.
+        write({ id: msg.id, result: { permissions: {}, scope: "turn" } });
+        enqueue("status", "Additional filesystem/network permission denied");
+        return;
+      }
+      if (!isCommand && !isFile) {
+        // Never invent an approval payload for unfamiliar server requests.
+        // Stop the run rather than hanging on an invalid JSON-RPC response.
+        enqueue("error", "Unsupported Codex interactive request: " + clean(method, 120));
+        failProvider("Unsupported Codex interactive request; action denied");
+        return;
+      }
       // Do not turn a vague request into a broad privilege grant. Additional
       // filesystem/network permissions require a separate, richer UI and are
       // denied rather than showing an incomplete approval summary.
@@ -106,8 +121,8 @@ export async function runCodexTurn(task, {
       const grantRoot = typeof details.grantRoot === "string" ? resolve(details.grantRoot) : "";
       const outsideRoot = grantRoot && grantRoot.toLowerCase() !== resolve(root).toLowerCase();
       const hasKnownCommand = typeof details.command === "string" && details.command.trim().length > 0;
-      if ((!isCommand && !isFile) || mode === "read_only" || isPermission ||
-          networkAccess || additionalAccess || outsideRoot || (isCommand && !hasKnownCommand)) {
+      if (mode === "read_only" || networkAccess || additionalAccess ||
+          outsideRoot || (isCommand && !hasKnownCommand)) {
         write({ id: msg.id, result: { decision: "decline" } });
         enqueue("status", "Provider requested unsupported or elevated access; denied safely");
         return;

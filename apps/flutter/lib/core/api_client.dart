@@ -139,6 +139,34 @@ class AgentApi {
     await _request('/api/accounts/members/${Uri.encodeComponent(id)}', method: 'DELETE');
   }
 
+  /// Authenticated server-sent event stream for the OWNER. Events carry
+  /// state-change notifications, not fake agent output. Always refetch task
+  /// detail from the server after a notification, never trust event text as
+  /// authorization to execute an action.
+  Stream<Map<String, dynamic>> ownerEventStream() async* {
+    final request = await _http.getUrl(endpoint.resolve('/api/stream'))
+      .timeout(const Duration(seconds: 15));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    final response = await request.close().timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw ApiException('Remote event stream unavailable',
+        response.statusCode);
+    }
+    await for (final line in utf8.decoder.bind(response).transform(const LineSplitter())) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        final parsed = jsonDecode(line.substring(6));
+        if (parsed is Map) yield Map<String, dynamic>.from(parsed);
+      } catch (_) {
+        // Ignore an invalid server event; the periodic refresh is authoritative.
+      }
+    }
+  }
+
+  /// Owner-only remote session, run and approval status.
+  Future<Map<String, dynamic>> remoteAgentOverview() => _request('/api/remote/overview');
+
   Future<Map<String, dynamic>> githubStatus() => _request('/api/account/github');
 
   Future<Map<String, dynamic>> connectGithub(String personalAccessToken) =>

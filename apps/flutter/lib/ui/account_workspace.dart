@@ -116,59 +116,9 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
 
   Future<void> _saveProvider(Map<String, dynamic> existing) async {
     final provider = existing['id'].toString();
-    final model = TextEditingController(text: existing['model']?.toString() ?? '');
-    final key = TextEditingController();
-    var showKey = false;
     final form = await showDialog<Map<String, String>>(context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, update) => AlertDialog(
-        title: Text('Connect ${existing['label']}'),
-        content: SingleChildScrollView(child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Use your own provider API account. The key is sent over HTTPS and encrypted on your O-AGENT backend, never bundled into the app.',
-              style: TextStyle(fontSize: 12, height: 1.5)),
-            const SizedBox(height: 9),
-            TextButton.icon(
-              icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              onPressed: () => _openKeyConsole(provider),
-              label: const Text('Get a key from the provider'),
-            ),
-            const SizedBox(height: 8),
-            TextField(controller: model, maxLength: 120,
-              decoration: const InputDecoration(labelText: 'Model ID',
-                prefixIcon: Icon(Icons.auto_awesome_outlined))),
-            const SizedBox(height: 10),
-            TextField(controller: key, obscureText: !showKey, autocorrect: false,
-              enableSuggestions: false, keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                labelText: existing['connected'] == true ? 'New API key (optional)' : 'Your API key',
-                prefixIcon: const Icon(Icons.key_rounded),
-                helperText: existing['connected'] == true ? 'Leave blank to keep the saved encrypted key.' : null,
-                suffixIcon: IconButton(
-                  onPressed: () => update(() => showKey = !showKey),
-                  icon: Icon(showKey ? Icons.visibility_off_outlined : Icons.visibility_outlined)),
-              )),
-            const SizedBox(height: 10),
-            const Text('An API key may incur charges from its provider. A ChatGPT, Claude or Gemini subscription is not always the same as API billing.',
-              style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5)),
-          ],
-        )),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () {
-            if (model.text.trim().isEmpty ||
-                (existing['connected'] != true && key.text.trim().isEmpty)) return;
-            Navigator.pop(ctx, {
-              'model': model.text.trim(),
-              if (key.text.trim().isNotEmpty) 'apiKey': key.text.trim(),
-            });
-          }, child: const Text('Save securely')),
-        ],
-      )));
-    // Controllers are disposed after the dialog; credentials are never written
-    // to persistent phone storage, logs, or GitHub.
-    model.dispose();
-    key.dispose();
+      builder: (_) => ProviderKeyDialog(existing: existing,
+        onGetKey: () => _openKeyConsole(provider)));
     if (form == null || !mounted) return;
     try {
       await widget.controller.client!.setAccountConnection(
@@ -214,35 +164,9 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
   }
 
   Future<void> _connectGithub() async {
-    final input = TextEditingController();
     try {
       final secret = await showDialog<String>(context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Connect personal GitHub'),
-          content: SingleChildScrollView(child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Use a fine-grained personal access token with '
-                'read-only Metadata and Contents access to repositories you choose. '
-                'O-AGENT verifies it with GitHub before reporting a connection. '
-                'It cannot push code or control GitHub Actions with this integration.',
-                style: TextStyle(fontSize: 12, height: 1.5)),
-              const SizedBox(height: 12),
-              TextField(controller: input, obscureText: true,
-                enableSuggestions: false, autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Personal access token',
-                  prefixIcon: Icon(Icons.key_outlined))),
-            ])),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, input.text.trim()),
-              child: const Text('Verify and connect')),
-          ],
-        ),
-      );
+        builder: (_) => const GithubTokenDialog());
       if (secret == null || secret.isEmpty || !mounted) return;
       setState(() { loading = true; error = null; });
       await widget.controller.client!.connectGithub(secret);
@@ -251,8 +175,6 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
       await _load();
     } catch (e) {
       if (mounted) setState(() { error = e.toString(); loading = false; });
-    } finally {
-      input.dispose();
     }
   }
 
@@ -733,5 +655,116 @@ class _Panel extends StatelessWidget {
       color: color, borderRadius: BorderRadius.circular(17),
       border: Border.all(color: OTheme.hairline)),
     child: child,
+  );
+}
+
+
+/// Keep controllers alive through the dialog exit animation. Disposing them
+/// immediately after showDialog returns can race Flutter's element teardown.
+class ProviderKeyDialog extends StatefulWidget {
+  const ProviderKeyDialog({super.key, required this.existing, required this.onGetKey});
+  final Map<String, dynamic> existing;
+  final VoidCallback onGetKey;
+  @override State<ProviderKeyDialog> createState() => _ProviderKeyDialogState();
+}
+class _ProviderKeyDialogState extends State<ProviderKeyDialog> {
+  late final TextEditingController model;
+  final key = TextEditingController();
+  bool showKey = false;
+  @override
+  void initState() {
+    super.initState();
+    model = TextEditingController(text: widget.existing['model']?.toString() ?? '');
+  }
+  @override
+  void dispose() {
+    model.dispose();
+    key.clear();
+    key.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text('Connect ' + (widget.existing['label']?.toString() ?? 'AI')),
+    content: SingleChildScrollView(child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Use your own API account. Keys are encrypted on your '
+          'selected O-AGENT backend, not included in the Android APK.',
+          style: TextStyle(fontSize: 12, height: 1.5)),
+        const SizedBox(height: 10),
+        TextButton.icon(onPressed: widget.onGetKey,
+          icon: const Icon(Icons.open_in_new_rounded, size: 18),
+          label: const Text('Get a key from the provider')),
+        const SizedBox(height: 8),
+        TextField(controller: model, maxLength: 120,
+          decoration: const InputDecoration(labelText: 'Model ID',
+            prefixIcon: Icon(Icons.auto_awesome_outlined))),
+        const SizedBox(height: 10),
+        TextField(controller: key, obscureText: !showKey,
+          autocorrect: false, enableSuggestions: false,
+          keyboardType: TextInputType.visiblePassword,
+          decoration: InputDecoration(
+            labelText: widget.existing['connected'] == true
+              ? 'New API key (optional)' : 'Your API key',
+            prefixIcon: const Icon(Icons.key_rounded),
+            helperText: widget.existing['connected'] == true
+              ? 'Leave blank to keep the saved encrypted key.' : null,
+            suffixIcon: IconButton(
+              onPressed: () => setState(() => showKey = !showKey),
+              icon: Icon(showKey ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined)),
+          )),
+        const SizedBox(height: 10),
+        const Text('Provider API use may incur charges. Chat subscriptions '
+          'may not include API credits.',
+          style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.5)),
+      ],
+    )),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel')),
+      FilledButton(onPressed: () {
+        if (model.text.trim().isEmpty ||
+          (widget.existing['connected'] != true && key.text.trim().isEmpty)) return;
+        Navigator.pop(context, <String, String>{
+          'model': model.text.trim(),
+          if (key.text.trim().isNotEmpty) 'apiKey': key.text.trim(),
+        });
+      }, child: const Text('Save securely')),
+    ],
+  );
+}
+class GithubTokenDialog extends StatefulWidget {
+  const GithubTokenDialog({super.key});
+  @override State<GithubTokenDialog> createState() => _GithubTokenDialogState();
+}
+class _GithubTokenDialogState extends State<GithubTokenDialog> {
+  final input = TextEditingController();
+  @override
+  void dispose() { input.clear(); input.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Connect personal GitHub'),
+    content: SingleChildScrollView(child: Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Use a fine-grained personal access token with read-only '
+          'Metadata and Contents access to your selected repositories. '
+          'O-AGENT verifies the token. It cannot push code with this connection.',
+          style: TextStyle(fontSize: 12, height: 1.5)),
+        const SizedBox(height: 12),
+        TextField(controller: input, obscureText: true,
+          enableSuggestions: false, autocorrect: false,
+          decoration: const InputDecoration(
+            labelText: 'Personal access token',
+            prefixIcon: Icon(Icons.key_outlined))),
+      ])),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel')),
+      FilledButton(onPressed: () => Navigator.pop(context, input.text.trim()),
+        child: const Text('Verify and connect')),
+    ],
   );
 }

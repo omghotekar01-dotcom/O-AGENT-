@@ -22,6 +22,8 @@ export class ControlPlane {
       agentThreads: initial.agentThreads ?? {},
       projects: initial.projects ?? {},
       externalProjects: initial.externalProjects ?? {},
+      codexLocalProjects: initial.codexLocalProjects ?? {},
+      codexLocalSync: initial.codexLocalSync ?? {},
       accounts: initial.accounts ?? {},
     };
     this.persist = persist;

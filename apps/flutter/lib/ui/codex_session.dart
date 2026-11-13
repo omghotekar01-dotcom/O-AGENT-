@@ -9,9 +9,11 @@ import 'projects.dart';
 /// This does not automate the ChatGPT consumer website.
 class CodexSessionScreen extends StatefulWidget {
   const CodexSessionScreen({super.key, required this.controller, required this.projectId,
-    required this.sessionId, required this.sessionTitle, required this.cwd});
+    required this.sessionId, required this.sessionTitle, required this.cwd,
+    this.initialTaskId});
   final ControlController controller;
   final String projectId, sessionId, sessionTitle, cwd;
+  final String? initialTaskId;
 
   @override
   State<CodexSessionScreen> createState() => _CodexSessionState();
@@ -27,7 +29,9 @@ class _CodexSessionState extends State<CodexSessionScreen> {
   @override
   void initState() {
     super.initState();
-    for (final t in widget.controller.snapshot?.tasks ?? []) {
+    taskId = widget.initialTaskId;
+    for (final t in widget.initialTaskId == null
+        ? (widget.controller.snapshot?.tasks ?? []) : []) {
       if (t.kind == 'codex_cli_turn' && t.parameters?['sessionId'] == widget.sessionId) {
         taskId = t.id;
         break;

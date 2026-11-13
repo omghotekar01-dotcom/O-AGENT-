@@ -118,6 +118,73 @@ export class ProjectHub {
       },
     ];
   }
+  /**
+   * Owner-only remote command center. Values are derived exclusively from
+   * authenticated worker syncs and actual persisted task/approval state.
+   * A saved Codex thread is never mislabeled as an actively running IDE tab.
+   */
+  remoteOverview() {
+    const now = this.now();
+    const machines = this.core.snapshot().workers.map(w => ({
+      id: w.id, name: w.name, status: w.status, lastSeenAt: w.lastSeenAt,
+    }));
+    const sessions = Object.values(this.core.data.codexLocalProjects).flatMap(p => {
+      const synced = now - p.syncedAt < 120000;
+      const machine = machines.find(w => w.id === p.workerId);
+      return (p.sessions || []).map(s => ({
+        projectId: p.id, projectTitle: p.title, cwd: p.cwd,
+        workerId: p.workerId, sessionId: s.id, title: s.title,
+        lastKnownState: s.state, updatedAt: s.updatedAt,
+        syncFresh: synced, workerOnline: machine?.status === "online",
+        // Last-known process state is not proof of a currently interactive tab.
+        observedState: synced ? "saved_session" : "stale_session",
+      }));
+    }).slice(0, 80);
+    const taskState = this.core.snapshot().tasks
+      .filter(t => t.kind === "codex_cli_turn" || t.kind === "codex_cloud_submit")
+      .slice(0, 70);
+    const runs = taskState.map(t => {
+      const approvals = Object.values(t.approvals ?? {}).filter(a =>
+        a.state === "pending" && a.expiresAt > now && t.status === "running")
+        .map(a => ({ id: a.id, kind: a.kind, description: a.description,
+          expiresAt: a.expiresAt }));
+      const p = t.parameters ?? {};
+      const related = sessions.find(s => s.sessionId === p.sessionId &&
+        s.projectId === p.projectId);
+      const last = t.updates?.at(-1);
+      return {
+        id: t.id, kind: t.kind, status: t.status, workerId: t.workerId,
+        projectId: p.projectId ?? null, sessionId: p.sessionId ?? null,
+        cwd: p.cwd ?? null, mode: p.mode ?? null,
+        sessionTitle: related?.title ?? null,
+        projectTitle: related?.projectTitle ?? null,
+        promptPreview: shorten(p.prompt, 220),
+        createdAt: t.createdAt, updatedAt: t.updatedAt,
+        updateCount: t.nextUpdate ?? t.updates?.length ?? 0,
+        latestEvent: last ? { type: last.type, text: shorten(last.text, 400),
+          at: last.at } : null,
+        pendingApprovals: approvals,
+        error: shorten(t.error, 300) || null,
+        // Only a supervised O-AGENT turn can be resumed in our mobile console.
+        canOpenSession: t.kind === "codex_cli_turn" &&
+          typeof p.projectId === "string" && typeof p.sessionId === "string",
+      };
+    });
+    return {
+      generatedAt: new Date(now).toISOString(),
+      machines, sessions, runs,
+      sources: this.sources().map(s => ({
+        id: s.id, label: s.label, status: s.status,
+        capabilities: s.capabilities, limitation: s.limitation,
+      })),
+      activeRuns: runs.filter(r => ["waiting_for_approval", "queued", "running"].includes(r.status)).length,
+      pendingApprovals: runs.filter(r => r.status === "waiting_for_approval").length +
+        runs.reduce((n, r) => n + r.pendingApprovals.length, 0),
+      screenStreaming: { supported: false, reason:
+        "No explicitly consented Windows capture/streaming agent has been enrolled." },
+    };
+  }
+
   async fetchGithub(path) {
     const headers = {
       "accept": "application/vnd.github+json",

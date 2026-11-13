@@ -250,7 +250,7 @@ class _StudioShellState extends State<StudioShell> {
             selectedIndex: index,
             onDestinationSelected: (next) => setState(() => index = next),
             destinations: const [
-              NavigationDestination(icon: Icon(Icons.folder_copy_outlined), selectedIcon: Icon(Icons.folder_copy_rounded), label: 'Projects'),
+              NavigationDestination(icon: Icon(Icons.folder_copy_outlined), selectedIcon: Icon(Icons.folder_copy_rounded), label: 'Remote'),
               NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view_rounded), label: 'Agents'),
               NavigationDestination(icon: Icon(Icons.chat_bubble_outline_rounded), selectedIcon: Icon(Icons.chat_bubble_rounded), label: 'Chat'),
               NavigationDestination(icon: Icon(Icons.list_alt_rounded), label: 'Activity'),
