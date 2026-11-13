@@ -166,6 +166,13 @@ export class ControlPlane {
       if (result.length > 20000) throw new DomainError(413, "Result too large");
       if (task.kind === "codex_cli_history") {
         const until = this.clock() + HISTORY_PREVIEW_TTL;
+        for (const [key, value] of this.historyPreviews) {
+          if (value.expiresAt <= this.clock()) this.historyPreviews.delete(key);
+        }
+        // Bound even fresh histories, so repeated chats cannot exhaust RAM.
+        while (this.historyPreviews.size >= 24) {
+          this.historyPreviews.delete(this.historyPreviews.keys().next().value);
+        }
         this.historyPreviews.set(taskId, {
           expiresAt: until,
           result: JSON.parse(result),
