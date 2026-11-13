@@ -34,7 +34,7 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
   Map<String, dynamic>? invite;
   String selectedProvider = 'openai';
   String? error;
-  int tab = 0;
+  int tab = 3; // Remote agents are the default, not a chatbot.
   bool loading = false, sending = false;
 
   bool get owner => !widget.controller.isMember;
@@ -322,12 +322,15 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('My AI workspace'),
+      appBar: AppBar(title: const Text('My workspace'),
         actions: [IconButton(onPressed: _load, icon: const Icon(Icons.sync_rounded),
           tooltip: 'Refresh connections')]),
       body: SafeArea(child: Column(children: [
         Padding(padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
           child: Row(children: [
+            Expanded(child: _TabButton(label: 'Agents', selected: tab == 3,
+              icon: Icons.settings_remote_outlined, onTap: () => setState(() => tab = 3))),
+            const SizedBox(width: 7),
             Expanded(child: _TabButton(label: 'Chat', selected: tab == 0,
               icon: Icons.chat_bubble_outline, onTap: () => setState(() => tab = 0))),
             const SizedBox(width: 7),
@@ -343,6 +346,7 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
             padding: const EdgeInsets.all(12), child: Text(error!,
               style: const TextStyle(color: Color(0xFF9B4835), fontSize: 12))))),
         Expanded(child: switch (tab) {
+          3 => _agentsView(),
           0 => _chatView(),
           1 => _connectionsView(),
           _ => _accountView(),
@@ -351,6 +355,42 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
       ])),
     );
   }
+
+  Widget _agentsView() => ListView(
+    padding: const EdgeInsets.fromLTRB(19, 17, 19, 29),
+    children: [
+      const OScreenTitle(eyebrow: 'Personal remote agents',
+        title: 'Your cloud.\nYour agents.',
+        subtitle: 'Supervise real coding agents on supported providers. '
+          'The account is private and separate from the workspace owner.'),
+      const SizedBox(height: 20),
+      OIconTile(icon: Icons.cloud_queue_rounded,
+        title: 'Cursor Cloud Agents',
+        subtitle: 'Connect your personal Cursor Cloud API key to see real '
+          'hosted sessions, steer active runs, read results, and cancel tasks.',
+        onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+          builder: (_) => CursorCloudScreen(controller: widget.controller)))),
+      const OSectionTitle('Other workspaces'),
+      const OIconTile(icon: Icons.laptop_mac_outlined,
+        title: 'Codex CLI on the enrolled laptop',
+        subtitle: 'Available to the workspace owner under Remote. '
+          'Invited members cannot operate the owner’s computer.',
+        color: OVisual.secondary),
+      const SizedBox(height: 9),
+      const OIconTile(icon: Icons.extension_outlined,
+        title: 'Claude Code, Copilot and VS Code',
+        subtitle: 'These require separately enrolled official agent SDKs '
+          'or a trusted IDE extension. No browser-chat takeover is claimed.',
+        color: OVisual.secondary),
+      const OSectionTitle('Private API conversations'),
+      OIconTile(icon: Icons.chat_bubble_outline_rounded,
+        title: 'OpenAI, Claude and Gemini API chat',
+        subtitle: 'Optional personal conversations and file attachments. '
+          'These are not existing coding sessions on your laptop.',
+        color: OVisual.mint,
+        onTap: () => setState(() => tab = 0)),
+    ],
+  );
 
   Widget _chatView() => ListView(padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
     children: [
@@ -546,7 +586,7 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
           ),
       ],
       const SizedBox(height: 14),
-      const _Panel(child: Text('Only OpenAI, Claude/Anthropic and Gemini API-owned conversations are supported here today. This does not import existing ChatGPT/Claude/Gemini website chats or control their browser tabs.',
+      const _Panel(child: Text('OpenAI, Claude and Gemini keys support private API-owned chats. Cursor Cloud is a separate real-agent connection. None of these API keys imports existing consumer website chats or controls browser tabs.',
         style: TextStyle(fontSize: 11, height: 1.6, color: Colors.grey))),
     ]);
 
@@ -558,7 +598,7 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
       Text(widget.controller.accountDisplayName,
         style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w800)),
       Text(owner ? 'Workspace owner · machine control available in main app'
-        : 'Invited member · private AI chats only',
+        : 'Private provider keys and cloud agents · no access to owner laptop',
         style: const TextStyle(color: Colors.grey, fontSize: 12)),
       const SizedBox(height: 17),
       _Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
