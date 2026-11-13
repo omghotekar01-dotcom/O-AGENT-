@@ -245,7 +245,7 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
             child: FilledButton.tonalIcon(
               onPressed: ready ? () => _openCodex(session) : null,
               icon: const Icon(CupertinoIcons.paperplane, size: 17),
-              label: const Text('Open and prompt Codex')),
+              label: const Text('Open conversation')),
           ),
         ])));
   }
@@ -281,12 +281,12 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
             children: [
               const OScreenTitle(
                 eyebrow: 'Your control center',
-                title: 'Stay in control.\nFrom anywhere.',
-                subtitle: 'Supervise real coding-agent sessions, examine work '
-                  'and handle approval requests without being at your desk.'),
+                title: 'Your projects.\nIn your pocket.',
+                subtitle: 'See your saved Codex conversations, send instructions '
+                  'and review approvals from anywhere.'),
               const SizedBox(height: 19),
               LayoutBuilder(builder: (context, constraints) {
-                final wide = constraints.maxWidth >= 470;
+                final wide = constraints.maxWidth >= 300;
                 final tiles = [
                   _statCard(CupertinoIcons.waveform_path_ecg,
                     (data?['activeRuns']?.toString() ?? '—'), 'Active runs',
@@ -314,30 +314,50 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                         color: Color(0xFFB34E52), fontSize: 12)),
                       TextButton(onPressed: _refresh, child: const Text('Retry')),
                     ]))),
-              const OSectionTitle('Your workspaces'),
-              OIconTile(icon: CupertinoIcons.cloud_fill,
-                title: 'Cursor Cloud Agents',
-                subtitle: 'Official hosted agent API · independently '
-                  'authenticated using your own Cursor key',
-                onTap: _openCursor, color: OVisual.primary),
-              const SizedBox(height: 10),
-              const SizedBox(height: 10),
-              OIconTile(icon: CupertinoIcons.chevron_left_slash_chevron_right,
-                title: 'Claude Agent SDK & GitHub Copilot',
-                subtitle: 'Run officially authenticated SDK sessions on '
-                  'a trusted laptop, with exact owner approvals',
-                onTap: () => _openBridge(), color: OVisual.primary),
-              const SizedBox(height: 10),
-              OIconTile(icon: CupertinoIcons.square_stack_3d_up,
-                title: 'VS Code workspace companion',
-                subtitle: 'Opt-in editor extension, owner-approved '
-                  'file navigation and separate local confirmation',
-                onTap: () => _openVsCode(), color: OVisual.primary),
-              const SizedBox(height: 10),
+              const OSectionTitle('My Codex conversations'),
+              if (sessions.isEmpty && data != null)
+                const OEmptyState(icon: CupertinoIcons.square_stack,
+                  title: 'No conversations found yet',
+                  message: 'Sign in to Codex on your laptop, create a '
+                    'conversation, and enable local sync in CONFIGURE-PROJECTS.cmd.'),
+              for (final session in sessions) _sessionCard(session),
+              const OSectionTitle('Start here'),
               OIconTile(icon: CupertinoIcons.folder_fill,
-                title: 'Projects and repositories',
-                subtitle: 'Browse verified projects, external work and Codex sessions',
+                title: 'My projects',
+                subtitle: 'Browse real coding projects and saved conversations',
                 onTap: _openProjects, color: OVisual.mint),
+              const SizedBox(height: 10),
+              OIconTile(icon: CupertinoIcons.desktopcomputer,
+                title: 'See my laptop',
+                subtitle: 'View a window you explicitly choose on your laptop. '
+                  'View only; no hidden capture.',
+                onTap: _openScreen, color: OVisual.primary),
+              ExpansionTile(
+                title: const Text('Connect more AI tools (optional)',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Cursor, Claude, Copilot and VS Code '
+                  'require separate authorized setup.',
+                  style: TextStyle(fontSize: 11)),
+                childrenPadding: const EdgeInsets.symmetric(
+                  horizontal: 9, vertical: 8),
+                children: [
+                  OIconTile(icon: CupertinoIcons.cloud_fill,
+                    title: 'Cursor Cloud Agents',
+                    subtitle: 'Requires provider access; not needed to '
+                      'test your Codex laptop connection',
+                    onTap: _openCursor, color: OVisual.primary),
+                  const SizedBox(height: 8),
+                  OIconTile(icon: CupertinoIcons.chevron_left_slash_chevron_right,
+                    title: 'Claude & GitHub Copilot',
+                    subtitle: 'Use a signed-in agent SDK on your laptop',
+                    onTap: () => _openBridge(), color: OVisual.primary),
+                  const SizedBox(height: 8),
+                  OIconTile(icon: CupertinoIcons.square_stack_3d_up,
+                    title: 'VS Code companion',
+                    subtitle: 'Opt-in editor connection with local approval',
+                    onTap: () => _openVsCode(), color: OVisual.primary),
+                ],
+              ),
               OSectionTitle('Laptop connection',
                 action: 'Refresh', onAction: _refresh),
               if (machines.isEmpty) const OEmptyState(
@@ -379,14 +399,11 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                   message: 'Only actual O-AGENT-supervised runs appear here. '
                     'Open a saved session to submit an explicit, approval-gated turn.'),
               for (final r in cards) _runCard(r, sessions),
-              const OSectionTitle('Saved Codex sessions'),
-              if (sessions.isEmpty && data != null)
-                const OEmptyState(icon: CupertinoIcons.square_stack,
-                  title: 'No sessions synced yet',
-                  message: 'On Windows, sign in to Codex CLI, create a saved '
-                    'project session, and enable local sync in CONFIGURE-PROJECTS.cmd.'),
-              for (final session in sessions) _sessionCard(session),
-              const OSectionTitle('Integration availability'),
+              ExpansionTile(
+                title: const Text('Technical connection details',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+                initiallyExpanded: false,
+                children: [
               OSurface(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Source capabilities',
@@ -415,6 +432,8 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                         color: OVisual.muted(context))),
                   ],
                 ])),
+                ],
+              ),
               const OSectionTitle('Alerts and approvals'),
               OIconTile(icon: CupertinoIcons.bell_fill,
                 title: 'Push notifications and device permissions',
@@ -422,17 +441,6 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                   'status changes. Firebase setup required.',
                 onTap: _openPush, color: OVisual.primary),
               const SizedBox(height: 9),
-              const OSectionTitle('Desktop and browser viewing'),
-              OIconTile(icon: CupertinoIcons.desktopcomputer,
-                title: 'View consented laptop preview',
-                subtitle: 'See temporary real screen or window frames selected '
-                  'by the laptop user. Owner-only, view-only, no mouse control.',
-                onTap: _openScreen, color: OVisual.primary),
-              const SizedBox(height: 9),
-              const OIconTile(icon: CupertinoIcons.shield_lefthalf_fill,
-                title: 'Capture requires explicit human consent',
-                subtitle: 'Laptop browser selection and a visible sharing '
-                  'indicator are required. No silent desktop takeover.'),
             ],
           )),
       ))),
