@@ -208,6 +208,18 @@ class AgentApi {
   Future<Map<String, dynamic>> cursorAgent(String id) =>
     _request('/api/account/cursor/agents/' + Uri.encodeComponent(id));
 
+  Future<List<Map<String, dynamic>>> cursorArtifacts(String agentId) async {
+    final response = await _request('/api/account/cursor/agents/' +
+      Uri.encodeComponent(agentId) + '/artifacts');
+    return (response['artifacts'] as List? ?? [])
+      .map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> cursorArtifactLink(
+      String agentId, String artifactPath) =>
+    _request('/api/account/cursor/agents/' + Uri.encodeComponent(agentId) +
+      '/artifacts/download?path=' + Uri.encodeQueryComponent(artifactPath));
+
   Future<List<Map<String, dynamic>>> cursorRuns(String id) async {
     final response = await _request(
       '/api/account/cursor/agents/' + Uri.encodeComponent(id) + '/runs');
