@@ -1,0 +1,40 @@
+name: O-AGENT Cloud Deployment Config
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "Dockerfile.worker"
+      - "docker-compose.cloud.yml"
+      - "deploy/**"
+      - ".github/workflows/cloud-config.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "Dockerfile.worker"
+      - "docker-compose.cloud.yml"
+      - "deploy/**"
+      - ".github/workflows/cloud-config.yml"
+permissions:
+  contents: read
+jobs:
+  validate:
+    name: Secure single-instance cloud topology
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify cloud and worker secrets are separate
+        run: |
+          cp deploy/cloud.env.example .env.cloud
+          cp deploy/worker.env.example .env.worker
+          docker compose --env-file .env.cloud -f docker-compose.cloud.yml config --quiet
+          grep -q 'env_file: .env.worker' docker-compose.cloud.yml
+          if sed -n '/^  cloud-worker:/,/^networks:/p' docker-compose.cloud.yml | grep -q 'env_file: .env.cloud'; then
+            echo "Worker must never receive server admin or vault secrets"; exit 1
+          fi
+      - name: Verify public ports and durable storage
+        run: |
+          grep -q 'oagent_data:/data' docker-compose.cloud.yml
+          grep -q '"443:443"' docker-compose.cloud.yml
+          grep -q 'USER node' Dockerfile.worker
+          node --check apps/gateway/src/provider-turn.mjs
