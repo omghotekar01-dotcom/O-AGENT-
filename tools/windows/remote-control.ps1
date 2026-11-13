@@ -40,8 +40,13 @@ public static class OAgentUserInput {
   [StructLayout(LayoutKind.Sequential)] private struct Input {
     public uint type; public InputUnion data;
   }
+  [StructLayout(LayoutKind.Sequential)] private struct MouseInput {
+    public int dx; public int dy; public uint mouseData;
+    public uint flags; public uint time; public IntPtr extra;
+  }
   [StructLayout(LayoutKind.Explicit)] private struct InputUnion {
     [FieldOffset(0)] public KeyInput keyboard;
+    [FieldOffset(0)] public MouseInput mouse;
   }
   [StructLayout(LayoutKind.Sequential)] private struct KeyInput {
     public ushort vk; public ushort scan; public uint flags; public uint time; public IntPtr extra;
