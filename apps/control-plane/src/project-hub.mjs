@@ -53,6 +53,8 @@ export class ProjectHub {
     const localCodexVerified = localCodexEnabled && Object.values(this.core.data.codexLocalSync).some(at => this.now() - at < 120000);
     const codexVerified = codexEnabled && Object.values(this.core.data.externalProjects).some(p => this.now() - p.syncedAt < 120000);
     const githubVerified = [...this.repoCache.values()].some(v => this.now() - v.at < 120000);
+    const workers = this.core.snapshot().workers.filter(w => w.status === "online");
+    const hasCapability = kind => workers.some(w => w.capabilities?.includes(kind));
     const ai = typeof this.ai?.status === "function" ? this.ai.status() : null;
     const apiStatus = provider => ai?.provider !== provider || !ai?.configured
       ? "requires_setup"
@@ -92,13 +94,17 @@ export class ProjectHub {
         limitation: "Messages API for O-AGENT-owned conversations. Does not read arbitrary claude.ai chats or Claude Code IDE sessions.",
       },
       {
-        id: "copilot_sdk", label: "GitHub Copilot SDK", status: "not_implemented",
-        capabilities: [],
+        id: "copilot_sdk", label: "GitHub Copilot SDK",
+        status: hasCapability("copilot_sdk_turn") ? "configured_unverified" : "requires_setup",
+        capabilities: hasCapability("copilot_sdk_turn")
+          ? ["request_supervised_turn","view_turn_events","decide_permission_requests"] : [],
         limitation: "A separate Copilot SDK runtime and authenticated session must be installed and tested. GitHub repository read access is not Copilot session access.",
       },
       {
-        id: "claude_code", label: "Claude Code / SDK", status: "not_implemented",
-        capabilities: [],
+        id: "claude_code", label: "Claude Agent SDK",
+        status: hasCapability("claude_agent_turn") ? "configured_unverified" : "requires_setup",
+        capabilities: hasCapability("claude_agent_turn")
+          ? ["request_supervised_turn","view_turn_events","decide_permission_requests"] : [],
         limitation: "Requires a signed-in, enrolled Claude Code/Agent SDK runtime and an explicit session permission bridge. Not currently reading existing sessions.",
       },
       {
@@ -141,7 +147,8 @@ export class ProjectHub {
       }));
     }).slice(0, 80);
     const taskState = this.core.snapshot().tasks
-      .filter(t => t.kind === "codex_cli_turn" || t.kind === "codex_cloud_submit")
+      .filter(t => ["codex_cli_turn", "codex_cloud_submit",
+        "claude_agent_turn", "copilot_sdk_turn"].includes(t.kind))
       .slice(0, 70);
     const runs = taskState.map(t => {
       const approvals = Object.values(t.approvals ?? {}).filter(a =>
@@ -166,6 +173,7 @@ export class ProjectHub {
         pendingApprovals: approvals,
         error: shorten(t.error, 300) || null,
         // Only a supervised O-AGENT turn can be resumed in our mobile console.
+        canOpenBridgeTask: ["claude_agent_turn","copilot_sdk_turn"].includes(t.kind),
         canOpenSession: t.kind === "codex_cli_turn" &&
           typeof p.projectId === "string" && typeof p.sessionId === "string",
       };
