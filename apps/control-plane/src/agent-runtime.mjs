@@ -72,6 +72,43 @@ function openaiText(reply) {
   return text;
 }
 
+// Provider-native file and image inputs. Text/DOCX is transformed into
+// visibly untrusted reference material. Never persist base64 in chat history.
+function textWithFiles(prompt, attachments) {
+  const notes = attachments.filter(a => typeof a.text === "string").map(a =>
+    "\n\n[Untrusted attached document: " + a.name + "]\n" + a.text.slice(0, 50000) +
+    "\n[End of untrusted attachment]");
+  return prompt + notes.join("");
+}
+function openaiParts(prompt, attachments) {
+  const output = [{ type: "input_text", text: textWithFiles(prompt, attachments) }];
+  for (const a of attachments) {
+    if (!a.base64) continue;
+    if (a.mimeType.startsWith("image/")) output.push({ type: "input_image",
+      image_url: "data:" + a.mimeType + ";base64," + a.base64 });
+    else if (a.mimeType === "application/pdf") output.push({
+      type: "input_file", filename: a.name,
+      file_data: "data:application/pdf;base64," + a.base64 });
+  }
+  return output;
+}
+function anthropicParts(prompt, attachments) {
+  const output = [{ type: "text", text: textWithFiles(prompt, attachments) }];
+  for (const a of attachments) {
+    if (!a.base64) continue;
+    const source = { type: "base64", media_type: a.mimeType, data: a.base64 };
+    if (a.mimeType.startsWith("image/")) output.push({ type: "image", source });
+    else if (a.mimeType === "application/pdf") output.push({ type: "document", source });
+  }
+  return output;
+}
+function geminiParts(prompt, attachments) {
+  const output = [{ text: textWithFiles(prompt, attachments) }];
+  for (const a of attachments) if (a.base64) output.push({
+    inlineData: { mimeType: a.mimeType, data: a.base64 } });
+  return output;
+}
+
 export class AgentRuntime {
   constructor(core, { env = process.env, fetchImpl = fetch, allowTools = true } = {}) {
     this.core = core;
@@ -86,7 +123,7 @@ export class AgentRuntime {
   }
 
   get provider() { return ["openai", "anthropic", "gemini"].includes(this.env.OAGENT_AI_PROVIDER) ? this.env.OAGENT_AI_PROVIDER : "openai"; }
-  get model() { return this.env.OAGENT_AI_MODEL || (this.provider === "openai" ? "gpt-5.6-terra" : this.provider === "anthropic" ? "claude-sonnet-4-5" : "gemini-2.5-flash"); }
+  get model() { return this.env.OAGENT_AI_MODEL || (this.provider === "openai" ? "gpt-6-luna" : this.provider === "anthropic" ? "claude-sonnet-5" : "gemini-3.8-flash"); }
   get key() { return this.provider === "openai" ? this.env.OPENAI_API_KEY : this.provider === "anthropic" ? this.env.ANTHROPIC_API_KEY : this.env.GEMINI_API_KEY; }
 
   status() {
@@ -182,20 +219,20 @@ export class AgentRuntime {
     }
   }
 
-  async generate(messages, agent) {
-    if (this.provider === "gemini") return this.geminiText(messages, systemInstructions(agent), 1800);
-    if (this.provider === "anthropic") return this.generateAnthropic(messages, agent);
-    return this.generateOpenAI(messages, agent);
+  async generate(messages, agent, attachments = []) {
+    if (this.provider === "gemini") return this.geminiText(messages, systemInstructions(agent), 1800, attachments);
+    if (this.provider === "anthropic") return this.generateAnthropic(messages, agent, attachments);
+    return this.generateOpenAI(messages, agent, attachments);
   }
-  async geminiText(messages, instruction, maxOutputTokens) {
+  async geminiText(messages, instruction, maxOutputTokens, attachments = []) {
     // Dedicated Google Gemini API account. This does not access personal
     // Gemini web chats, and does not grant the model machine tools.
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,90}$/.test(this.model)) {
       throw new DomainError(400, "Invalid Gemini model ID");
     }
-    const contents = messages.map(m => ({
+    const contents = messages.map((m, index) => ({
       role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
+      parts: attachments.length && index === messages.length - 1 ? geminiParts(m.content, attachments) : [{ text: m.content }],
     }));
     const data = await providerJson(this.fetchImpl,
       "https://generativelanguage.googleapis.com/v1beta/models/" +
@@ -208,9 +245,9 @@ export class AgentRuntime {
     if (!answer) throw new DomainError(502, "Gemini returned no text or blocked this request");
     return answer;
   }
-  async generateOpenAI(messages, agent) {
+  async generateOpenAI(messages, agent, attachments = []) {
     const tools = this.allowTools ? TOOL_DEFS.map(t => ({ type: "function", ...t, strict: true })) : [];
-    let input = messages.map(m => ({ role: m.role, content: m.content }));
+    let input = messages.map((m, index) => ({ role: m.role, content: attachments.length && index === messages.length - 1 ? openaiParts(m.content, attachments) : m.content }));
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const result = await providerJson(this.fetchImpl, "https://api.openai.com/v1/responses",
         { authorization: "Bearer " + this.key },
@@ -233,9 +270,9 @@ export class AgentRuntime {
     }
     throw new DomainError(502, "AI tool loop did not finish");
   }
-  async generateAnthropic(messages, agent) {
+  async generateAnthropic(messages, agent, attachments = []) {
     const tools = this.allowTools ? TOOL_DEFS.map(t => ({ name: t.name, description: t.description, input_schema: t.parameters })) : [];
-    const history = messages.map(m => ({ role: m.role, content: m.content }));
+    const history = messages.map((m, index) => ({ role: m.role, content: attachments.length && index === messages.length - 1 ? anthropicParts(m.content, attachments) : m.content }));
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const result = await providerJson(this.fetchImpl, "https://api.anthropic.com/v1/messages",
         { "x-api-key": this.key, "anthropic-version": "2023-06-01" },
@@ -257,7 +294,7 @@ export class AgentRuntime {
     }
     throw new DomainError(502, "AI tool loop did not finish");
   }
-  async send({ agentId, threadId, message }) {
+  async send({ agentId, threadId, message, attachments = [] }) {
     if (!this.status().configured) throw new DomainError(503, "AI provider is not configured on the backend. See docs/AI_SETUP.md");
     const agent = selectedAgent(agentId);
     const prompt = validateMessage(message);
@@ -277,7 +314,7 @@ export class AgentRuntime {
     this.busy.add(thread.id);
     try {
       const requestMessages = [...thread.messages.slice(-MAX_MESSAGES + 1), { role: "user", content: prompt }];
-      const reply = await this.generate(requestMessages, agent);
+      const reply = await this.generate(requestMessages, agent, attachments);
       this.providerHealth = "connected";
       this.lastError = null;
       this.lastVerifiedAt = new Date().toISOString();

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/controller.dart';
+import '../core/api_client.dart';
 import '../theme.dart';
 
 /// Personal account workspace. Every operation is authenticated and scoped to
@@ -19,6 +22,12 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
   List<Map<String, dynamic>> providers = [];
   List<Map<String, dynamic>> threads = [];
   List<Map<String, dynamic>> members = [];
+  List<Map<String, dynamic>> storedAttachments = [];
+  List<Map<String, dynamic>> stagedAttachments = [];
+  bool uploading = false;
+  Map<String, dynamic> github = {};
+  List<Map<String, dynamic>> githubRepos = [];
+  String? selectedGithubRepo;
   Map<String, dynamic>? conversation;
   Map<String, dynamic>? invite;
   String selectedProvider = 'openai';
@@ -49,12 +58,28 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
       final fetched = (response['providers'] as List? ?? [])
         .map((x) => Map<String, dynamic>.from(x as Map)).toList();
       final recent = await api.accountThreads();
+      final files = await api.accountAttachments();
+      Map<String, dynamic> git = {};
+      List<Map<String, dynamic>> repositories = [];
+      String? githubWarning;
+      try {
+        git = await api.githubStatus();
+        if (git['connected'] == true) repositories = await api.githubRepos();
+      } catch (_) {
+        // A broken GitHub integration must never hide the user's AI keys or chats.
+        githubWarning = 'GitHub is temporarily unavailable. Reconnect or try refreshing.';
+        try { git = await api.githubStatus(); } catch (_) { /* Older backend. */ }
+      }
       final people = owner ? await api.members() : <Map<String, dynamic>>[];
       if (!mounted) return;
       setState(() {
         providers = fetched;
         threads = recent;
         members = people;
+        storedAttachments = files;
+        github = git;
+        githubRepos = repositories;
+        error = githubWarning;
         if (!providers.any((p) => p['id'] == selectedProvider && p['connected'] == true)) {
           for (final p in providers) {
             if (p['connected'] == true) {
@@ -63,7 +88,6 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
             }
           }
         }
-        error = null;
       });
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
@@ -189,6 +213,123 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
     }
   }
 
+  Future<void> _connectGithub() async {
+    final input = TextEditingController();
+    try {
+      final secret = await showDialog<String>(context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Connect personal GitHub'),
+          content: SingleChildScrollView(child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Use a fine-grained personal access token with '
+                'read-only Metadata and Contents access to repositories you choose. '
+                'O-AGENT verifies it with GitHub before reporting a connection. '
+                'It cannot push code or control GitHub Actions with this integration.',
+                style: TextStyle(fontSize: 12, height: 1.5)),
+              const SizedBox(height: 12),
+              TextField(controller: input, obscureText: true,
+                enableSuggestions: false, autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Personal access token',
+                  prefixIcon: Icon(Icons.key_outlined))),
+            ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, input.text.trim()),
+              child: const Text('Verify and connect')),
+          ],
+        ),
+      );
+      if (secret == null || secret.isEmpty || !mounted) return;
+      setState(() { loading = true; error = null; });
+      await widget.controller.client!.connectGithub(secret);
+      if (!mounted) return;
+      setState(() => loading = false);
+      await _load();
+    } catch (e) {
+      if (mounted) setState(() { error = e.toString(); loading = false; });
+    } finally {
+      input.dispose();
+    }
+  }
+
+  Future<void> _disconnectGithub() async {
+    try {
+      await widget.controller.client!.disconnectGithub();
+      if (!mounted) return;
+      setState(() { selectedGithubRepo = null; });
+      await _load();
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
+  }
+
+  void _askAboutRepo(String name) {
+    if (stagedAttachments.length >= 3) {
+      setState(() => error = 'Remove one attachment before selecting GitHub context.');
+      return;
+    }
+    setState(() {
+      selectedGithubRepo = name;
+      conversation = null;
+      tab = 0;
+      message.text = 'Review the README in this repository and suggest specific next steps.';
+    });
+  }
+
+  Future<void> _pickFile() async {
+    if (uploading || stagedAttachments.length >= (selectedGithubRepo == null ? 3 : 2)) return;
+    try {
+      final file = await FilePicker.pickFile(type: FileType.custom,
+        allowedExtensions: ['txt', 'md', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx']);
+      if (file == null) return;
+      final length = file.lengthSync() ?? await file.length();
+      if (length == null || length < 1 || length > 1500000) {
+        throw const ApiException('Choose a file of 1.5 MB or less.');
+      }
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 1500000) {
+        throw const ApiException('Choose a file of 1.5 MB or less.');
+      }
+      const types = {
+        'txt': 'text/plain', 'md': 'text/markdown', 'pdf': 'application/pdf',
+        'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+        'webp': 'image/webp',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      };
+      final mime = types[file.extension?.toLowerCase()];
+      if (mime == null) throw const ApiException('File type unsupported');
+      setState(() { uploading = true; error = null; });
+      final saved = await widget.controller.client!.uploadAccountAttachment(
+        name: file.name, mimeType: mime, base64: base64Encode(bytes));
+      if (!mounted) return;
+      setState(() {
+        stagedAttachments.add(saved);
+        storedAttachments.insert(0, saved);
+      });
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => uploading = false);
+    }
+  }
+
+  Future<void> _deleteFile(String id) async {
+    try {
+      await widget.controller.client!.deleteAccountAttachment(id);
+      if (!mounted) return;
+      setState(() {
+        stagedAttachments.removeWhere((f) => f['id'] == id);
+        storedAttachments.removeWhere((f) => f['id'] == id);
+      });
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    }
+  }
+
   Future<void> _send() async {
     final prompt = message.text.trim();
     if (sending || prompt.isEmpty) return;
@@ -200,10 +341,12 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
     try {
       final next = await widget.controller.client!.accountChat(
         provider: selectedProvider, message: prompt,
+        attachmentIds: stagedAttachments.map((f) => f['id'].toString()).toList(),
+        githubRepository: selectedGithubRepo,
         threadId: conversation?['id']?.toString());
       if (!mounted) return;
       message.clear();
-      setState(() => conversation = next);
+      setState(() { conversation = next; stagedAttachments.clear(); selectedGithubRepo = null; });
       threads = await widget.controller.client!.accountThreads();
       if (mounted) setState(() {});
     } catch (e) {
@@ -353,15 +496,34 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
   Widget _composer() => Container(padding: const EdgeInsets.fromLTRB(15, 10, 15, 16),
     decoration: const BoxDecoration(color: OTheme.paper,
       border: Border(top: BorderSide(color: OTheme.hairline))),
-    child: Row(children: [
-      Expanded(child: TextField(controller: message, minLines: 1, maxLines: 4,
-        maxLength: 4000, enabled: !sending,
-        decoration: const InputDecoration(hintText: 'Message your own AI',
-          counterText: ''))),
-      const SizedBox(width: 8),
-      IconButton.filled(onPressed: sending ? null : _send,
-        tooltip: 'Send to selected API provider',
-        icon: const Icon(Icons.arrow_upward_rounded)),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      if (selectedGithubRepo != null)
+        InputChip(label: Text('README: ' + selectedGithubRepo!),
+          onDeleted: () => setState(() => selectedGithubRepo = null)),
+      if (stagedAttachments.isNotEmpty)
+        SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+          for (final file in stagedAttachments)
+            Padding(padding: const EdgeInsets.only(right: 5), child: InputChip(
+              label: Text(file['name']?.toString() ?? 'File'),
+              onDeleted: () => _deleteFile(file['id'].toString()))),
+        ])),
+      Row(children: [
+        IconButton(
+          tooltip: 'Attach image, PDF, text or DOCX (1.5 MB)',
+          onPressed: sending || uploading || stagedAttachments.length >= (selectedGithubRepo == null ? 3 : 2)
+            ? null : _pickFile,
+          icon: uploading ? const SizedBox(width: 19, height: 19,
+            child: CircularProgressIndicator(strokeWidth: 2)) :
+            const Icon(Icons.attach_file_rounded)),
+        Expanded(child: TextField(controller: message, minLines: 1, maxLines: 4,
+          maxLength: 4000, enabled: !sending,
+          decoration: const InputDecoration(hintText: 'Message your own AI',
+            counterText: ''))),
+        const SizedBox(width: 8),
+        IconButton.filled(onPressed: sending || uploading ? null : _send,
+          tooltip: 'Send to selected API provider',
+          icon: const Icon(Icons.arrow_upward_rounded)),
+      ]),
     ]));
 
   Widget _connectionsView() => ListView(padding: const EdgeInsets.fromLTRB(18, 14, 18, 20),
@@ -417,6 +579,40 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
                 fontSize: 11, color: Color(0xFF9B4835))),
           ])),
         ),
+      const SizedBox(height: 20),
+      const Text('GITHUB CODING CONTEXT', style: TextStyle(fontSize: 10,
+        color: OTheme.violet, fontWeight: FontWeight.w800, letterSpacing: 1.4)),
+      const SizedBox(height: 8),
+      const Text('Link your own GitHub repositories',
+        style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      Text(github['connected'] == true ?
+        'Verified as ' + (github['login']?.toString() ?? 'GitHub user') +
+          '. Read-only repository metadata and README context.' :
+        'Connect a read-only fine-grained personal access token. '
+          'Only your GitHub account is used.',
+        style: const TextStyle(fontSize: 12, color: Colors.grey, height: 1.5)),
+      const SizedBox(height: 12),
+      if (github['connected'] == true)
+        OutlinedButton.icon(onPressed: _disconnectGithub,
+          icon: const Icon(Icons.link_off_outlined),
+          label: const Text('Disconnect GitHub'))
+      else
+        FilledButton.tonalIcon(onPressed: loading ? null : _connectGithub,
+          icon: const Icon(Icons.code_rounded), label: const Text('Connect GitHub account')),
+      if (github['connected'] == true) ...[
+        const SizedBox(height: 12),
+        for (final repo in githubRepos)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(repo['fullName']?.toString() ?? ''),
+            subtitle: Text(repo['private'] == true ? 'Private repository' : 'Public repository'),
+            trailing: TextButton(
+              onPressed: () => _askAboutRepo(repo['fullName'].toString()),
+              child: const Text('Ask AI')),
+          ),
+      ],
+      const SizedBox(height: 14),
       const _Panel(child: Text('Only OpenAI, Claude/Anthropic and Gemini API-owned conversations are supported here today. This does not import existing ChatGPT/Claude/Gemini website chats or control their browser tabs.',
         style: TextStyle(fontSize: 11, height: 1.6, color: Colors.grey))),
     ]);
@@ -483,6 +679,18 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
                   tooltip: 'Revoke member'),
           ),
       ],
+      const SizedBox(height: 20),
+      const Text('My uploaded files', style: TextStyle(fontSize: 19,
+        fontWeight: FontWeight.w800)),
+      const Text('Files are encrypted on this backend. Remove ones you no longer need.',
+        style: TextStyle(fontSize: 11, color: Colors.grey)),
+      for (final file in storedAttachments)
+        ListTile(contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.insert_drive_file_outlined),
+          title: Text(file['name']?.toString() ?? 'File'),
+          subtitle: Text(file['size'].toString() + ' bytes'),
+          trailing: IconButton(onPressed: () => _deleteFile(file['id'].toString()),
+            tooltip: 'Delete file', icon: const Icon(Icons.delete_outline_rounded))),
       const SizedBox(height: 24),
       OutlinedButton.icon(onPressed: () => widget.controller.disconnect(),
         icon: const Icon(Icons.logout_rounded), label: const Text('Disconnect this device')),

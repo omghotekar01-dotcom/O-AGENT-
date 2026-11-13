@@ -44,6 +44,13 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
       await new Promise(r => setTimeout(r, 100));
     }
     assert.equal(ready, true, "Control-plane HTTP server must start");
+    const config = await call("/api/auth/config", "none");
+    assert.equal(config.status, 200);
+    assert.equal(config.payload.enabled, false, "Public registration must fail closed without email and HTTPS settings");
+    const publicRegister = await call("/api/auth/register", "none", "POST", {
+      email: "tester@example.org", displayName: "User", password: "a-secure-password-123"
+    });
+    assert.equal(publicRegister.status, 503);
     // Invitation-only members are separate identities. A member must never
     // become an operator simply by connecting to the same host.
     const whoOwner = await call("/api/me", apiToken);
@@ -82,6 +89,18 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal(connected.status, 200);
     assert.equal(connected.payload.providers.find(p => p.id === "gemini").connected, true);
     assert.equal(JSON.stringify(connected.payload).includes(personalKey), false);
+    const txt = Buffer.from("Integration test private notes").toString("base64");
+    const upload = await call("/api/account/attachments", personalToken, "POST", {
+      name: "my-notes.txt", mimeType: "text/plain", base64: txt
+    });
+    assert.equal(upload.status, 201);
+    assert.equal(upload.payload.name, "my-notes.txt");
+    const list = await call("/api/account/attachments", personalToken);
+    assert.equal(list.payload.attachments.length, 1);
+    assert.equal(JSON.stringify(list.payload).includes("Integration test private notes"), false);
+    assert.equal((await call("/api/account/attachments", apiToken)).payload.attachments.length, 0);
+    assert.equal((await call("/api/account/attachments/" + upload.payload.id, apiToken, "DELETE")).status, 404);
+    assert.equal((await call("/api/account/attachments/" + upload.payload.id, personalToken, "DELETE")).status, 200);
     const ownerConnections = await call("/api/account/connections", apiToken);
     assert.equal(ownerConnections.payload.providers.find(p => p.id === "gemini").connected, false);
     const stateFile = await import("node:fs").then(fs =>

@@ -217,7 +217,18 @@ class ControlController extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(_sessionStore.clear().catchError((Object _) {}));
     _generation++;
     _poller?.cancel();
-    _api?.close();
+    final previous = _api;
+    if (previous != null && isMember) {
+      // Revoke personal server sessions during explicit signout. Legacy
+      // invitation backends may not support this logout endpoint yet.
+      unawaited(() async {
+        try { await previous.logoutPersonalSession(); }
+        catch (_) { /* Account may use an older private backend. */ }
+        finally { previous.close(); }
+      }());
+    } else {
+      previous?.close();
+    }
     _api = null;
     endpoint = null;
     error = null;

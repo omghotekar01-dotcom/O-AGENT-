@@ -54,7 +54,7 @@ class AgentApi {
     String? idempotencyKey,
   }) async {
     try {
-      final timeout = path == "/api/ai/chat" || path == "/api/ai/refine" || path.endsWith("/messages") ? const Duration(seconds: 85) : const Duration(seconds: 15);
+      final timeout = path == "/api/ai/chat" || path == "/api/account/chat" || path.endsWith("/verify") || path == "/api/ai/refine" || path.endsWith("/messages") ? const Duration(seconds: 85) : const Duration(seconds: 15);
       final url = endpoint.resolve(path);
       final request = await _http.openUrl(method, url).timeout(timeout);
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
@@ -85,6 +85,44 @@ class AgentApi {
     }
   }
 
+  /// Public endpoints never send a bearer token or AI provider secret.
+  static Future<Map<String, dynamic>> publicAccountRequest({
+    required String backend,
+    required String path,
+    required Map<String, dynamic> body,
+  }) async {
+    final origin = validateEndpoint(backend);
+    if (!const {'/api/auth/register', '/api/auth/verify', '/api/auth/login',
+      '/api/auth/forgot', '/api/auth/reset', '/api/auth/resend'}.contains(path)) {
+      throw const ApiException('Unsupported account action');
+    }
+    final http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    try {
+      final request = await http.postUrl(origin.resolve(path))
+        .timeout(const Duration(seconds: 20));
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode(body));
+      final response = await request.close().timeout(const Duration(seconds: 20));
+      final payload = await utf8.decoder.bind(response).join().timeout(const Duration(seconds: 20));
+      final data = Map<String, dynamic>.from(jsonDecode(payload) as Map);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(data['error']?.toString() ?? 'Account action failed',
+          response.statusCode);
+      }
+      return data;
+    } on SocketException {
+      throw const ApiException('Cannot reach the backend. Check the network and HTTPS address.');
+    } on HandshakeException {
+      throw const ApiException('Backend HTTPS certificate is not trusted.');
+    } finally {
+      http.close(force: true);
+    }
+  }
+
+  Future<void> logoutPersonalSession() async {
+    await _request('/api/auth/logout', method: 'POST');
+  }
+
   Future<Map<String, dynamic>> accountInfo() => _request('/api/me');
 
   /// Owner-only: one-use invitation; never display operator tokens to members.
@@ -99,6 +137,41 @@ class AgentApi {
 
   Future<void> revokeMember(String id) async {
     await _request('/api/accounts/members/${Uri.encodeComponent(id)}', method: 'DELETE');
+  }
+
+  Future<Map<String, dynamic>> githubStatus() => _request('/api/account/github');
+
+  Future<Map<String, dynamic>> connectGithub(String personalAccessToken) =>
+    _request('/api/account/github', method: 'PUT',
+      body: {'token': personalAccessToken});
+
+  Future<void> disconnectGithub() async {
+    await _request('/api/account/github', method: 'DELETE');
+  }
+
+  Future<List<Map<String, dynamic>>> githubRepos() async {
+    final result = await _request('/api/account/github/repos');
+    return (result['repos'] as List? ?? [])
+      .map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> githubReadmeStatus() => _request('/api/account/github');
+
+  Future<List<Map<String, dynamic>>> accountAttachments() async {
+    final data = await _request('/api/account/attachments');
+    return (data['attachments'] as List? ?? [])
+      .map((x) => Map<String, dynamic>.from(x as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> uploadAccountAttachment({
+    required String name, required String mimeType, required String base64,
+  }) => _request('/api/account/attachments', method: 'POST', body: {
+    'name': name, 'mimeType': mimeType, 'base64': base64,
+  });
+
+  Future<void> deleteAccountAttachment(String id) async {
+    await _request('/api/account/attachments/' + Uri.encodeComponent(id),
+      method: 'DELETE');
   }
 
   Future<Map<String, dynamic>> accountConnections() =>
@@ -135,9 +208,13 @@ class AgentApi {
     required String provider,
     required String message,
     String? threadId,
+    List<String> attachmentIds = const [],
+    String? githubRepository,
   }) => _request('/api/account/chat', method: 'POST', body: {
     'provider': provider, 'agentId': 'navigator', 'message': message,
     if (threadId != null) 'threadId': threadId,
+    if (attachmentIds.isNotEmpty) 'attachmentIds': attachmentIds,
+    if (githubRepository != null) 'githubRepository': githubRepository,
   });
 
   /// Public pairing route; only works with a one-time owner-issued invitation.

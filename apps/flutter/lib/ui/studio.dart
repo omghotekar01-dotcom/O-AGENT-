@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import '../core/api_client.dart';
 import 'account_workspace.dart';
+import 'public_account.dart';
 import '../core/models.dart';
 import '../theme.dart';
 import 'projects.dart';
@@ -773,7 +774,7 @@ class _StudioConnectState extends State<StudioConnect> {
           const Text('Only real machines and real AI responses appear here. Connect to your own control plane to begin.',
             style: TextStyle(fontSize: 14, color: _muted, height: 1.5)),
           const SizedBox(height: 31),
-          const Text('Development connection', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const Text('Choose your workspace connection', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 11),
           Row(children: [
             Expanded(child: ChoiceChip(label: const Text('My owner workspace'),
@@ -782,6 +783,14 @@ class _StudioConnectState extends State<StudioConnect> {
             Expanded(child: ChoiceChip(label: const Text('Join with invitation'),
               selected: joining, onSelected: (_) => setState(() => joining = true))),
           ]),
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
+              builder: (_) => PublicAccountScreen(controller: widget.controller,
+                backend: url.text, remember: rememberDevice))),
+            icon: const Icon(Icons.person_add_alt_outlined),
+            label: const Text('Public cloud account: sign up / sign in'),
+          ),
           const SizedBox(height: 14),
           TextField(controller: url, keyboardType: TextInputType.url,
             decoration: const InputDecoration(labelText: 'Backend HTTPS URL', prefixIcon: Icon(Icons.link))),
@@ -848,7 +857,7 @@ class _StudioConnectState extends State<StudioConnect> {
           if (widget.controller.error != null) Padding(padding: const EdgeInsets.only(top: 12),
             child: Text(widget.controller.error!, style: const TextStyle(color: _alert))),
           const SizedBox(height: 25),
-          const _Note('Owners use their original operator token. Invited users enter a 15-minute one-time code from the owner and receive a separate personal token. API keys can then be added privately in the mobile Connections tab. Use trusted HTTPS remote access.'),
+          const _Note('Owners use their existing token; invited members use a one-time code. New public accounts require an HTTPS hosted backend with verified email configured. Everyone supplies their own AI keys in Connections. Computer controls stay owner-only.'),
         ],
       )),
     )))),

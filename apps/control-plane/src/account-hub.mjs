@@ -1,11 +1,12 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { DomainError } from "./core.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
+import { MAX_ATTACHMENT_BYTES, validateFile, attachmentForModel } from "./attachments.mjs";
 
 const PROVIDERS = Object.freeze({
-  openai: { label: "OpenAI API", defaultModel: "gpt-5.6-luna", env: "OPENAI_API_KEY" },
-  anthropic: { label: "Claude API", defaultModel: "claude-sonnet-4-5", env: "ANTHROPIC_API_KEY" },
-  gemini: { label: "Google Gemini API", defaultModel: "gemini-2.5-flash", env: "GEMINI_API_KEY" },
+  openai: { label: "OpenAI API", defaultModel: "gpt-6-luna", env: "OPENAI_API_KEY" },
+  anthropic: { label: "Claude API", defaultModel: "claude-sonnet-5", env: "ANTHROPIC_API_KEY" },
+  gemini: { label: "Google Gemini API", defaultModel: "gemini-3.8-flash", env: "GEMINI_API_KEY" },
 });
 const hash = value => createHash("sha256").update(value).digest("hex");
 const validLabel = (value, max) =>
@@ -25,6 +26,8 @@ export class AccountHub {
     this.data.invitations ??= {};
     this.data.connections ??= {};
     this.data.threads ??= {};
+    this.data.attachments ??= {};
+    this.data.integrations ??= {};
     this.master = null;
     if (env.OAGENT_VAULT_KEY_BASE64) {
       const decoded = Buffer.from(env.OAGENT_VAULT_KEY_BASE64, "base64");
@@ -96,6 +99,8 @@ export class AccountHub {
     delete member.tokenHash;
     delete this.data.connections[memberId];
     delete this.data.threads[memberId];
+    delete this.data.attachments?.[memberId];
+    delete this.data.integrations?.[memberId];
     this.commit("account.member.revoked", { memberId });
     return { revoked: true };
   }
@@ -206,9 +211,10 @@ export class AccountHub {
     }
   }
 
-  async send(userId, { provider, message, threadId }) {
+  async send(userId, { provider, message, threadId, attachmentIds = [], githubRepository }) {
     if (!PROVIDERS[provider]) throw new DomainError(400, "Choose a supported provider");
     if (!validLabel(message, 4000)) throw new DomainError(400, "Message must contain 1–4000 characters");
+    const attachments = this.resolveAttachments(userId, attachmentIds);
     const busyId = userId + ":" + (threadId ?? "new");
     if ([...this.busy].filter(key => key.startsWith(userId + ":")).length >= 2) {
       throw new DomainError(429, "Too many simultaneous personal AI requests");
@@ -216,12 +222,18 @@ export class AccountHub {
     if (this.busy.has(busyId)) throw new DomainError(409, "This conversation is already processing");
     this.busy.add(busyId);
     try {
+      if (githubRepository != null) {
+        if (attachments.length >= 3) throw new DomainError(400, "Up to three sources per AI request");
+        const readme = await this.githubReadme(userId, githubRepository);
+        attachments.push({ name: githubRepository + "/README.md", mimeType: "text/plain", text: readme });
+      }
       const { runtime } = this.runtime(userId, provider);
       if (threadId && runtime.getThread(threadId)?.provider !== provider) {
         throw new DomainError(409, "Conversation belongs to another provider");
       }
       // Personal BYOK chats have no machine-operation agent or tool privileges.
-      const result = await runtime.send({ agentId: "navigator", threadId, message });
+      const result = await runtime.send({ agentId: "navigator", threadId, message, attachments });
+      if (attachments.length) result.messages[result.messages.length - 2].attachments = attachments.map(a => ({ name: a.name, mimeType: a.mimeType }));
       result.provider ??= provider;
       this.commit("account.chat.saved", { userId, provider, threadId: result.id });
       this.recordHealth(userId, provider, "connected");
@@ -231,6 +243,124 @@ export class AccountHub {
         error.status === 503 ? "rate_limited" : "failed", error.message);
       throw error;
     } finally { this.busy.delete(busyId); }
+  }
+
+  githubStatus(userId) {
+    const saved = this.data.integrations[userId]?.github;
+    return { connected: !!saved, login: saved?.login ?? null,
+      checkedAt: saved?.checkedAt ?? null, capability: "read_only_repo_metadata_and_readme" };
+  }
+  async githubFetch(token, path) {
+    let response;
+    try {
+      response = await this.fetchImpl("https://api.github.com" + path, {
+        method: "GET", signal: AbortSignal.timeout(15000),
+        headers: { "accept": "application/vnd.github+json",
+          "x-github-api-version": "2022-11-28", "user-agent": "oagent-private-github",
+          "authorization": "Bearer " + token },
+      });
+    } catch {
+      throw new DomainError(502, "GitHub is unreachable. Retry the connection.");
+    }
+    if (response.status === 401) throw new DomainError(401, "GitHub rejected this personal access token");
+    if (response.status === 403 || response.status === 429) {
+      throw new DomainError(429, "GitHub denied access, or an API rate limit was reached");
+    }
+    if (response.status === 404) throw new DomainError(404, "Repository or README unavailable for this GitHub account");
+    if (!response.ok) throw new DomainError(502, "GitHub request failed (HTTP " + response.status + ")");
+    try { return await response.json(); }
+    catch { throw new DomainError(502, "Unexpected GitHub response"); }
+  }
+  async connectGithub(userId, { token } = {}) {
+    if (typeof token !== "string" || token.length < 20 || token.length > 512 || /\s/.test(token)) {
+      throw new DomainError(400, "Enter a valid fine-grained GitHub personal access token");
+    }
+    if (!this.vaultReady) throw new DomainError(503, "Secure vault unavailable");
+    // Never report a successful connection merely because a token was saved.
+    const profile = await this.githubFetch(token, "/user");
+    if (typeof profile.login !== "string" || !profile.login) {
+      throw new DomainError(502, "GitHub did not verify an account identity");
+    }
+    this.data.integrations[userId] ??= {};
+    this.data.integrations[userId].github = {
+      login: profile.login, checkedAt: this.now(),
+      secret: this.encrypt(userId, "integration:github", token) };
+    this.commit("account.github.connected", { userId });
+    return this.githubStatus(userId);
+  }
+  disconnectGithub(userId) {
+    if (this.data.integrations[userId]) delete this.data.integrations[userId].github;
+    this.commit("account.github.disconnected", { userId });
+    return this.githubStatus(userId);
+  }
+  githubToken(userId) {
+    const saved = this.data.integrations[userId]?.github;
+    if (!saved) throw new DomainError(404, "Connect your personal GitHub account first");
+    return this.decrypt(userId, "integration:github", saved.secret);
+  }
+  async githubRepos(userId) {
+    const repos = await this.githubFetch(this.githubToken(userId),
+      "/user/repos?per_page=40&sort=updated&affiliation=owner,collaborator");
+    if (!Array.isArray(repos)) throw new DomainError(502, "GitHub returned no repository list");
+    return repos.slice(0, 40).map(r => ({ fullName: String(r.full_name || "").slice(0, 160),
+      description: String(r.description || "").slice(0, 300), private: !!r.private,
+      defaultBranch: String(r.default_branch || ""), updatedAt: r.updated_at ?? null }));
+  }
+  async githubReadme(userId, repository) {
+    if (typeof repository !== "string" ||
+      !/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(repository)) {
+      throw new DomainError(400, "Invalid GitHub repository name");
+    }
+    const file = await this.githubFetch(this.githubToken(userId),
+      "/repos/" + repository + "/readme");
+    if (file.encoding !== "base64" || typeof file.content !== "string" ||
+        file.content.length > 180000 || file.size > 100000) {
+      throw new DomainError(413, "GitHub README must be a text document under 100 KB");
+    }
+    const decoded = Buffer.from(file.content.replace(/\s/g, ""), "base64");
+    if (decoded.length > 100000 || decoded.includes(0)) {
+      throw new DomainError(400, "Unsupported GitHub README content");
+    }
+    return decoded.toString("utf8").slice(0, 45000);
+  }
+
+  attachments(userId) {
+    return Object.values(this.data.attachments[userId] ?? {}).map(({ id, name, mimeType, size, createdAt }) =>
+      ({ id, name, mimeType, size, createdAt })).sort((a, b) => b.createdAt - a.createdAt);
+  }
+  saveAttachment(userId, { name, mimeType, base64 }) {
+    const bytes = validateFile({ name, mimeType, base64 });
+    if (!this.vaultReady) throw new DomainError(503, "Secure vault unavailable on this backend");
+    const mine = this.data.attachments[userId] ??= {};
+    const files = Object.values(mine);
+    if (files.length >= 12 || files.reduce((sum, f) => sum + f.size, bytes.length) > 10 * MAX_ATTACHMENT_BYTES) {
+      throw new DomainError(409, "Attachment limit reached. Remove older files first.");
+    }
+    const id = randomUUID();
+    const record = { id, name, mimeType, size: bytes.length, createdAt: this.now(),
+      secret: this.encrypt(userId, "file:" + id, bytes.toString("base64")) };
+    mine[id] = record;
+    this.commit("account.attachment.saved", { userId, attachmentId: id });
+    const { secret, ...metadata } = record;
+    return metadata;
+  }
+  deleteAttachment(userId, id) {
+    const mine = this.data.attachments[userId];
+    if (!mine?.[id]) throw new DomainError(404, "Attachment unavailable");
+    delete mine[id];
+    this.commit("account.attachment.deleted", { userId, attachmentId: id });
+    return { removed: true };
+  }
+  resolveAttachments(userId, ids) {
+    if (!Array.isArray(ids) || ids.length > 3 || new Set(ids).size !== ids.length) {
+      throw new DomainError(400, "Choose up to three different attachments");
+    }
+    return ids.map(id => {
+      const file = this.data.attachments[userId]?.[id];
+      if (!file) throw new DomainError(404, "Attachment unavailable");
+      const binary = this.decrypt(userId, "file:" + id, file.secret);
+      return attachmentForModel(file, binary);
+    });
   }
 
   threads(userId) {
