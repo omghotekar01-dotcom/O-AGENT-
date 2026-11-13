@@ -22,6 +22,7 @@ class CodexSessionScreen extends StatefulWidget {
 class _CodexSessionState extends State<CodexSessionScreen> {
   final composer = TextEditingController();
   Timer? poller;
+  StreamSubscription<Map<String, dynamic>>? liveEvents;
   Map<String, dynamic>? task;
   String? taskId, error;
   bool busy = false, loading = false;
@@ -39,10 +40,34 @@ class _CodexSessionState extends State<CodexSessionScreen> {
       }
     }
     _refresh();
-    poller = Timer.periodic(const Duration(seconds: 3), (_) => _refresh());
+    _watchLiveEvents();
+    // Network and provider events are best-effort; keep periodic refresh as
+    // the server-authoritative recovery path when SSE disconnects.
+    poller = Timer.periodic(const Duration(seconds: 3), (_) {
+      _refresh();
+      if (liveEvents == null) _watchLiveEvents();
+    });
   }
   @override
-  void dispose() { poller?.cancel(); composer.dispose(); super.dispose(); }
+  void dispose() {
+    poller?.cancel();
+    liveEvents?.cancel();
+    composer.dispose();
+    super.dispose();
+  }
+  void _watchLiveEvents() {
+    final api = widget.controller.client;
+    if (api == null || liveEvents != null) return;
+    liveEvents = api.ownerEventStream().listen((event) {
+      if (!mounted || api != widget.controller.client) return;
+      if (taskId == null || event['taskId'] != taskId) return;
+      final type = event['type']?.toString() ?? '';
+      if (type.startsWith('task.') || type.startsWith('codex.')) {
+        _refresh(); // Never execute decisions based on untrusted stream data.
+      }
+    }, onError: (_) { liveEvents = null; },
+      onDone: () { liveEvents = null; }, cancelOnError: true);
+  }
   Future<void> _refresh() async {
     if (taskId == null || loading || !mounted) return;
     loading = true;
