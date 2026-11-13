@@ -1,0 +1,47 @@
+name: O-AGENT VS Code Companion
+on:
+  pull_request:
+    paths:
+      - "apps/vscode/**"
+      - "tests/vscode-companion.test.mjs"
+      - ".github/workflows/vscode-companion.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/vscode/**"
+      - ".github/workflows/vscode-companion.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: VS Code companion security and syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check apps/vscode/src/extension.cjs
+      - run: node --check apps/vscode/src/path-policy.cjs
+      - run: node --test tests/vscode-companion.test.mjs
+  package-vsix:
+    name: VSIX on batched release only
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[mobile-release]')
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Package consented VS Code extension
+        working-directory: apps/vscode
+        run: npx --yes @vscode/vsce package --no-dependencies --skip-license --allow-missing-repository --out o-agent-vscode-companion.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: o-agent-vscode-companion-vsix
+          path: apps/vscode/o-agent-vscode-companion.vsix
+          retention-days: 30
+          if-no-files-found: error
