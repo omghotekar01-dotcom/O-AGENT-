@@ -154,6 +154,12 @@ test("official Codex app-server actually resumes, starts turn, emits real deltas
   assert.equal(result.providerStatus, "completed");
   assert.equal(result.output, "Real Codex answer.");
   assert.ok(updates.some(e => e.type === "agent_delta" && e.text.includes("Real Codex")));
+  const initialized = fake.sent.find(m => m.method === "initialize");
+  const resumed = fake.sent.find(m => m.method === "thread/resume");
+  assert.equal(initialized.params.capabilities.experimentalApi, true);
+  assert.deepEqual(resumed.params, { threadId: sessionId, excludeTurns: true });
+  // Regression: long-lived sessions must not serialize their entire saved
+  // history during resume; the approval-gated turn itself is still identical.
   // Regression: Codex CLI 0.167.2 rejects the legacy
   // sandboxPolicy.readOnly.access object with an invalid-request error.
   const start = fake.sent.find(m => m.method === "turn/start").params;

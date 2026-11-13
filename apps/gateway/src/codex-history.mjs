@@ -84,6 +84,7 @@ export async function readCodexHistory(task, {
       return;
     }
     let done=false, stage=0, total=0, buffer="";
+    let readStatus="unknown";
     const timer=setTimeout(()=>finish(Error("CODEX_READ_TIMEOUT: Codex did not return saved conversation messages. Check whether the laptop CLI is responding.")),timeoutMs);
     function finish(error,result) {
       if(done)return;
@@ -94,28 +95,67 @@ export async function readCodexHistory(task, {
       if(error) reject(error); else resolve(result);
     }
     const send=(v)=>{if(!done)child.stdin.write(JSON.stringify(v)+"\n");};
+    function finishHistory(turns, more = false) {
+      const formatted = conversationMessages({ turns });
+      finish(null, {
+        provider: "codex_cli", sessionId,
+        messages: formatted.messages,
+        truncated: more || formatted.truncated,
+        totalShown: formatted.messages.length,
+        observedStatus: readStatus,
+        fetchedAt: new Date().toISOString(),
+        note: "Recent saved user/assistant text only, retrieved read-only. This is not a live ChatGPT or IDE mirror.",
+      });
+    }
     function handle(msg) {
-      if (!msg || typeof msg !== "object")return;
-      if (msg.id===1 && stage===0) {
-        if(msg.error)return finish(Error(explainCodexError(msg.error,"initialization")));
-        stage=1;
-        send({method:"initialized",params:{}});
-        send({id:2,method:"thread/read",params:{threadId:sessionId,includeTurns:true}});
-      } else if(msg.id===2 && stage===1) {
-        if(msg.error)return finish(Error(explainCodexError(msg.error,"read")));
-        const thread=msg.result?.thread;
-        if(!thread || thread.id !== sessionId)
+      if (!msg || typeof msg !== "object") return;
+      if (msg.id === 1 && stage === 0) {
+        if (msg.error) return finish(Error(explainCodexError(msg.error, "initialization")));
+        stage = 1;
+        send({ method: "initialized", params: {} });
+        // Verify the selected conversation without materializing its entire
+        // history. Some real threads have multi-megabyte embedded tool data.
+        send({ id: 2, method: "thread/read", params: {
+          threadId: sessionId, includeTurns: false,
+        } });
+      } else if (msg.id === 2 && stage === 1) {
+        if (msg.error) return finish(Error(explainCodexError(msg.error, "read")));
+        const thread = msg.result?.thread;
+        if (!thread || thread.id !== sessionId)
           return finish(Error("CODEX_INVALID_HISTORY: Codex returned a different conversation. No data was accepted."));
-        const formatted=conversationMessages(thread);
-        finish(null,{
-          provider:"codex_cli",sessionId,
-          messages:formatted.messages,truncated:formatted.truncated,
-          totalShown:formatted.messages.length,
-          observedStatus: typeof thread.status?.type === "string"
-            ? thread.status.type.slice(0,40):"unknown",
-          fetchedAt:new Date().toISOString(),
-          note:"Saved user/assistant text only. This is not an interactive mirror of a different Codex application.",
-        });
+        readStatus = typeof thread.status?.type === "string"
+          ? thread.status.type.slice(0, 40) : "unknown";
+        stage = 2;
+        // Supported by current official Codex app-server. Page only recent
+        // turns; the returned data is filtered to text before reaching mobile.
+        send({ id: 3, method: "thread/turns/list", params: {
+          threadId: sessionId, limit: 8, sortDirection: "desc",
+          itemsView: "summary",
+        } });
+      } else if (msg.id === 3 && stage === 2) {
+        if (msg.error) {
+          // Older Codex builds lack the experimental pagination endpoint.
+          // Retain legacy read as a compatibility fallback, still byte-bounded.
+          const description = String(msg.error?.message ?? "").toLowerCase();
+          if (msg.error.code === -32601 || /experimentalapi|method not found|not supported/.test(description)) {
+            stage = 3;
+            send({ id: 4, method: "thread/read", params: {
+              threadId: sessionId, includeTurns: true,
+            } });
+            return;
+          }
+          return finish(Error(explainCodexError(msg.error, "history pagination")));
+        }
+        const page = msg.result?.data;
+        if (!Array.isArray(page))
+          return finish(Error("CODEX_HISTORY_INVALID: Codex returned an invalid paginated history response."));
+        finishHistory(page.slice().reverse(), msg.result?.nextCursor != null);
+      } else if (msg.id === 4 && stage === 3) {
+        if (msg.error) return finish(Error(explainCodexError(msg.error, "read")));
+        const thread = msg.result?.thread;
+        if (!thread || thread.id !== sessionId)
+          return finish(Error("CODEX_INVALID_HISTORY: Codex returned a different conversation. No data was accepted."));
+        finishHistory(thread.turns ?? []);
       }
     }
     child.on("error",()=>finish(Error("CODEX_NOT_INSTALLED: The laptop could not start Codex. Check the CLI installation and login.")));
@@ -140,6 +180,7 @@ export async function readCodexHistory(task, {
     child.stderr.on("data",()=>{}); // Never print stdout/CLI secrets.
     send({id:1,method:"initialize",params:{
       clientInfo:{name:"o_agent",title:"O-AGENT owner-approved saved conversation viewer",version:"0.6.2"},
+      capabilities:{ experimentalApi:true },
     }});
   });
 }
