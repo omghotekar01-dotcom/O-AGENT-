@@ -156,7 +156,7 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
               subtitle: 'Preview JPEGs stay in server memory for only a few '
                 'seconds. Stop on laptop or revoke sharing here on mobile.'),
           ])),
-      ))),
+      )),
     );
   }
 }
