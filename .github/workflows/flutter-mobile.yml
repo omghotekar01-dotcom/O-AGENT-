@@ -10,6 +10,12 @@ on:
       - "apps/flutter/**"
       - ".github/workflows/flutter-mobile.yml"
   workflow_dispatch:
+    inputs:
+      build_ios:
+        description: 'Also build the iOS simulator app (optional)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: flutter-mobile-${{ github.ref }}
@@ -37,7 +43,8 @@ jobs:
       - run: flutter test --no-pub
 
   android-debug-apk:
-    name: Android installable debug APK
+    name: Android installable debug APK (batched release only)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[mobile-release]'))
     needs: flutter-test
     runs-on: ubuntu-latest
     defaults:
@@ -75,7 +82,8 @@ jobs:
           if-no-files-found: error
 
   ios-simulator:
-    name: iOS Simulator app (unsigned)
+    name: iOS Simulator app (unsigned, manual only)
+    if: github.event_name == 'workflow_dispatch' && inputs.build_ios == true
     needs: flutter-test
     runs-on: macos-latest
     defaults:
