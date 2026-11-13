@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import 'codex_session.dart';
+import 'agent_sdk_bridge.dart';
 import 'cursor_cloud.dart';
 import 'ios_components.dart';
 import 'projects.dart';
@@ -101,6 +102,9 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
         initialTaskId: taskId,
       )));
   }
+  void _openBridge([String? task]) => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      AgentSdkBridgeScreen(controller: widget.controller, taskId: task)));
   void _openCursor() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       CursorCloudScreen(controller: widget.controller)));
@@ -172,7 +176,14 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
               style: const TextStyle(color: OVisual.gold,
                 fontSize: 12, fontWeight: FontWeight.w700))),
           const SizedBox(height: 11),
-          if (run['canOpenSession'] == true)
+          if (run['canOpenBridgeTask'] == true)
+            SizedBox(width: double.infinity, child: FilledButton.tonalIcon(
+              onPressed: () => _openBridge(run['id']?.toString()),
+              icon: Icon(exactApproval ? CupertinoIcons.checkmark_shield
+                : CupertinoIcons.doc_text, size: 18),
+              label: Text(exactApproval ? 'Review provider permissions'
+                : 'Inspect live SDK run')))
+          else if (run['canOpenSession'] == true)
             SizedBox(width: double.infinity, child: FilledButton.tonalIcon(
               onPressed: () => _openCodex(session, taskId: run['id']?.toString()),
               icon: Icon(exactApproval ? CupertinoIcons.checkmark_shield
@@ -284,6 +295,13 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                 subtitle: 'Official hosted agent API · independently '
                   'authenticated using your own Cursor key',
                 onTap: _openCursor, color: OVisual.primary),
+              const SizedBox(height: 10),
+              const SizedBox(height: 10),
+              OIconTile(icon: CupertinoIcons.chevron_left_slash_chevron_right,
+                title: 'Claude Agent SDK & GitHub Copilot',
+                subtitle: 'Run officially authenticated SDK sessions on '
+                  'a trusted laptop, with exact owner approvals',
+                onTap: () => _openBridge(), color: OVisual.primary),
               const SizedBox(height: 10),
               OIconTile(icon: CupertinoIcons.folder_fill,
                 title: 'Projects and repositories',
