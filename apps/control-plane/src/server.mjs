@@ -81,11 +81,12 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && path.startsWith("/api/auth/")) {
       const action = path.slice("/api/auth/".length);
       const ip = req.socket.remoteAddress || "unknown";
-      if (["register", "verify", "login", "forgot", "reset"].includes(action)) {
+      if (["register", "verify", "resend", "login", "forgot", "reset"].includes(action)) {
         publicAuth.throttle(ip, action);
         const body = await readJson(req, 4096);
         if (action === "register") return send(res, 201, await publicAuth.register(body));
         if (action === "verify") return send(res, 200, publicAuth.verify(body));
+        if (action === "resend") return send(res, 200, await publicAuth.resend(body));
         if (action === "login") return send(res, 200, await publicAuth.login(body));
         if (action === "forgot") return send(res, 200, await publicAuth.forgot(body));
         if (action === "reset") return send(res, 200, await publicAuth.reset(body));
@@ -139,6 +140,18 @@ const server = createServer(async (req, res) => {
       const verifyPath = path.match(/^\/api\/account\/connections\/(openai|anthropic|gemini)\/verify$/);
       if (verifyPath && req.method === "POST") {
         return send(res, 200, await accountHub.verifyConnection(userId, verifyPath[1]));
+      }
+      if (req.method === "GET" && path === "/api/account/github") {
+        return send(res, 200, accountHub.githubStatus(userId));
+      }
+      if (req.method === "PUT" && path === "/api/account/github") {
+        return send(res, 200, await accountHub.connectGithub(userId, await readJson(req, 4096)));
+      }
+      if (req.method === "DELETE" && path === "/api/account/github") {
+        return send(res, 200, accountHub.disconnectGithub(userId));
+      }
+      if (req.method === "GET" && path === "/api/account/github/repos") {
+        return send(res, 200, { repos: await accountHub.githubRepos(userId) });
       }
       if (req.method === "GET" && path === "/api/account/attachments") {
         return send(res, 200, { attachments: accountHub.attachments(userId) });

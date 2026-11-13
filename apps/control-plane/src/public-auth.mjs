@@ -25,6 +25,7 @@ export class PublicAuth {
     core.data.accounts.sessions ??= {};
     this.accounts = core.data.accounts;
     this.rate = new Map();
+    this.pendingRegistrations = new Set();
   }
 
   get enabled() {
@@ -70,7 +71,7 @@ export class PublicAuth {
     if (!emailPattern.test(normalized) || normalized.length > 254 ||
         typeof displayName !== "string" || !displayName.trim() || displayName.length > 80 ||
         !passwordValid(password)) throw new DomainError(400, "Enter a valid email, name and password of 12–128 characters");
-    if (this.find(normalized)) throw new DomainError(409, "Account already exists. Sign in or recover your password.");
+    if (this.find(normalized) || this.pendingRegistrations.has(normalized)) throw new DomainError(409, "Account already exists. Sign in or recover your password.");
     const id = randomUUID();
     const salt = randomBytes(24).toString("base64");
     const verifyCode = code("verify");
@@ -81,13 +82,34 @@ export class PublicAuth {
       createdAt: this.now(),
     };
     // Email before persisting: no unusable account is created if delivery fails.
-    await this.sendMail(normalized, "Verify your O-AGENT account",
-      "Your O-AGENT verification code (valid 15 minutes):\n\n" + verifyCode +
-      "\n\nOpen O-AGENT and enter the code under Verify email. Ignore this message if you did not sign up.");
-    this.accounts.members[id] = member;
-    this.core.commit("account.public.registered", { memberId: id });
-    return { ok: true, message: "Verification code sent. Enter it in the app." };
+    this.pendingRegistrations.add(normalized);
+    try {
+      await this.sendMail(normalized, "Verify your O-AGENT account",
+        "Your O-AGENT verification code (valid 15 minutes):\n\n" + verifyCode +
+        "\n\nOpen O-AGENT and enter the code under Verify email. Ignore if you did not sign up.");
+      this.accounts.members[id] = member;
+      this.core.commit("account.public.registered", { memberId: id });
+      return { ok: true, message: "Verification code sent. Enter it in the app." };
+    } finally {
+      this.pendingRegistrations.delete(normalized);
+    }
   }
+  async resend({ email } = {}) {
+    this.requireEnabled();
+    const member = this.find(normalizeEmail(email));
+    if (member && !member.verifiedAt &&
+        (!member.verifyResentAt || this.now() - member.verifyResentAt > 60_000)) {
+      const verification = code("verify");
+      await this.sendMail(member.email, "Verify your O-AGENT account",
+        "Your new O-AGENT verification code (valid 15 minutes):\n\n" + verification);
+      member.verifyDigest = sha(verification);
+      member.verifyExpiresAt = this.now() + 15 * 60_000;
+      member.verifyResentAt = this.now();
+      this.core.commit("account.public.verification.resent", { memberId: member.id });
+    }
+    return { ok: true, message: "If verification is pending, a new code has been sent." };
+  }
+
   verify({ email, code: provided } = {}) {
     this.requireEnabled();
     const member = this.find(normalizeEmail(email));
@@ -121,12 +143,13 @@ export class PublicAuth {
   async login({ email, password } = {}) {
     this.requireEnabled();
     const member = this.find(normalizeEmail(email));
-    if (typeof password !== "string" || password.length > 128 || !member?.passwordSalt) {
-      // Uniform generic errors avoid account enumeration.
+    if (typeof password !== "string" || password.length > 128) {
       throw new DomainError(401, "Invalid email or password, or email not verified");
     }
-    const hashed = await this.passwordHash(password, member.passwordSalt);
-    if (!member.verifiedAt || !equal(hashed, member.passwordHash)) {
+    // Keep the expensive password hash path for unknown emails to reduce timing leaks.
+    const hashed = await this.passwordHash(password, member?.passwordSalt ||
+      Buffer.alloc(24).toString("base64"));
+    if (!member?.verifiedAt || !equal(hashed, member.passwordHash)) {
       throw new DomainError(401, "Invalid email or password, or email not verified");
     }
     return this.createSession(member);
