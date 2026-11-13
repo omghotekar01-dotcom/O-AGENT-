@@ -248,3 +248,55 @@ test("lost Cursor create response is not retried or reported as success", async 
     /creation outcome uncertain/i);
   assert.equal(attempts, 1, "Ambiguous provider create must not be retried");
 });
+
+
+test("Cursor generated artifacts are only provider-listed safe paths", async () => {
+  const calls = [];
+  const client = new CursorCloudClient({ fetchImpl: async (url, opts) => {
+    calls.push({url, opts});
+    return {ok:true, status:200, text:async()=>JSON.stringify({
+      items: [
+        {path:"artifacts/screenshot.png", sizeBytes:22334,
+          updatedAt:"2026-11-13T13:00:00Z"},
+        {path:"artifacts/report.pdf", sizeBytes:902},
+        {path:"artifacts/../server.env", sizeBytes:25},
+        {path:"/opt/cursor/artifacts/absolute.png", sizeBytes:10},
+        {path:"artifacts/a\\private", sizeBytes:10},
+      ]})};
+  }});
+  const response = await client.listArtifacts("key-alice-123456789", agent);
+  assert.deepEqual(response.artifacts.map(a=>a.path),
+    ["artifacts/screenshot.png", "artifacts/report.pdf"]);
+  assert.equal(response.artifacts[0].sizeBytes,22334);
+  assert.equal(calls[0].url, "https://api.cursor.com/v1/agents/" + agent + "/artifacts");
+});
+
+test("Cursor artifact link is short-lived HTTPS with a restricted provider host", async () => {
+  const seen = [];
+  const url = "https://cloud-agent-artifacts.s3.us-east-1.amazonaws.com/test?X-Amz-Signature=example";
+  const client = new CursorCloudClient({ fetchImpl: async (path,opts) => {
+    seen.push(path);
+    return {ok:true,status:200,text:async()=>JSON.stringify({
+      url, expiresAt:"2026-11-13T13:15:00Z",
+    })};
+  } });
+  const link = await client.artifactLink("key-alice-123456789", agent,
+    "artifacts/screenshot.png");
+  assert.equal(link.url, url);
+  assert.equal(link.expiresAt, "2026-11-13T13:15:00Z");
+  assert.equal(seen[0], "https://api.cursor.com/v1/agents/" + agent +
+    "/artifacts/download?path=artifacts%2Fscreenshot.png");
+  await assert.rejects(client.artifactLink("key-alice-123456789", agent,
+    "artifacts/../../secrets.txt"), /Invalid Cursor artifact path/);
+  await assert.rejects(client.artifactLink("key-alice-123456789", agent,
+    "https://evil.example/secrets"), /Invalid Cursor artifact path/);
+  assert.equal(seen.length,1);
+  const evil = new CursorCloudClient({fetchImpl:async()=>({
+    ok:true,status:200,text:async()=>JSON.stringify({
+      url:"https://evil.example/download/steal",
+      expiresAt:"2026-11-13T13:15:00Z",
+    }),
+  })});
+  await assert.rejects(evil.artifactLink("key-alice-123456789",agent,
+    "artifacts/screenshot.png"), /Untrusted Cursor artifact download target/);
+});
