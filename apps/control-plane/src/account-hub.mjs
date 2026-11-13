@@ -317,6 +317,64 @@ export class AccountHub {
   async cursorRun(userId, agentId, runId) {
     return this.cursor.getRun(this.cursorKey(userId), agentId, runId);
   }
+  async cursorCreateAgent(userId, body = {}) {
+    const key = this.cursorKey(userId);
+    const requestId = body.requestId;
+    if (typeof requestId !== "string" ||
+        !/^[A-Za-z0-9_-]{16,120}$/.test(requestId))
+      throw new DomainError(400, "Unique create request ID required");
+    const normalized = {
+      prompt: body.prompt, repoUrl: body.repoUrl, startingRef: body.startingRef ?? null,
+      mode: body.mode ?? "plan", autoCreatePR: body.autoCreatePR ?? false,
+    };
+    const digest = hash(JSON.stringify(normalized));
+    const storageId = "create:" + requestId;
+    const saved = this.data.cursorSubmissions[userId] ??= {};
+    const existing = saved[storageId];
+    if (existing) {
+      if (existing.digest !== digest)
+        throw new DomainError(409, "Request ID reused with a different project");
+      if (existing.uncertain) throw new DomainError(409,
+        "Agent creation outcome uncertain. Open Cursor or refresh the list before retrying. " +
+        "Expected agent ID: " + existing.agentId);
+      return existing.response;
+    }
+    // Cursor v1 supports agentId for idempotent creates. An explicit stable
+    // ID ensures a lost HTTP reply cannot accidentally create two agents.
+    const hex = hash("cursor-new-agent:" + userId + ":" + requestId);
+    const uuid = hex.slice(0,8) + "-" + hex.slice(8,12) + "-4" + hex.slice(13,16) +
+      "-" + ((parseInt(hex[16],16) & 3) | 8).toString(16) + hex.slice(17,20) +
+      "-" + hex.slice(20,32);
+    const agentId = "bc-" + uuid;
+    const lock = userId + ":cursor:create";
+    if (this.cursorPending.has(lock))
+      throw new DomainError(409, "Another cloud agent is being created");
+    this.cursorPending.add(lock);
+    // Store the intended operation before the provider call. We must never
+    // automatically replay a potentially billable create after a disconnect.
+    saved[storageId] = { digest, agentId, uncertain: true, at: this.now() };
+    this.commit("account.cursor.create.requested", { userId, agentId });
+    try {
+      const response = await this.cursor.createAgent(key, {
+        ...normalized, agentId,
+      });
+      saved[storageId] = { digest, agentId, response, at: this.now() };
+      for (const [id] of Object.entries(saved).sort((a,b) => a[1].at - b[1].at)
+        .slice(0, Math.max(0, Object.keys(saved).length - 80))) delete saved[id];
+      this.commit("account.cursor.created", { userId, agentId });
+      return response;
+    } catch (error) {
+      // A deterministic ID can be checked via GET, but we do not re-POST on
+      // uncertain outcomes. Safe validation/permission failures may be retried
+      // only with a fresh ID after the user explicitly changes the input.
+      if (error.status && error.status < 500 && error.status !== 429)
+        delete saved[storageId];
+      this.commit("account.cursor.create.unconfirmed", { userId, agentId });
+      throw error;
+    } finally {
+      this.cursorPending.delete(lock);
+    }
+  }
   async cursorFollowUp(userId, agentId, body = {}) {
     const key = this.cursorKey(userId);
     const requestId = body.requestId;
