@@ -59,6 +59,14 @@ try {
     if (@($machineState.workers | Where-Object { $_.id -eq 'test-machine' -and $_.status -eq 'online' }).Count -ne 1) {
         throw 'Machine did not register as online in the real backend.'
     }
+    $account = Invoke-RestMethod -Uri 'http://127.0.0.1:19583/api/me' -Headers $headers
+    if ($account.role -ne 'owner' -or $account.vaultReady -ne $true) {
+        throw 'Windows one-click launcher did not initialize the per-account credential vault.'
+    }
+    $protected = Read-OAgentConfig
+    if (-not $protected.VaultKeyEncrypted -or $protected.VaultKeyEncrypted.Length -lt 60) {
+        throw 'Encrypted BYOK vault key was not saved for this Windows account.'
+    }
     $ai = Invoke-RestMethod -Uri 'http://127.0.0.1:19583/api/ai/status' -Headers $headers
     if ($ai.configured -ne $false) { throw 'Unconfigured AI provider was falsely marked ready.' }
     Write-Host 'Windows launcher integration tests passed.' -ForegroundColor Green
