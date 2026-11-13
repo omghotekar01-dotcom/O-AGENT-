@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { explainCodexError } from "./codex-errors.mjs";
+import { codexChildEnv } from "./codex-env.mjs";
 
 const LIMIT_LINE = 1024 * 1024;
 const LIMIT_TOTAL = 16 * 1024 * 1024;
@@ -41,9 +42,7 @@ export async function runCodexTurn(task, {
   }
   // Avoid leaking O-AGENT operator, worker or independent AI API keys to the
   // child process, while retaining official local Codex account auth.
-  const childEnv = Object.fromEntries(Object.entries(env).filter(([key]) =>
-    !/^(OAGENT_(API|WORKER)_TOKEN|OAGENT_GITHUB_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|OAGENT_CODEX_TASK_PROMPT)$/i.test(key)
-  ));
+  const childEnv = codexChildEnv(env);
   const bin = isWindows ? "powershell.exe" : "codex";
   const argv = isWindows
     ? ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "& codex app-server"]

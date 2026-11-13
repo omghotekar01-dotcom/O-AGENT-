@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { explainCodexError } from "./codex-errors.mjs";
+import { codexChildEnv } from "./codex-env.mjs";
 
 const MAX_OUTPUT = 4 * 1024 * 1024;
 const MAX_MESSAGES = 32;
 const MAX_TEXT = 13000;
 const MAX_TURNS = 20;
 const LIMIT_PER_MESSAGE = 2100;
-const BLOCKED_ENV = /^(OAGENT_.*(?:TOKEN|KEY|SECRET|PASSWORD)|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|GITHUB_TOKEN)$/i;
 
 function cleanText(value, limit = LIMIT_PER_MESSAGE) {
   if (typeof value !== "string") return "";
@@ -67,7 +67,7 @@ export async function readCodexHistory(task, {
   const args = isWindows
     ? ["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command","& codex app-server"]
     : ["app-server"];
-  const childEnv = Object.fromEntries(Object.entries(env).filter(([key])=>!BLOCKED_ENV.test(key)));
+  const childEnv = codexChildEnv(env);
   return await new Promise((resolve, reject) => {
     let child;
     try {

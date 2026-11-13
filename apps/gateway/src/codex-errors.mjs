@@ -17,6 +17,10 @@ export function explainCodexError(error, operation = "resume") {
     return "CODEX_MODEL_MISMATCH: This conversation was created with a different model provider. "
       + "Open it with its original provider account; saved messages can still be read.";
   }
+  if (code === -32601 || /unsupported|unknown method|method not found|requires experimentalapi/.test(message)) {
+    return "CODEX_UPDATE_REQUIRED: The installed Codex CLI does not support this conversation operation. "
+      + "Update the official Codex CLI on the laptop, then restart O-AGENT.";
+  }
   if (/not found|not exist|unknown thread|cannot find|no such/.test(message)) {
     return "CODEX_HISTORY_NOT_FOUND: This saved conversation no longer exists under the signed-in "
       + "Windows user's Codex account. Refresh your project list and check the laptop login.";
@@ -24,10 +28,6 @@ export function explainCodexError(error, operation = "resume") {
   if (/not authorized|unauthorized|sign.?in|authentication|permission denied|forbidden/.test(message)) {
     return "CODEX_LOGIN_REQUIRED: The laptop Codex CLI account is not authorized. "
       + "Sign into Codex under the same Windows user running O-AGENT, then refresh.";
-  }
-  if (code === -32601 || /unsupported|unknown method|requires experimentalapi/.test(message)) {
-    return "CODEX_UPDATE_REQUIRED: The installed Codex CLI does not support this conversation operation. "
-      + "Update the official Codex CLI on the laptop, then restart O-AGENT.";
   }
   if (code === -32602 || /invalid params|invalid request/.test(message)) {
     return "CODEX_PROTOCOL_ERROR: This Codex CLI version rejected the " + operation
