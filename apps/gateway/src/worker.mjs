@@ -16,6 +16,14 @@ const id = process.env.OAGENT_WORKER_ID || "local-worker";
 const root = resolve(process.env.OAGENT_WORKSPACE_ROOT || process.cwd());
 if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error("Invalid OAGENT_WORKER_ID");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const capabilities = [
+  "system_info", "workspace_inventory",
+  ...(process.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC === "1" ? ["codex_cloud_submit"] : []),
+  ...(process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC === "1" ? ["codex_cli_turn"] : []),
+  ...(process.env.OAGENT_ENABLE_CLAUDE_AGENT_SDK === "1" ? ["claude_agent_turn"] : []),
+  ...(process.env.OAGENT_ENABLE_COPILOT_SDK === "1" ? ["copilot_sdk_turn"] : []),
+];
+
 
 async function api(path, body = {}, method = "POST") {
   const result = await fetch(new URL(path, endpoint), {
@@ -96,7 +104,7 @@ async function main() {
   let lastCodexSync = 0;
   let lastLocalCodexSync = 0;
   let activeTask = false;
-  await api("/api/workers/register", { id, name: hostname() });
+  await api("/api/workers/register", { id, name: hostname(), capabilities });
   while (true) {
     try {
       // Provider history queries can take 25-30 seconds. Run them off the
@@ -153,7 +161,7 @@ async function main() {
       }
     } catch (err) {
       console.error("Worker polling error:", err.message);
-      try { await api("/api/workers/register", { id, name: hostname() }); } catch { /* retry next cycle */ }
+      try { await api("/api/workers/register", { id, name: hostname(), capabilities }); } catch { /* retry next cycle */ }
     }
     await sleep(3000);
   }
