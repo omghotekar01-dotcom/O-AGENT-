@@ -787,6 +787,9 @@ class _StudioConnectState extends State<StudioConnect> {
             decoration: const InputDecoration(labelText: 'Backend HTTPS URL', prefixIcon: Icon(Icons.link))),
           const SizedBox(height: 13),
           if (joining) ...[
+            const Padding(padding: EdgeInsets.only(bottom: 10),
+              child: Text('Your code works only once. On a private phone, enable Remember this device to keep your new personal account after closing the app.',
+                style: TextStyle(color: _muted, fontSize: 12, height: 1.5))),
             TextField(controller: displayName, maxLength: 80,
               decoration: const InputDecoration(labelText: 'Your display name',
                 prefixIcon: Icon(Icons.person_outline))),
