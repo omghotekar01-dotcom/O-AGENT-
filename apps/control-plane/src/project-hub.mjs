@@ -102,7 +102,7 @@ export class ProjectHub {
         limitation: "Requires a signed-in, enrolled Claude Code/Agent SDK runtime and an explicit session permission bridge. Not currently reading existing sessions.",
       },
       {
-        id: "cursor", label: "Cursor", status: "not_implemented",
+        id: "cursor", label: "Cursor local IDE", status: "not_implemented",
         capabilities: [],
         limitation: "Cursor has an official CLI with headless and session operations; O-AGENT does not yet own or control a Cursor CLI session or active IDE tab.",
       },
