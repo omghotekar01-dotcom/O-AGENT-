@@ -185,3 +185,41 @@ test("live provider tool approval only accepts a real human decision", async () 
   });
   assert.ok(updates.some(e => e.type === "status" && e.text.includes("denied")));
 });
+
+test("Codex permission escalation is explicitly denied with protocol-correct empty grant", async () => {
+  const sent = [];
+  const process = new EventEmitter();
+  process.stdout = new EventEmitter();
+  process.stderr = new EventEmitter();
+  process.kill = () => true;
+  process.stdin = {
+    write(line) {
+      const msg = JSON.parse(line);
+      sent.push(msg);
+      const respond = value => queueMicrotask(() =>
+        process.stdout.emit("data", Buffer.from(JSON.stringify(value) + "\n")));
+      if (msg.id === 1 && msg.method === "initialize") respond({ id: 1, result: {} });
+      else if (msg.id === 2) respond({ id: 2, result: { thread: { id: sessionId } } });
+      else if (msg.id === 3) {
+        respond({ id: 3, result: { turn: { id: "turn-escalation" } } });
+        respond({ id: 79, method: "item/permissions/requestApproval",
+          params: { threadId: sessionId, reason: "Request extra network/filesystem rights" } });
+      } else if (msg.id === 79 && msg.result) {
+        respond({ method: "turn/completed", params: { threadId: sessionId,
+          turn: { id: "turn-escalation", status: "completed" } } });
+      }
+    },
+    end() {},
+  };
+  const updates = [];
+  const result = await runCodexTurn(makeTask("workspace_write"), {
+    spawnImpl: () => process, isWindows: true, realpathImpl: async () => cwd,
+    sendUpdate: async x => updates.push(x),
+    askPermission: async () => { throw Error("Must not ask human to grant unscoped permissions"); },
+    timeoutMs: 2500,
+  });
+  assert.equal(result.providerStatus, "completed");
+  assert.deepEqual(sent.find(m => m.id === 79 && !m.method)?.result,
+    { permissions: {}, scope: "turn" });
+  assert.ok(updates.some(e => e.type === "status" && e.text.includes("denied")));
+});
