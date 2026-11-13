@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../core/controller.dart';
+import '../core/api_client.dart';
 import 'codex_session.dart';
 import 'agent_sdk_bridge.dart';
 import 'screen_preview.dart';
@@ -88,7 +89,14 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
         setState(() { data = next; error = null; });
       }
     } catch (e) {
-      if (mounted) setState(() => error = e.toString());
+      if (mounted) {
+        setState(() => error = e is ApiException && e.statusCode == 404
+          ? 'This backend does not have the Remote endpoint. On your laptop, '
+            'stop O-AGENT, run git pull origin main, and restart O-AGENT.cmd. '
+            'Check that your phone uses the same private Tailscale URL, '
+            'then tap Retry.'
+          : e.toString());
+      }
     } finally { loading = false; }
   }
   void _openCodex(Map<String, dynamic> session, {String? taskId}) {
@@ -281,10 +289,10 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                 final wide = constraints.maxWidth >= 470;
                 final tiles = [
                   _statCard(CupertinoIcons.waveform_path_ecg,
-                    (data?['activeRuns'] ?? 0).toString(), 'Active runs',
+                    (data?['activeRuns']?.toString() ?? '—'), 'Active runs',
                     OVisual.primary),
                   _statCard(CupertinoIcons.checkmark_shield,
-                    (data?['pendingApprovals'] ?? 0).toString(),
+                    (data?['pendingApprovals']?.toString() ?? '—'),
                     'Needs review', OVisual.gold),
                 ];
                 return wide

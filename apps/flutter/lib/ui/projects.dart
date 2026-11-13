@@ -67,7 +67,23 @@ class _ProjectHubState extends State<ProjectHubScreen> {
         return [p['title'], p['cwd'], p['sourceRef'], p['description']]
           .whereType<String>().any((value) => value.toLowerCase().contains(term));
       }).toList();
-      return RefreshIndicator(
+      // ProjectHubScreen opens as its own route from Remote mission control.
+      // A route must install a Material surface before TextField, ChoiceChip,
+      // InkWell, IconButton and their focus/ink semantics are built.
+      return Scaffold(
+        backgroundColor: OTheme.paper,
+        appBar: AppBar(
+          title: const Text('Projects', style: TextStyle(
+            fontWeight: FontWeight.w800)),
+          actions: [
+            IconButton(
+              onPressed: _refresh,
+              tooltip: 'Refresh project sources',
+              icon: const Icon(Icons.sync_rounded),
+            ),
+          ],
+        ),
+        body: SafeArea(child: RefreshIndicator(
         onRefresh: () async { _refresh(); try { await future; } catch (_) {} },
         child: ListView(padding: const EdgeInsets.fromLTRB(22, 16, 22, 36), children: [
           Row(children: [
@@ -252,6 +268,7 @@ class _ProjectHubState extends State<ProjectHubScreen> {
           const Text('Provider integrations are capability-based. GitHub and Codex Cloud views do not expose their live browser screens or permissions.',
             style: TextStyle(color: muted, fontSize: 11, height: 1.5)),
         ]),
+        )),
       );
     },
   );
@@ -296,51 +313,11 @@ class _ProjectDetailState extends State<ProjectDetailScreen> {
         content: Text('The Codex laptop connector is offline. Start O-AGENT on the laptop.')));
       return;
     }
-    final environment = TextEditingController(text: project['environmentId']?.toString() ?? '');
-    final content = TextEditingController();
     final request = await showDialog<Map<String, String>>(context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New Codex Cloud task'),
-        content: SingleChildScrollView(child: Column(
-          mainAxisSize: MainAxisSize.min, children: [
-            const Text('This creates a NEW task, not a reply to an existing Codex session. You will review and approve the full prompt afterward.',
-              style: TextStyle(fontSize: 12, color: muted)),
-            const SizedBox(height: 12),
-            TextField(controller: environment, maxLength: 120,
-              decoration: const InputDecoration(labelText: 'Cloud environment ID')),
-            const SizedBox(height: 9),
-            TextField(controller: content, maxLength: 2000, maxLines: 5, minLines: 2,
-              decoration: const InputDecoration(labelText: 'New task prompt')),
-          ],
-        )),
-        actions: [
-          TextButton.icon(
-            onPressed: () async {
-              if (content.text.trim().isEmpty) return;
-              try {
-                final proposed = await widget.controller.client!.refinePrompt(
-                  content.text.trim(), target: 'codex_cloud');
-                content.text = proposed;
-              } catch (e) {
-                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(content: Text('Cannot improve prompt: ' + e.toString())));
-              }
-            },
-            icon: const Icon(Icons.auto_fix_high_rounded),
-            label: const Text('Improve with AI'),
-          ),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () {
-            if (environment.text.trim().isEmpty || content.text.trim().isEmpty) return;
-            Navigator.pop(ctx, {
-              'environmentId': environment.text.trim(), 'prompt': content.text.trim(),
-            });
-          }, child: const Text('Request approval')),
-        ],
-      ),
-    );
-    environment.dispose();
-    content.dispose();
+      builder: (_) => CodexCloudTaskDialog(
+        controller: widget.controller,
+        environmentId: project['environmentId']?.toString() ?? '',
+      ));
     if (request == null || !mounted) return;
     try {
       await widget.controller.client!.requestCodexTask(
@@ -641,6 +618,86 @@ class _ProjectCreateDialogState extends State<ProjectCreateDialog> {
           'title': title.text.trim(), 'description': description.text.trim(),
         });
       }, child: const Text('Create project')),
+    ],
+  );
+}
+
+
+/// Route-owned controllers prevent premature TextField disposal while a
+/// dialog exit animation is still in progress. No project task is submitted
+/// until the parent screen receives and validates the completed form.
+class CodexCloudTaskDialog extends StatefulWidget {
+  const CodexCloudTaskDialog({
+    super.key, required this.controller, required this.environmentId,
+  });
+  final ControlController controller;
+  final String environmentId;
+  @override State<CodexCloudTaskDialog> createState() =>
+    _CodexCloudTaskDialogState();
+}
+class _CodexCloudTaskDialogState extends State<CodexCloudTaskDialog> {
+  late final environment = TextEditingController(text: widget.environmentId);
+  final content = TextEditingController();
+  bool refining = false;
+
+  @override
+  void dispose() {
+    environment.dispose();
+    content.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refine() async {
+    if (refining || content.text.trim().isEmpty) return;
+    final api = widget.controller.client;
+    if (api == null) return;
+    setState(() => refining = true);
+    try {
+      final proposed = await api.refinePrompt(
+        content.text.trim(), target: 'codex_cloud');
+      if (mounted) {
+        content.text = proposed;
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot improve prompt: ' + e.toString())));
+    } finally {
+      if (mounted) setState(() => refining = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('New Codex Cloud task'),
+    content: SingleChildScrollView(child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Creates a new task, not a reply to an existing session. '
+          'You will review and approve the exact prompt afterward.',
+          style: TextStyle(fontSize: 12, color: muted)),
+        const SizedBox(height: 12),
+        TextField(controller: environment, maxLength: 120,
+          decoration: const InputDecoration(labelText: 'Cloud environment ID')),
+        const SizedBox(height: 9),
+        TextField(controller: content, maxLength: 2000, maxLines: 5, minLines: 2,
+          decoration: const InputDecoration(labelText: 'New task prompt')),
+      ],
+    )),
+    actions: [
+      TextButton.icon(
+        onPressed: refining ? null : _refine,
+        icon: const Icon(Icons.auto_fix_high_rounded),
+        label: Text(refining ? 'Improving…' : 'Improve with AI'),
+      ),
+      TextButton(onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel')),
+      FilledButton(onPressed: refining ? null : () {
+        if (environment.text.trim().isEmpty || content.text.trim().isEmpty) return;
+        Navigator.pop(context, <String, String>{
+          'environmentId': environment.text.trim(),
+          'prompt': content.text.trim(),
+        });
+      }, child: const Text('Request approval')),
     ],
   );
 }
