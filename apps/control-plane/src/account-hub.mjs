@@ -206,10 +206,13 @@ export class AccountHub {
     }
   }
 
-  async send(userId, { provider, agentId = "navigator", message, threadId }) {
+  async send(userId, { provider, message, threadId }) {
     if (!PROVIDERS[provider]) throw new DomainError(400, "Choose a supported provider");
     if (!validLabel(message, 4000)) throw new DomainError(400, "Message must contain 1–4000 characters");
     const busyId = userId + ":" + (threadId ?? "new");
+    if ([...this.busy].filter(key => key.startsWith(userId + ":")).length >= 2) {
+      throw new DomainError(429, "Too many simultaneous personal AI requests");
+    }
     if (this.busy.has(busyId)) throw new DomainError(409, "This conversation is already processing");
     this.busy.add(busyId);
     try {
@@ -217,7 +220,8 @@ export class AccountHub {
       if (threadId && runtime.getThread(threadId)?.provider !== provider) {
         throw new DomainError(409, "Conversation belongs to another provider");
       }
-      const result = await runtime.send({ agentId, threadId, message });
+      // Personal BYOK chats have no machine-operation agent or tool privileges.
+      const result = await runtime.send({ agentId: "navigator", threadId, message });
       result.provider ??= provider;
       this.commit("account.chat.saved", { userId, provider, threadId: result.id });
       this.recordHealth(userId, provider, "connected");
