@@ -11,6 +11,7 @@ import 'vscode_remote.dart';
 import 'cursor_cloud.dart';
 import 'ios_components.dart';
 import 'projects.dart';
+import 'free_ai_hub.dart';
 
 Map<String, dynamic> remoteMap(Object? v) => v is Map
   ? Map<String, dynamic>.from(v) : <String, dynamic>{};
@@ -131,6 +132,8 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   void _openProjects() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       ProjectHubScreen(controller: widget.controller)));
+  void _openAiApps() => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) => const FreeAiHubScreen()));
 
   Widget _statCard(IconData icon, String count, String label, Color tint) =>
     OSurface(padding: const EdgeInsets.all(15), child: Row(children: [
@@ -338,6 +341,11 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                 title: 'My projects',
                 subtitle: 'Browse real coding projects and saved conversations',
                 onTap: _openProjects, color: OVisual.mint),
+              const SizedBox(height: 10),
+              OIconTile(icon: CupertinoIcons.globe,
+                title: 'AI apps & ChatGPT shortcuts',
+                subtitle: 'Open ChatGPT, Grok, Gemini and your saved links. Browser access only; not live session sync.',
+                onTap: _openAiApps, color: OVisual.primary),
               const SizedBox(height: 10),
               OIconTile(icon: CupertinoIcons.desktopcomputer,
                 title: 'See my laptop',
