@@ -24,11 +24,12 @@ jobs:
         with:
           node-version: "22"
       - run: node --check apps/vscode/src/extension.cjs
+      - run: node --check apps/vscode/src/connection.cjs
       - run: node --check apps/vscode/src/path-policy.cjs
       - run: node --test tests/vscode-companion.test.mjs
   package-vsix:
     name: VSIX on batched release only
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[mobile-release]')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, '[mobile-release]') || contains(github.event.head_commit.message, '[vscode-release]'))
     needs: verify
     runs-on: ubuntu-latest
     steps:

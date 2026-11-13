@@ -1,48 +1,60 @@
 # O-AGENT VS Code Companion
 
-An opt-in extension for the owner of a trusted VS Code workspace.
-This extension is **not** a VS Code chat takeover or remote desktop tool.
+An opt-in extension for tracking changed/unsaved filenames and approved file opens
+in a trusted Visual Studio **Code** workspace. This is **not** a Copilot chat
+takeover or a screen-control extension.
 
-## Installation
+## Install in VS Code (not Visual Studio)
 
-**Do not double-click the `.vsix` file in Windows Explorer.** Windows
-may launch the *Visual Studio 2022/2026* VSIXInstaller, which rejects this
-**Visual Studio Code** extension with `NoApplicableSKUsException`.
+Do not double-click the `.vsix`: on Windows that may open the unrelated
+**Visual Studio 2022/2026 VSIX Installer** and fail.
 
-After downloading and extracting the `o-agent-vscode-companion-vsix` artifact:
+Download and extract the latest `o-agent-vscode-companion-vsix` artifact.
+Then either:
+- In VS Code, open **Extensions** (`Ctrl+Shift+X`), select **... → Install from VSIX...**
+  and select `o-agent-vscode-companion.vsix`; or
+- In your updated O-AGENT project folder, run `INSTALL-VSCODE-COMPANION.cmd`.
+  It invokes the Visual Studio Code command-line installer.
 
-- Double-click `INSTALL-VSCODE-COMPANION.cmd` in your updated O-AGENT source
-  folder. The installer uses the VS Code `code.cmd` command and searches the
-  default extracted Downloads path.
-- Or open **Visual Studio Code** (blue icon), then **Extensions →
-  ... → Install from VSIX...** and choose the extracted `o-agent-vscode-companion.vsix`.
-- Or run:
-  `code --install-extension "%USERPROFILE%\\Downloads\\o-agent-vscode-companion-vsix\\o-agent-vscode-companion.vsix" --force`
-  in a CMD shell with VS Code's `code` command installed.
+## Configure on the same laptop as O-AGENT
 
-Do not attempt installation into Visual Studio Community or Visual Studio Installer.
+1. Start `O-AGENT.cmd` and verify `http://127.0.0.1:8787/health` responds
+   with the O-AGENT service information. If the launcher uses another port,
+   substitute that port.
+2. Open and **trust** a real project folder in VS Code.
+3. Press `Ctrl+Shift+P`, choose **O-AGENT: Configure Secure Companion**.
+4. For **Backend URL**, enter `http://127.0.0.1:8787` if VS Code is
+   running on the **same** laptop as the backend.
+   If VS Code is on a different device, use your private HTTPS Tailscale
+   backend origin (e.g. `https://your-device.your-tailnet.ts.net`).
+   Plain HTTP is **never** allowed for other devices, LAN addresses or domains.
+5. For **Worker token**, use the existing Windows **WORKER** token saved
+   encrypted under `%LOCALAPPDATA%\OAgent\settings.json`. This is **not**
+   your phone OPERATOR token, GitHub token or AI API key. Never paste it into
+   chat or issue trackers. The extension stores the token in VS Code SecretStorage.
+6. Press `Ctrl+Shift+P` → **O-AGENT: Start Remote Workspace Companion** →
+   **Enable**. The status bar should show `O-AGENT: connected`.
 
-Download the ``o-agent-vscode-companion\` VSIX artifact from the consolidated
-GitHub Actions release, then choose **Extensions → ... → Install from VSIX...**
-in VS Code. You may also package it from source with
-\`npx @vscode/vsce package --no-dependencies --skip-license --allow-missing-repository\`.
+The extension sends only a short list of Git changed paths and unsaved
+file names to the private backend. It does not upload file contents or diffs.
+The owner phone can open **Remote → VS Code live file changes** to inspect
+the feed. Opening a specific file requires owner approval **and** a second
+confirmation in the local VS Code window.
 
-Open a trusted workspace. Run **O-AGENT: Configure Secure Companion** and enter
-your private HTTPS backend origin and existing **worker** token. Credentials
-are stored in VS Code SecretStorage, not in the extension package.
+## If connection fails
 
-Run **O-AGENT: Start Remote Workspace Companion** and explicitly agree to the
-local enrollment dialog. A visible status bar indicates active remote polling.
-From the owner phone, choose Remote → VS Code companion. The phone must approve
-the requested workspace-relative file path, then the local VS Code user must
-also agree to open it. The extension does not copy file contents or edit files.
+- **Cannot reach backend:** Start/restart `O-AGENT.cmd`; check
+  `http://127.0.0.1:8787/health` in your laptop browser.
+- **HTTP 401:** Wrong token. Reconfigure using the **WORKER** token rather
+  than the **OPERATOR** token.
+- **HTTP 404:** Server may be outdated or the URL does not point to your
+  O-AGENT backend. Update/restart Windows server.
+- **HTTPS DNS/certificate issues:** When VS Code and backend are on the
+  same Windows laptop, use `http://127.0.0.1:8787` instead.
+- **No changed files:** Open and trust the project folder; edit a file.
+  Wait for the companion's five-second polling interval.
+- **O-AGENT: disconnected:** Hover over status-bar text for a diagnostic.
+  You may also run **Developer: Show Logs... → Extension Host** inside VS Code.
+  Never include passwords or tokens in shared logs.
 
-Stop polling with **O-AGENT: Stop Remote Workspace Companion**. To revoke a
-token, rotate your worker token on both the server and trusted devices.
-
-## Restrictions
-
-Only root-level file/directory names can be inventoried; exact open-file
-requests are resolved against real paths and checked for workspace escape.
-The companion never controls Copilot Chat, Cursor tabs, external terminals,
-the desktop mouse or keyboard, and it does not connect automatically.
+Run **O-AGENT: Stop Remote Workspace Companion** to stop the feed.

@@ -7,6 +7,7 @@ const execFileAsync = promisify(execFile);
 const { realpath, stat, readdir } = require("node:fs/promises");
 const { resolve, basename } = require("node:path");
 const { safeRelativePath, withinWorkspace } = require("./path-policy.cjs");
+const { parseBackendOrigin, explainHttpFailure, explainFetchFailure } = require("./connection.cjs");
 
 const STORAGE_URL = "oagent.server";
 const STORAGE_TOKEN = "oagent.workerToken";
@@ -18,25 +19,43 @@ async function settings() {
   const origin = await contextRef.secrets.get(STORAGE_URL);
   const token = await contextRef.secrets.get(STORAGE_TOKEN);
   if (!origin || !token) throw Error("Configure secure companion first");
-  const url = new URL(origin);
-  if (url.protocol !== "https:" ||
-      url.username || url.password || url.search || url.hash ||
-      (url.pathname !== "/" && url.pathname !== "")) {
-    throw Error("A trusted HTTPS backend origin is required");
-  }
+  const url = parseBackendOrigin(origin);
   if (token.length < 24) throw Error("Invalid enrolled worker token");
   return {url,token};
 }
 async function api(path, body, method = "POST") {
   const {url,token} = await settings();
-  const result = await fetch(new URL(path,url),{
-    method,headers:{"Authorization":"Bearer " + token,"Content-Type":"application/json"},
-    ...(method !== "GET" ? {body:JSON.stringify(body||{})} : {}),
-    signal:AbortSignal.timeout(15000),redirect:"error",
-  });
+  let result;
+  try {
+    result = await fetch(new URL(path,url),{
+      method,headers:{"Authorization":"Bearer " + token,"Content-Type":"application/json"},
+      ...(method !== "GET" ? {body:JSON.stringify(body||{})} : {}),
+      signal:AbortSignal.timeout(15000),redirect:"error",
+    });
+  } catch (error) {
+    throw Error(explainFetchFailure(error, url));
+  }
   const json = await result.json().catch(()=>({}));
-  if (!result.ok) throw Error("Backend returned HTTP " + result.status);
+  if (!result.ok) throw Error(explainHttpFailure(result.status, path));
   return json;
+}
+async function checkBackend() {
+  const { url } = await settings();
+  let response;
+  // Verify the configured service before sending the worker token anywhere.
+  try {
+    response = await fetch(new URL("/health", url), {
+      method: "GET", signal: AbortSignal.timeout(7000),
+      cache: "no-store", redirect: "error",
+    });
+  } catch (error) {
+    throw Error(explainFetchFailure(error, url));
+  }
+  if (!response.ok) throw Error(
+    "O-AGENT health check failed (HTTP " + response.status + "). Check the backend address.");
+  const data = await response.json().catch(() => ({}));
+  if (data?.service !== "oagent-control-plane" || data?.status !== "ok")
+    throw Error("The configured address is not the O-AGENT backend. Use http://127.0.0.1:8787 on the laptop.");
 }
 async function currentWorkspace() {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath;
@@ -65,11 +84,11 @@ async function changedFiles() {
     const {stdout} = await execFileAsync("git",
       ["-C", root, "status", "--porcelain=v1", "--untracked-files=normal"],
       {timeout: 4500, maxBuffer: 30000, windowsHide: true});
-    for (const line of stdout.split(/\\r?\\n/).slice(0, 110)) {
+    for (const line of stdout.split(/\r?\n/).slice(0, 110)) {
       if (line.length < 4) continue;
       const code = line.slice(0, 2);
       const file = line.slice(3).trim().slice(0, 300);
-      if (!file || file.includes("\\0") || /[\\r\\n]/.test(file)) continue;
+      if (!file || file.includes("\0") || /[\r\n]/.test(file)) continue;
       const status = code === "??" ? "untracked" :
         code.includes("U") ? "conflicted" :
         code.includes("D") ? "deleted" :
@@ -142,8 +161,9 @@ async function poll() {
     }
     statusBar.text = "$(shield) O-AGENT: connected";
     statusBar.tooltip = "Explicitly enrolled VS Code companion; no background screen capture.";
-  } catch {
+  } catch (error) {
     statusBar.text = "$(warning) O-AGENT: disconnected";
+    statusBar.tooltip = error.message;
   } finally { pending = false; }
 }
 async function stop() {
@@ -164,6 +184,7 @@ async function start() {
   }
   try {
     await settings();
+    await checkBackend();
     const confirm = await vscode.window.showInformationMessage(
       "Enroll this VS Code workspace? O-AGENT may send a short list of changed "
       + "and unsaved file names (NEVER file contents) to your private owner backend "
@@ -176,17 +197,21 @@ async function start() {
     statusBar.show();
     await poll();
     timer = setInterval(() => { void poll(); }, 5000);
-  } catch {
-    vscode.window.showErrorMessage("O-AGENT connection failed. Check HTTPS URL and worker enrollment token.");
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Unknown connection error";
+    statusBar.text = "$(warning) O-AGENT: disconnected";
+    statusBar.tooltip = detail;
+    vscode.window.showErrorMessage("O-AGENT connection failed: " + detail);
   }
 }
 async function configure() {
   const url = await vscode.window.showInputBox({
-    title:"O-AGENT backend HTTPS URL",
-    prompt:"Enter the exact private HTTPS origin; no URL path or credentials",
+    title:"O-AGENT backend URL",
+    prompt:"Use http://127.0.0.1:8787 for VS Code on this laptop, or your trusted private HTTPS Tailscale origin.",
+    value:"http://127.0.0.1:8787",
     ignoreFocusOut:true,validateInput:v=> {
-      try {const u=new URL(v);return u.protocol==="https:"&&!!u.host&&u.pathname==="/"?"": "Enter only a trusted HTTPS origin";}
-      catch{return "Invalid URL"}
+      try { parseBackendOrigin(v); return ""; }
+      catch (error) { return error.message; }
     },
   });
   if (!url) return;
