@@ -110,12 +110,13 @@ class _FreeAiHubScreenState extends State<FreeAiHubScreen> {
     final name = _label.text.trim();
     final url = _address.text.trim();
     if (name.isEmpty || name.length > 70 || !_validWebLink(url)) {
-      setState(() => _error =
-        'Enter a short name and a valid HTTPS link from a listed AI provider.');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter a project name and a valid official HTTPS AI link.')));
       return;
     }
     if (_pins.length >= 12) {
-      setState(() => _error = 'Maximum 12 saved shortcuts. Remove one first.');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Maximum 12 shortcuts. Remove an existing one first.')));
       return;
     }
     final updated = <Map<String, String>>[
@@ -130,8 +131,8 @@ class _FreeAiHubScreenState extends State<FreeAiHubScreen> {
       _address.clear();
       Navigator.pop(context);
     } catch (_) {
-      if (mounted) setState(() => _error =
-        'Could not securely save this shortcut on your device.');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not save shortcut in secure device storage.')));
     }
   }
 
