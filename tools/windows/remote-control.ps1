@@ -53,6 +53,7 @@ public static class OAgentUserInput {
   }
   [DllImport("user32.dll", SetLastError=true)]
   private static extern uint SendInput(uint count, Input[] inputs, int size);
+  public static int InputStructSize() { return Marshal.SizeOf(typeof(Input)); }
   public static void Move(int dx, int dy) {
     Point p; if (GetCursorPos(out p)) SetCursorPos(p.X + dx, p.Y + dy);
   }
