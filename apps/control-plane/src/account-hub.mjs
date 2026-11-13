@@ -96,6 +96,7 @@ export class AccountHub {
     delete member.tokenHash;
     delete this.data.connections[memberId];
     delete this.data.threads[memberId];
+    delete this.data.attachments?.[memberId];
     this.commit("account.member.revoked", { memberId });
     return { revoked: true };
   }

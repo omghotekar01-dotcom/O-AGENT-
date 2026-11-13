@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: o-agent-cloud
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    disk:
+      name: o-agent-persistent-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 8787
+      - key: OAGENT_DATA_FILE
+        value: /data/oagent-data.json
+      - key: OAGENT_API_TOKEN
+        generateValue: true
+      - key: OAGENT_WORKER_TOKEN
+        generateValue: true
+      - key: OAGENT_VAULT_KEY_BASE64
+        sync: false
+      - key: OAGENT_PUBLIC_ACCOUNTS
+        value: "1"
+      - key: OAGENT_RESEND_API_KEY
+        sync: false
+      - key: OAGENT_MAIL_FROM
+        sync: false
+      - key: OAGENT_PUBLIC_URL
+        sync: false

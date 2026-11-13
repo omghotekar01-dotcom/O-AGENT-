@@ -22,6 +22,7 @@ export class ControlPlane {
       agentThreads: initial.agentThreads ?? {},
       projects: initial.projects ?? {},
       externalProjects: initial.externalProjects ?? {},
+      accounts: initial.accounts ?? {},
     };
     this.persist = persist;
     this.clock = clock;

@@ -7,6 +7,7 @@ import { ControlPlane, DomainError } from "./core.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
 import { ProjectHub } from "./project-hub.mjs";
 import { AccountHub } from "./account-hub.mjs";
+import { PublicAuth } from "./public-auth.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
 const workerToken = process.env.OAGENT_WORKER_TOKEN ?? "";
@@ -29,6 +30,7 @@ const core = new ControlPlane(initial, persist);
 const agentRuntime = new AgentRuntime(core);
 const projectHub = new ProjectHub(core, agentRuntime);
 const accountHub = new AccountHub(core);
+const publicAuth = new PublicAuth(core);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
   res.writeHead(code, JSON_HEADERS);
@@ -74,8 +76,22 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/") return staticFile(res, "index.html", "text/html; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.css") return staticFile(res, "dashboard.css", "text/css; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.js") return staticFile(res, "dashboard.js", "text/javascript; charset=utf-8");
-    // Joining requires a previously authorized one-time invitation. No
-    // public self-registration or bearer token sharing between members.
+    // Anonymous email/password endpoints have per-address throttling.
+    if (req.method === "GET" && path === "/api/auth/config") return send(res, 200, publicAuth.config());
+    if (req.method === "POST" && path.startsWith("/api/auth/")) {
+      const action = path.slice("/api/auth/".length);
+      const ip = req.socket.remoteAddress || "unknown";
+      if (["register", "verify", "login", "forgot", "reset"].includes(action)) {
+        publicAuth.throttle(ip, action);
+        const body = await readJson(req, 4096);
+        if (action === "register") return send(res, 201, await publicAuth.register(body));
+        if (action === "verify") return send(res, 200, publicAuth.verify(body));
+        if (action === "login") return send(res, 200, await publicAuth.login(body));
+        if (action === "forgot") return send(res, 200, await publicAuth.forgot(body));
+        if (action === "reset") return send(res, 200, await publicAuth.reset(body));
+      }
+    }
+    // Joining requires a previously authorized one-time invitation.
     if (req.method === "POST" && path === "/api/accounts/claim") {
       return send(res, 201, accountHub.claimInvitation(await readJson(req, 4096)));
     }
@@ -84,9 +100,13 @@ const server = createServer(async (req, res) => {
     const worker = isWorkerRoute && authorized(req, workerToken);
     const authHeader = req.headers.authorization ?? "";
     const member = !owner && !worker && typeof authHeader === "string" &&
-      authHeader.startsWith("Bearer ") ? accountHub.authenticate(authHeader.slice(7)) : null;
+      authHeader.startsWith("Bearer ") ?
+        (publicAuth.authenticate(authHeader.slice(7)) || accountHub.authenticate(authHeader.slice(7))) : null;
     if (isWorkerRoute ? !worker : (!owner && !member)) throw new DomainError(401, "Invalid authorization token");
     const userId = owner ? "owner" : member?.id;
+    if (req.method === "POST" && path === "/api/auth/logout") {
+      return send(res, 200, publicAuth.logout(authHeader.slice(7)));
+    }
 
     if (req.method === "GET" && path === "/api/me") {
       return send(res, 200, owner
@@ -101,7 +121,9 @@ const server = createServer(async (req, res) => {
     }
     const revokeMember = path.match(/^\/api\/accounts\/members\/([0-9a-f-]+)$/);
     if (owner && req.method === "DELETE" && revokeMember) {
-      return send(res, 200, accountHub.revokeMember(revokeMember[1]));
+      const revoked = accountHub.revokeMember(revokeMember[1]);
+      publicAuth.revokeUser(revokeMember[1]);
+      return send(res, 200, revoked);
     }
     if (!isWorkerRoute && path.startsWith("/api/account/")) {
       if (req.method === "GET" && path === "/api/account/connections") {
