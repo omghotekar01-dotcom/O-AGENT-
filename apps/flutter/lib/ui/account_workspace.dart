@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/controller.dart';
 import '../theme.dart';
@@ -78,6 +79,17 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
     return {'id': id, 'connected': false, 'model': ''};
   }
 
+  Future<void> _openKeyConsole(String provider) async {
+    final urls = {
+      'openai': 'https://platform.openai.com/api-keys',
+      'anthropic': 'https://console.anthropic.com/',
+      'gemini': 'https://aistudio.google.com/apikey',
+    };
+    final target = Uri.parse(urls[provider] ?? urls['openai']!);
+    final opened = await launchUrl(target, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) setState(() => error = 'Could not open the provider API key page');
+  }
+
   Future<void> _saveProvider(Map<String, dynamic> existing) async {
     final provider = existing['id'].toString();
     final model = TextEditingController(text: existing['model']?.toString() ?? '');
@@ -91,7 +103,13 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
           crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('Use your own provider API account. The key is sent over HTTPS and encrypted on your O-AGENT backend, never bundled into the app.',
               style: TextStyle(fontSize: 12, height: 1.5)),
-            const SizedBox(height: 15),
+            const SizedBox(height: 9),
+            TextButton.icon(
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              onPressed: () => _openKeyConsole(provider),
+              label: const Text('Get a key from the provider'),
+            ),
+            const SizedBox(height: 8),
             TextField(controller: model, maxLength: 120,
               decoration: const InputDecoration(labelText: 'Model ID',
                 prefixIcon: Icon(Icons.auto_awesome_outlined))),
