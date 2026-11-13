@@ -93,6 +93,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/") return staticFile(res, "index.html", "text/html; charset=utf-8");
     if (req.method === "GET" && path === "/screen-capture") return staticFile(res, "screen-capture.html", "text/html; charset=utf-8");
     if (req.method === "GET" && path === "/screen-capture.js") return staticFile(res, "screen-capture.js", "text/javascript; charset=utf-8");
+    if (req.method === "GET" && path === "/screen-capture.css") return staticFile(res, "screen-capture.css", "text/css; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.css") return staticFile(res, "dashboard.css", "text/css; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.js") return staticFile(res, "dashboard.js", "text/javascript; charset=utf-8");
     // Anonymous email/password endpoints have per-address throttling.
