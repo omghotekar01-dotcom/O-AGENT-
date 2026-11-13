@@ -37,7 +37,10 @@
   }
   async function tick() {
     if (!alive || busy || !lease || !media) return;
-    if (document.visibilityState !== "visible") return;
+    // Screen capture permission remains browser-controlled and visible to the
+    // laptop user. Continue publishing while the picker page is backgrounded,
+    // e.g. when the user switches to the VS Code window they chose to share.
+    // Browsers can still throttle background timers; no zero-latency guarantee.
     const track = media.getVideoTracks()[0];
     if (!track || track.readyState !== "live") {
       await cleanup();
@@ -85,7 +88,7 @@
       stop.disabled = false;
       status.textContent = "Sharing selected display";
       info("Sharing started. Stop immediately whenever you need.");
-      timer = setInterval(() => { void tick(); }, 1100);
+      timer = setInterval(() => { void tick(); }, 900);
       await tick();
     } catch (err) {
       info("Not sharing: " + err.message);
