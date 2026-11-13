@@ -9,6 +9,7 @@ import { ProjectHub } from "./project-hub.mjs";
 import { AccountHub } from "./account-hub.mjs";
 import { PublicAuth } from "./public-auth.mjs";
 import { ScreenShare } from "./screen-share.mjs";
+import { RemoteInput } from "./remote-input.mjs";
 import { PushHub } from "./push-hub.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
@@ -34,6 +35,7 @@ const projectHub = new ProjectHub(core, agentRuntime);
 const accountHub = new AccountHub(core);
 const publicAuth = new PublicAuth(core);
 const screenShare = new ScreenShare();
+const remoteInput = new RemoteInput({ captureFresh: () => screenShare.status().fresh });
 const pushHub = new PushHub(core, accountHub);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
@@ -140,8 +142,10 @@ const server = createServer(async (req, res) => {
         return send(res, 200, screenShare.status());
       if (req.method === "POST" && path === "/api/screen/start")
         return send(res, 201, screenShare.start());
-      if (req.method === "POST" && path === "/api/screen/stop")
+      if (req.method === "POST" && path === "/api/screen/stop") {
+        remoteInput.stop();
         return send(res, 200, screenShare.stop());
+      }
       if (req.method === "POST" && path === "/api/screen/frame") {
         const image = await readBinary(req, ScreenShare.maxFrameBytes);
         return send(res, 200, screenShare.publish(
@@ -389,6 +393,34 @@ const server = createServer(async (req, res) => {
       return send(res, 200, result);
     }
 
+    // Manual desktop input is separate from screen capture. The Windows
+    // helper must be launched visibly, supply its worker token, and display
+    // a short-lived code entered by the owner on the phone. Never persist input.
+    if (path.startsWith("/api/input/")) {
+      if (!owner) throw new DomainError(403, "Only the workspace owner may control the screen");
+      if (req.method === "GET" && path === "/api/input/status")
+        return send(res, 200, remoteInput.status());
+      if (req.method === "POST" && path === "/api/input/pair")
+        return send(res, 200, remoteInput.pair(await readJson(req, 256)));
+      if (req.method === "POST" && path === "/api/input/action")
+        return send(res, 200, remoteInput.action(await readJson(req, 2048)));
+      if (req.method === "POST" && path === "/api/input/stop")
+        return send(res, 200, remoteInput.stop());
+      throw new DomainError(404, "Unknown remote input endpoint");
+    }
+    if (path.startsWith("/api/workers/remote-input/")) {
+      const body = await readJson(req, 256);
+      const id = body.workerId;
+      const known = core.snapshot().workers.some(w => w.id === id && w.status === "online");
+      if (!known) throw new DomainError(409, "Enrolled Windows worker is not online");
+      if (req.method === "POST" && path === "/api/workers/remote-input/prepare")
+        return send(res, 200, remoteInput.prepare(id));
+      if (req.method === "POST" && path === "/api/workers/remote-input/next")
+        return send(res, 200, remoteInput.next(id));
+      if (req.method === "POST" && path === "/api/workers/remote-input/stop")
+        return send(res, 200, remoteInput.stop(id));
+      throw new DomainError(404, "Unknown Windows input-helper endpoint");
+    }
     if (req.method === "GET" && path === "/api/state") return send(res, 200, core.snapshot());
     if (req.method === "GET" && path === "/api/events") {
       const after = Number(url.searchParams.get("after") ?? 0);
