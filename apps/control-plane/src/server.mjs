@@ -142,6 +142,84 @@ const server = createServer(async (req, res) => {
       if (verifyPath && req.method === "POST") {
         return send(res, 200, await accountHub.verifyConnection(userId, verifyPath[1]));
       }
+      // Per-account Cursor Cloud Agents v1. These routes are deliberately
+      // inside the personal-account scope, never the owner machine/task scope.
+      if (path === "/api/account/cursor") {
+        if (req.method === "GET") return send(res, 200, accountHub.cursorStatus(userId));
+        if (req.method === "PUT") return send(res, 200,
+          accountHub.connectCursor(userId, await readJson(req, 4096)));
+        if (req.method === "DELETE") return send(res, 200, accountHub.disconnectCursor(userId));
+      }
+      if (req.method === "POST" && path === "/api/account/cursor/verify") {
+        return send(res, 200, await accountHub.verifyCursor(userId));
+      }
+      if (req.method === "GET" && path === "/api/account/cursor/agents") {
+        return send(res, 200, await accountHub.cursorAgents(userId));
+      }
+      const cursorAgentRoute = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})$/);
+      if (req.method === "GET" && cursorAgentRoute) {
+        return send(res, 200, await accountHub.cursorAgent(userId, cursorAgentRoute[1]));
+      }
+      const cursorRunsRoute = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})\/runs$/);
+      if (cursorRunsRoute && req.method === "GET") {
+        return send(res, 200, await accountHub.cursorRuns(userId, cursorRunsRoute[1]));
+      }
+      if (cursorRunsRoute && req.method === "POST") {
+        return send(res, 201, await accountHub.cursorFollowUp(userId,
+          cursorRunsRoute[1], await readJson(req, 8192)));
+      }
+      const cursorRunRoute = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})\/runs\/([A-Za-z0-9_-]{8,120})$/);
+      if (cursorRunRoute && req.method === "GET") {
+        return send(res, 200, await accountHub.cursorRun(userId,
+          cursorRunRoute[1], cursorRunRoute[2]));
+      }
+      const cursorStreamRoute = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})\/runs\/([A-Za-z0-9_-]{8,120})\/stream$/);
+      if (cursorStreamRoute && req.method === "GET") {
+        // Verify this mobile account owns a key before starting the response.
+        accountHub.cursorKey(userId);
+        const controller = new AbortController();
+        const disconnect = () => controller.abort();
+        res.on("close", disconnect);
+        res.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          "connection": "keep-alive",
+          "x-content-type-options": "nosniff",
+          "x-accel-buffering": "no",
+        });
+        res.write(": oagent-cursor-live\n\n");
+        try {
+          for await (const event of accountHub.cursorEvents(userId,
+            cursorStreamRoute[1], cursorStreamRoute[2], {
+              signal: controller.signal,
+              lastEventId: req.headers["last-event-id"] || null,
+            })) {
+            if (controller.signal.aborted) break;
+            // No model reasoning, raw tool arguments or provider secrets.
+            res.write("event: " + event.event + "\n" +
+              (event.id ? "id: " + event.id + "\n" : "") +
+              "data: " + JSON.stringify(event.data) + "\n\n");
+          }
+        } catch (error) {
+          if (!controller.signal.aborted && !res.destroyed) {
+            res.write("event: error\ndata: " + JSON.stringify({
+              message: error.status === 410
+                ? "Stream expired. Open the final run result."
+                : "Cursor live stream ended. Refresh the run status.",
+            }) + "\n\n");
+          }
+        } finally {
+          res.off("close", disconnect);
+          controller.abort();
+          if (!res.writableEnded && !res.destroyed) res.end();
+        }
+        return;
+      }
+      const cursorCancelRoute = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})\/runs\/([A-Za-z0-9_-]{8,120})\/cancel$/);
+      if (cursorCancelRoute && req.method === "POST") {
+        return send(res, 200, await accountHub.cursorCancel(userId,
+          cursorCancelRoute[1], cursorCancelRoute[2]));
+      }
       if (req.method === "GET" && path === "/api/account/github") {
         return send(res, 200, accountHub.githubStatus(userId));
       }

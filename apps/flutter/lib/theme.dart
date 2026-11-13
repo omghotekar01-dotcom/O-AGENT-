@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 
 class OTheme {
   static const purple = Color(0xFFB48CFF);
@@ -9,13 +10,13 @@ class OTheme {
 
   // O-AGENT Studio: quiet paper surfaces, editorial typography and measured
   // accent colors rather than neon gradients and generic dashboard tiles.
-  static const paper = Color(0xFFF8F7F3);
-  static const ink = Color(0xFF202322);
-  static const violet = Color(0xFF6256A6);
-  static const lavender = Color(0xFFE9E4FB);
+  static const paper = Color(0xFFF6F6F8);
+  static const ink = Color(0xFF1C1C21);
+  static const violet = Color(0xFF5850A9);
+  static const lavender = Color(0xFFEDEBFC);
   static const warm = Color(0xFFF0DDCF);
   static const sage = Color(0xFFDDE6D7);
-  static const hairline = Color(0xFFE7E5E0);
+  static const hairline = Color(0xFFE8E8EC);
 
   static ThemeData studio() {
     final colors = ColorScheme.fromSeed(
@@ -33,6 +34,24 @@ class OTheme {
       useMaterial3: true,
       colorScheme: colors,
       scaffoldBackgroundColor: paper,
+      // Native-feeling iOS navigation motion in the shared Flutter shell.
+      // Keep animation and text scaling owned by the platform for accessibility.
+      pageTransitionsTheme: const PageTransitionsTheme(builders: {
+        TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      }),
+      dialogTheme: DialogThemeData(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24)),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.white,
+        showDragHandle: true,
+      ),
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: paper, foregroundColor: ink,
         elevation: 0, scrolledUnderElevation: 0,

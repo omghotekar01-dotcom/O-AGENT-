@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { DomainError } from "./core.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
+import { CursorCloudClient } from "./cursor-cloud.mjs";
 import { MAX_ATTACHMENT_BYTES, validateFile, attachmentForModel } from "./attachments.mjs";
 
 const PROVIDERS = Object.freeze({
@@ -20,6 +21,8 @@ export class AccountHub {
     this.fetchImpl = fetchImpl;
     this.now = now;
     this.busy = new Set();
+    this.cursor = new CursorCloudClient({ fetchImpl });
+    this.cursorPending = new Set();
     core.data.accounts ??= { members: {}, invitations: {}, connections: {}, threads: {} };
     this.data = core.data.accounts;
     this.data.members ??= {};
@@ -28,6 +31,7 @@ export class AccountHub {
     this.data.threads ??= {};
     this.data.attachments ??= {};
     this.data.integrations ??= {};
+    this.data.cursorSubmissions ??= {};
     this.master = null;
     if (env.OAGENT_VAULT_KEY_BASE64) {
       const decoded = Buffer.from(env.OAGENT_VAULT_KEY_BASE64, "base64");
@@ -101,6 +105,7 @@ export class AccountHub {
     delete this.data.threads[memberId];
     delete this.data.attachments?.[memberId];
     delete this.data.integrations?.[memberId];
+    delete this.data.cursorSubmissions?.[memberId];
     this.commit("account.member.revoked", { memberId });
     return { revoked: true };
   }
@@ -243,6 +248,124 @@ export class AccountHub {
         error.status === 503 ? "rate_limited" : "failed", error.message);
       throw error;
     } finally { this.busy.delete(busyId); }
+  }
+
+  // Cursor Cloud is a *separate user-owned agent connection*, not an
+  // OpenAI/Claude/Gemini inference key. It is never shared between members,
+  // and it never grants access to the owner's local desktop worker.
+  cursorStatus(userId) {
+    const saved = this.data.integrations[userId]?.cursorCloud;
+    return {
+      connected: !!saved,
+      status: saved?.status ?? "not_configured",
+      identity: saved?.identity ?? null,
+      keyName: saved?.keyName ?? null,
+      verifiedAt: saved?.verifiedAt ?? null,
+      capability: saved?.status === "connected" ? "cloud_agent_api_v1" : "unverified",
+      // Never display a provider connection as a local desktop session.
+      supportsDesktopCapture: false, supportsHumanApprovals: false,
+    };
+  }
+  connectCursor(userId, { apiKey } = {}) {
+    if (!this.master) throw new DomainError(503, "Encrypted credential vault required");
+    if (typeof apiKey !== "string" || apiKey.length < 12 ||
+        apiKey.length > 1024 || /\s/.test(apiKey)) {
+      throw new DomainError(400, "Invalid Cursor API key");
+    }
+    this.data.integrations[userId] ??= {};
+    this.data.integrations[userId].cursorCloud = {
+      secret: this.encrypt(userId, "cursorCloud", apiKey),
+      status: "configured_unverified", identity: null,
+      keyName: null, verifiedAt: null,
+    };
+    delete this.data.cursorSubmissions?.[userId];
+    this.commit("account.cursor.configured", { userId });
+    return this.cursorStatus(userId);
+  }
+  disconnectCursor(userId) {
+    delete this.data.integrations[userId]?.cursorCloud;
+    delete this.data.cursorSubmissions?.[userId];
+    this.commit("account.cursor.disconnected", { userId });
+    return this.cursorStatus(userId);
+  }
+  cursorKey(userId) {
+    const saved = this.data.integrations[userId]?.cursorCloud;
+    if (!saved) throw new DomainError(409, "Connect your own Cursor Cloud API key first");
+    return this.decrypt(userId, "cursorCloud", saved.secret);
+  }
+  async verifyCursor(userId) {
+    const key = this.cursorKey(userId);
+    const identity = await this.cursor.verify(key);
+    const saved = this.data.integrations[userId]?.cursorCloud;
+    if (!saved) throw new DomainError(409, "Cursor account disconnected");
+    saved.status = "connected";
+    saved.keyName = identity.keyName;
+    saved.identity = identity.identity;
+    saved.verifiedAt = this.now();
+    this.commit("account.cursor.verified", { userId });
+    return this.cursorStatus(userId);
+  }
+  async cursorAgents(userId) {
+    return this.cursor.listAgents(this.cursorKey(userId));
+  }
+  async cursorAgent(userId, agentId) {
+    return this.cursor.getAgent(this.cursorKey(userId), agentId);
+  }
+  async cursorRuns(userId, agentId) {
+    return this.cursor.listRuns(this.cursorKey(userId), agentId);
+  }
+  async cursorRun(userId, agentId, runId) {
+    return this.cursor.getRun(this.cursorKey(userId), agentId, runId);
+  }
+  async cursorFollowUp(userId, agentId, body = {}) {
+    const key = this.cursorKey(userId);
+    const requestId = body.requestId;
+    if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{16,120}$/.test(requestId))
+      throw new DomainError(400, "A unique request ID is required");
+    // Use a bounded per-user persistent idempotency record: double taps and
+    // network retries must not silently create duplicate billable runs.
+    const normalized = {
+      agentId, prompt: body.prompt, delivery: body.delivery ?? null,
+    };
+    const digest = hash(JSON.stringify(normalized));
+    const saved = this.data.cursorSubmissions[userId] ??= {};
+    const old = saved[requestId];
+    if (old) {
+      if (old.digest !== digest) throw new DomainError(409, "Request ID reused for a different operation");
+      if (old.uncertain) throw new DomainError(409,
+        "Cursor request outcome is uncertain. Refresh the run list before another prompt.");
+      return old.response;
+    }
+    const inFlight = userId + ":cursor:" + agentId;
+    if (this.cursorPending.has(inFlight)) throw new DomainError(409, "Another Cursor action is in progress");
+    this.cursorPending.add(inFlight);
+    try {
+      const response = await this.cursor.followUp(key, agentId, normalized);
+      saved[requestId] = { digest, response, at: this.now() };
+      for (const [id] of Object.entries(saved).sort((a,b) => a[1].at - b[1].at)
+        .slice(0, Math.max(0, Object.keys(saved).length - 80))) delete saved[id];
+      this.commit("account.cursor.run.requested", {
+        userId, agentId, runId: response.run?.id ?? response.runId ?? null,
+      });
+      return response;
+    } catch (error) {
+      // A transport error may mean Cursor accepted the prompt before the
+      // response disappeared. Fail closed and don't automatically retry it.
+      if (error.status === 503 || error.status === 502) {
+        saved[requestId] = { digest, uncertain: true, at: this.now() };
+        this.commit("account.cursor.run.uncertain", { userId, agentId });
+      }
+      throw error;
+    } finally { this.cursorPending.delete(inFlight); }
+  }
+  cursorEvents(userId, agentId, runId, options = {}) {
+    return this.cursor.streamRun(this.cursorKey(userId), agentId, runId, options);
+  }
+  async cursorCancel(userId, agentId, runId) {
+    const key = this.cursorKey(userId);
+    const response = await this.cursor.cancelRun(key, agentId, runId);
+    this.commit("account.cursor.run.cancelled", { userId, agentId, runId });
+    return response;
   }
 
   githubStatus(userId) {

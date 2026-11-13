@@ -90,6 +90,12 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal(publicConnectionState.status, 200);
     assert.equal(publicConnectionState.payload.vaultReady, true);
     assert.equal(publicConnectionState.payload.providers.every(p => !p.connected), true);
+    // Cursor Cloud credentials are per account; they cannot unlock worker routes.
+    assert.equal((await call("/api/account/cursor", personalToken)).payload.connected, false);
+    assert.equal((await call("/api/account/cursor/agents", personalToken)).status, 409);
+    assert.equal((await call("/api/account/cursor/agents/bc-00000000/runs/run-00000000/stream", personalToken)).status, 409);
+    assert.equal((await call("/api/account/cursor/agents", workerToken)).status, 401);
+    assert.equal((await call("/api/account/cursor", apiToken)).payload.connected, false);
     const personalKey = "fake-provider-key-safe-for-tests-123456789";
     const connected = await call("/api/account/connections/gemini", personalToken, "PUT",
       { apiKey: personalKey, model: "gemini-2.5-flash" });
