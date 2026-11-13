@@ -177,8 +177,8 @@ class AgentApi {
     }
   }
 
-  /// View-only screen frames captured on the user's laptop with the native
-  /// browser display picker. No remote keyboard/mouse control is supported.
+  /// Consented browser screen previews. Input is a separately paired,
+  /// explicitly authorized Windows capability, never implied by viewing.
   Future<Map<String, dynamic>> screenStatus() => _request('/api/screen/status');
 
   Future<Map<String, dynamic>> stopScreenShare() =>
@@ -208,6 +208,18 @@ class AgentApi {
     }
     return chunks.takeBytes();
   }
+
+  /// Remote pointer/keyboard only after a user starts the visible Windows
+  /// helper and enters its pairing code on this owner device. The backend
+  /// does not persist keystrokes or any remote input.
+  Future<Map<String, dynamic>> remoteInputStatus() =>
+    _request('/api/input/status');
+  Future<Map<String, dynamic>> pairRemoteInput(String code) =>
+    _request('/api/input/pair', method: 'POST', body: {'code': code});
+  Future<Map<String, dynamic>> sendRemoteInput(Map<String, dynamic> action) =>
+    _request('/api/input/action', method: 'POST', body: action);
+  Future<Map<String, dynamic>> stopRemoteInput() =>
+    _request('/api/input/stop', method: 'POST');
 
   /// Owner-only remote session, run and approval status.
   Future<Map<String, dynamic>> remoteAgentOverview() => _request('/api/remote/overview');
