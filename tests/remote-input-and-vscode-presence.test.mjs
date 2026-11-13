@@ -56,6 +56,16 @@ test("input broker rejects malformed inputs, unpaired callers, expired lease and
   assert.throws(() => broker.pair({code:another.pairingCode}),/No pending/);
 });
 
+test("pairing locks out after repeated invalid codes", () => {
+  let now = 500000;
+  const broker = new RemoteInput({now:()=>now,captureFresh:()=>true});
+  const {pairingCode} = broker.prepare("my-laptop");
+  const invalid = pairingCode === "12345678" ? "87654321" : "12345678";
+  for(let i=0;i<5;i++) assert.throws(()=>broker.pair({code:invalid}),/Incorrect/);
+  assert.equal(broker.status().awaitingPairing,false);
+  assert.throws(()=>broker.pair({code:pairingCode}),/No pending/);
+});
+
 test("editor source control snapshots are ephemeral and contain only bounded filenames", () => {
   let now = 160000;
   const feed = new VscodePresence({now:()=>now});
