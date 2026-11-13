@@ -186,3 +186,65 @@ test("expired Cursor SSE forces a fresh run read, unknown IDs are rejected", asy
       { lastEventId: "bad\r\nInjected-Header:foo" })) void event;
   }, /Invalid Cursor event cursor/);
 });
+
+
+test("new Cloud Agent uses a safe repo, new branch, plan mode and stable create ID", async () => {
+  const calls = [];
+  const transport = async (url, opts) => {
+    calls.push({ url, opts });
+    assert.equal(url, "https://api.cursor.com/v1/agents");
+    assert.equal(opts.method, "POST");
+    const body = JSON.parse(opts.body);
+    assert.equal(body.repos[0].url, "https://github.com/example/verified-repo");
+    assert.equal(body.repos[0].startingRef, "main");
+    assert.equal(body.mode, "plan");
+    assert.equal(body.autoCreatePR, false);
+    assert.equal(body.workOnCurrentBranch, false);
+    assert.match(body.agentId, /^bc-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    return { ok: true, status: 201, text: async () => JSON.stringify({
+      agent: { id: body.agentId, name: "Investigate", status: "ACTIVE" },
+      run: { id: run, agentId: body.agentId, status: "CREATING" },
+    }) };
+  };
+  const { hub, alice } = fixture();
+  hub.connectCursor(alice, { apiKey: "key-alice-123456789" });
+  hub.cursor = new CursorCloudClient({ fetchImpl: transport });
+  const draft = {
+    requestId: "stable-create-request-1234",
+    repoUrl: "https://github.com/example/verified-repo",
+    startingRef: "main",
+    prompt: "Plan a safe test upgrade",
+  };
+  const first = await hub.cursorCreateAgent(alice, draft);
+  assert.equal(first.run.status, "CREATING");
+  assert.equal(calls.length, 1);
+  const replay = await hub.cursorCreateAgent(alice, draft);
+  assert.deepEqual(replay, first);
+  assert.equal(calls.length, 1, "Double tap must not create duplicate cloud agents");
+  await assert.rejects(hub.cursorCreateAgent(alice,
+    { ...draft, prompt: "Push destructive changes" }), /reused/);
+  await assert.rejects(hub.cursorCreateAgent(alice,
+    { ...draft, requestId: "bad-repository-request-1234",
+      repoUrl: "http://localhost:8080/internal" }), /HTTPS repository URL/);
+  assert.equal(calls.length, 1);
+});
+
+test("lost Cursor create response is not retried or reported as success", async () => {
+  const { hub, alice } = fixture();
+  hub.connectCursor(alice, { apiKey: "key-alice-123456789" });
+  let attempts = 0;
+  hub.cursor = new CursorCloudClient({ fetchImpl: async () => {
+    attempts++;
+    throw Error("Upstream reply lost");
+  } });
+  const params = {
+    requestId: "uncertain-create-request-12345",
+    prompt: "Investigate issue",
+    repoUrl: "https://github.com/org/repo",
+  };
+  await assert.rejects(hub.cursorCreateAgent(alice, params),
+    /outcome|network unavailable/i);
+  await assert.rejects(hub.cursorCreateAgent(alice, params),
+    /creation outcome uncertain/i);
+  assert.equal(attempts, 1, "Ambiguous provider create must not be retried");
+});

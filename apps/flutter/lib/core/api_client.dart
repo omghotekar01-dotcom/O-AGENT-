@@ -185,6 +185,26 @@ class AgentApi {
       (item) => Map<String, dynamic>.from(item as Map)).toList();
   }
 
+  /// Start a real provider-hosted coding agent. The caller has separately
+  /// reviewed the repo/branch, prompt and provider billing implications.
+  Future<Map<String, dynamic>> createCursorAgent({
+    required String prompt,
+    required String repoUrl,
+    String? startingRef,
+    String mode = 'plan',
+    bool autoCreatePR = false,
+    String? requestId,
+  }) {
+    final random = Random.secure();
+    final nonce = List<int>.generate(24, (_) => random.nextInt(256));
+    return _request('/api/account/cursor/agents', method: 'POST', body: {
+      'requestId': requestId ?? base64UrlEncode(nonce),
+      'prompt': prompt, 'repoUrl': repoUrl,
+      'mode': mode, 'autoCreatePR': autoCreatePR,
+      if (startingRef != null && startingRef.isNotEmpty) 'startingRef': startingRef,
+    });
+  }
+
   Future<Map<String, dynamic>> cursorAgent(String id) =>
     _request('/api/account/cursor/agents/' + Uri.encodeComponent(id));
 

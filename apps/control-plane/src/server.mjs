@@ -156,6 +156,10 @@ const server = createServer(async (req, res) => {
       if (req.method === "GET" && path === "/api/account/cursor/agents") {
         return send(res, 200, await accountHub.cursorAgents(userId));
       }
+      if (req.method === "POST" && path === "/api/account/cursor/agents") {
+        return send(res, 201, await accountHub.cursorCreateAgent(userId,
+          await readJson(req, 8192)));
+      }
       const cursorAgentRoute = path.match(/^\/api\/account\/cursor\/agents\/([A-Za-z0-9_-]{8,120})$/);
       if (req.method === "GET" && cursorAgentRoute) {
         return send(res, 200, await accountHub.cursorAgent(userId, cursorAgentRoute[1]));
