@@ -56,10 +56,10 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal(invited.status, 201);
     const oneUseCode = invited.payload.invitationCode;
     assert.match(oneUseCode, /^join_/);
-    const claimed = await call("/api/accounts/claim", "not-an-authenticated-member", "POST",
+    const joinedMember = await call("/api/accounts/claim", "not-an-authenticated-member", "POST",
       { invitationCode: oneUseCode, displayName: "Invited tester" });
-    assert.equal(claimed.status, 201);
-    const personalToken = claimed.payload.token;
+    assert.equal(joinedMember.status, 201);
+    const personalToken = joinedMember.payload.token;
     assert.equal((await call("/api/accounts/claim", "bad", "POST",
       { invitationCode: oneUseCode, displayName: "Replay" })).status, 401);
     assert.equal((await call("/api/me", personalToken)).payload.role, "member");
@@ -93,7 +93,7 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal(removeKey.status, 200);
     assert.equal(removeKey.payload.providers.find(p => p.id === "gemini").connected, false);
     assert.equal((await call("/api/accounts/members", apiToken)).payload.members.length, 1);
-    const revoked = await call("/api/accounts/members/" + claimed.payload.user.id, apiToken, "DELETE");
+    const revoked = await call("/api/accounts/members/" + joinedMember.payload.user.id, apiToken, "DELETE");
     assert.equal(revoked.status, 200);
     assert.equal((await call("/api/me", personalToken)).status, 401);
 
