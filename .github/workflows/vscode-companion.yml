@@ -24,6 +24,7 @@ jobs:
         with:
           node-version: "22"
       - run: node --check apps/vscode/src/extension.cjs
+      - run: node --check apps/vscode/src/connection.cjs
       - run: node --check apps/vscode/src/path-policy.cjs
       - run: node --test tests/vscode-companion.test.mjs
   package-vsix:
