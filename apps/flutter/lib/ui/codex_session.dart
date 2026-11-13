@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import '../theme.dart';
 import 'projects.dart';
+import 'codex_conversation.dart';
 
 /// Real, server-authoritative Codex session events and explicit decisions.
 /// This does not automate the ChatGPT consumer website.
@@ -66,17 +67,20 @@ class _CodexSessionState extends State<CodexSessionScreen> {
   Future<void> _submit() async {
     final value = composer.text.trim();
     if (busy || value.isEmpty) return;
-    final yes = await _confirm('Request a real Codex turn?',
-      'Folder: ' + widget.cwd +
-      '\n\nMode: ' + mode +
-      '\n\nA separate approval is required before execution.' +
-      '\n\nRead-only prevents file edits, but Codex may read other files accessible to your Windows account. Project edits permits writing inside the chosen workspace. Network access is disabled by the sandbox.' +
-      '\n\nExact prompt:\n' + value, 'Create approval request');
+    final yes = await _confirm('Send this instruction to Codex?',
+      'Project folder: ' + widget.cwd +
+      '\n\nPermission: ' + (mode == 'read_only'
+        ? 'Read-only (no file edits)' : 'Project edits (each requested change needs approval)') +
+      '\n\nThis confirms and sends your exact prompt in ONE step. '
+      'Codex may be unable to continue a conversation currently owned '
+      'by another application. You can still read saved messages.' +
+      '\n\nExact instruction:\n' + value, 'Approve and send');
     if (!yes || !mounted) return;
     setState(() => busy = true);
     try {
-      final created = await widget.controller.client!.requestCodexLocalTurn(
-        projectId: widget.projectId, sessionId: widget.sessionId, prompt: value, mode: mode);
+      final created = await widget.controller.client!.sendConfirmedCodexTurn(
+        projectId: widget.projectId, sessionId: widget.sessionId,
+        prompt: value, mode: mode);
       if (mounted) {
         composer.clear();
         setState(() { taskId = created['id'].toString(); task = created; error = null; });
@@ -136,7 +140,7 @@ class _CodexSessionState extends State<CodexSessionScreen> {
       .map((e) => e['text']?.toString() ?? '').join();
     final result = asMap(task?['result']);
     return Scaffold(
-      appBar: AppBar(title: const Text('Codex session'), actions: [
+      appBar: AppBar(title: const Text('Codex conversation'), actions: [
         IconButton(tooltip: 'Refresh actual Codex events', onPressed: _refresh,
           icon: const Icon(Icons.sync_rounded)),
       ]),
@@ -151,13 +155,13 @@ class _CodexSessionState extends State<CodexSessionScreen> {
               Text('REMOTE AGENT CONSOLE', style: TextStyle(fontSize: 10,
                 fontWeight: FontWeight.w800, letterSpacing: 1.5, color: OTheme.violet)),
               SizedBox(height: 3),
-              Text('Codex CLI / IDE', style: TextStyle(fontSize: 21,
+              Text('Your Codex project', style: TextStyle(fontSize: 21,
                 fontWeight: FontWeight.w700, color: OTheme.ink)),
             ])),
           ]),
           const SizedBox(height: 17),
           InfoPanel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('SELECTED SAVED SESSION', style: TextStyle(
+            const Text('REAL SAVED CONVERSATION', style: TextStyle(
               color: OTheme.violet, fontSize: 10, letterSpacing: 1,
               fontWeight: FontWeight.w700)),
             const SizedBox(height: 9),
@@ -174,7 +178,7 @@ class _CodexSessionState extends State<CodexSessionScreen> {
                 style: const TextStyle(fontSize: 11, color: Colors.grey))),
             ]),
             const SizedBox(height: 8),
-            Text('Session ID: ' + (widget.sessionId.length > 8
+            Text('Conversation reference: ' + (widget.sessionId.length > 8
               ? widget.sessionId.substring(0, 8) : widget.sessionId),
               style: const TextStyle(fontSize: 10, color: Colors.grey)),
           ])),
@@ -228,10 +232,16 @@ class _CodexSessionState extends State<CodexSessionScreen> {
               ])),
           ],
           const SizedBox(height: 22),
-          const Heading('Live activity timeline'),
+          CodexConversationPanel(
+            controller: widget.controller,
+            projectId: widget.projectId,
+            sessionId: widget.sessionId),
+          const SizedBox(height: 26),
+          const Heading('Work sent from your phone'),
           const SizedBox(height: 11),
           if (events.isEmpty)
-            const InfoPanel(child: Text('No actual Codex events yet. Request and approve a turn below.')),
+            const InfoPanel(child: Text('No O-AGENT-controlled turn has run for this conversation yet. '
+              'Saved messages can still be read above.')),
           if (agentText.trim().isNotEmpty)
             Padding(padding: const EdgeInsets.only(bottom: 11),
               child: InfoPanel(background: OTheme.lavender,
@@ -269,14 +279,15 @@ class _CodexSessionState extends State<CodexSessionScreen> {
                 const Row(children: [
                   Icon(Icons.error_outline_rounded, color: Color(0xFF9B4835), size: 19),
                   SizedBox(width: 7),
-                  Text('Provider error', style: TextStyle(
+                  Text('Why this instruction stopped', style: TextStyle(
                     fontWeight: FontWeight.w700, color: Color(0xFF9B4835))),
                 ]),
                 const SizedBox(height: 8),
                 SelectableText(task!['error'].toString(),
                   style: const TextStyle(fontSize: 12, height: 1.5)),
                 const SizedBox(height: 8),
-                const Text('A failed attempt remains in history. Retrying creates a NEW approval request.',
+                const Text('Saved conversation messages are still available above. '
+                   'A new prompt creates a separate attempt and requires your confirmation.',
                   style: TextStyle(fontSize: 11, color: Colors.grey)),
                 const SizedBox(height: 9),
                 OutlinedButton.icon(
@@ -295,7 +306,9 @@ class _CodexSessionState extends State<CodexSessionScreen> {
                 ),
               ])),
           const SizedBox(height: 18),
-          const Text('This connects to the official Codex app-server, not the consumer ChatGPT website or a separate running terminal window.',
+          const Text('O-AGENT can read saved Codex messages and run approved turns '
+              'when the conversation is available. It cannot take over '
+              'another running Codex app or a ChatGPT browser tab.',
             style: TextStyle(fontSize: 11, color: Colors.grey)),
         ])),
         Container(padding: const EdgeInsets.fromLTRB(15, 10, 15, 14),
@@ -312,13 +325,30 @@ class _CodexSessionState extends State<CodexSessionScreen> {
             const Text('Read-only blocks changes, not all reads outside this folder.',
               style: TextStyle(fontSize: 10, color: Colors.grey)),
             const SizedBox(height: 8),
+            Align(alignment: Alignment.centerLeft, child: Wrap(
+              spacing: 7, runSpacing: 5, children: [
+                ActionChip(label: const Text('Progress update'),
+                  onPressed: active || busy ? null : () => setState(() =>
+                    composer.text = 'Summarize what has been completed, '
+                      'what remains, and any blockers. Do not modify files.')),
+                ActionChip(label: const Text('What next?'),
+                  onPressed: active || busy ? null : () => setState(() =>
+                    composer.text = 'Review this project and suggest the '
+                      'next safest step. Wait for my instruction before editing.')),
+                ActionChip(label: const Text('Explain error'),
+                  onPressed: active || busy ? null : () => setState(() =>
+                    composer.text = 'Explain the most recent error in '
+                      'simple language and suggest a fix. Do not edit files.')),
+              ],
+            )),
+            const SizedBox(height: 7),
             Row(children: [
               Expanded(child: TextField(controller: composer, maxLength: 4000,
                 maxLines: 4, minLines: 1, enabled: !busy && !active,
-                decoration: const InputDecoration(hintText: 'Prompt this actual Codex session',
+                decoration: const InputDecoration(hintText: 'Tell Codex what to do next…',
                   counterText: ''))),
               const SizedBox(width: 7),
-              IconButton.filled(tooltip: 'Request real Codex turn',
+              IconButton.filled(tooltip: 'Review and send instruction',
                 onPressed: active || busy ? null : _submit,
                 icon: const Icon(Icons.arrow_upward)),
             ]),
