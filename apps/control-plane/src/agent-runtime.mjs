@@ -73,10 +73,11 @@ function openaiText(reply) {
 }
 
 export class AgentRuntime {
-  constructor(core, { env = process.env, fetchImpl = fetch } = {}) {
+  constructor(core, { env = process.env, fetchImpl = fetch, allowTools = true } = {}) {
     this.core = core;
     this.env = env;
     this.fetchImpl = fetchImpl;
+    this.allowTools = allowTools;
     this.busy = new Set();
     this.providerHealth = "unverified";
     this.lastVerifiedAt = null;
@@ -208,12 +209,15 @@ export class AgentRuntime {
     return answer;
   }
   async generateOpenAI(messages, agent) {
-    const tools = TOOL_DEFS.map(t => ({ type: "function", ...t, strict: true }));
+    const tools = this.allowTools ? TOOL_DEFS.map(t => ({ type: "function", ...t, strict: true })) : [];
     let input = messages.map(m => ({ role: m.role, content: m.content }));
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const result = await providerJson(this.fetchImpl, "https://api.openai.com/v1/responses",
         { authorization: "Bearer " + this.key },
-        { model: this.model, instructions: systemInstructions(agent), input, tools, parallel_tool_calls: false, store: false, max_output_tokens: 1800 });
+        { model: this.model, instructions: systemInstructions(agent) +
+            (this.allowTools ? "" : "\nYou have no machine or task tools in this personal chat."),
+          input, ...(this.allowTools ? { tools, parallel_tool_calls: false } : {}),
+          store: false, max_output_tokens: 1800 });
       const calls = (result.output ?? []).filter(x => x.type === "function_call");
       if (!calls.length) {
         const answer = openaiText(result).trim();
@@ -230,12 +234,15 @@ export class AgentRuntime {
     throw new DomainError(502, "AI tool loop did not finish");
   }
   async generateAnthropic(messages, agent) {
-    const tools = TOOL_DEFS.map(t => ({ name: t.name, description: t.description, input_schema: t.parameters }));
+    const tools = this.allowTools ? TOOL_DEFS.map(t => ({ name: t.name, description: t.description, input_schema: t.parameters })) : [];
     const history = messages.map(m => ({ role: m.role, content: m.content }));
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
       const result = await providerJson(this.fetchImpl, "https://api.anthropic.com/v1/messages",
         { "x-api-key": this.key, "anthropic-version": "2023-06-01" },
-        { model: this.model, max_tokens: 1800, system: systemInstructions(agent), messages: history, tools });
+        { model: this.model, max_tokens: 1800,
+          system: systemInstructions(agent) +
+            (this.allowTools ? "" : "\nYou have no machine or task tools in this personal chat."),
+          messages: history, ...(this.allowTools ? { tools } : {}) });
       const calls = (result.content ?? []).filter(x => x.type === "tool_use");
       if (!calls.length) {
         const answer = (result.content ?? []).filter(x => x.type === "text").map(x => x.text).join("\n").trim();
