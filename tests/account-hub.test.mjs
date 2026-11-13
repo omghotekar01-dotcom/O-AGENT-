@@ -79,7 +79,7 @@ test("Vault fails closed without master key, and old master cannot decrypt after
   assert.throws(() => newMaster.runtime(user.user.id, "gemini"), /could not be decrypted/);
 });
 
-test("Provider keys can be replaced, revoked and different providers coexist", () => {
+test("Provider keys can be replaced, revoked and different providers coexist", async () => {
   const { hub, core } = makeHub();
   const uid = "owner";
   hub.saveConnection(uid, "openai", { apiKey: "sk-initial-key-12345678", model: "gpt-5.6-luna" });
@@ -90,5 +90,5 @@ test("Provider keys can be replaced, revoked and different providers coexist", (
   hub.deleteConnection(uid, "openai");
   assert.equal(hub.listConnections(uid).providers.find(p => p.id === "openai").connected, false);
   assert.equal(hub.listConnections(uid).providers.find(p => p.id === "gemini").connected, true);
-  assert.throws(() => hub.send(uid, { provider: "openai", message: "Hi" }), /Connect your own provider/);
+  await assert.rejects(hub.send(uid, { provider: "openai", message: "Hi" }), /Connect your own provider/);
 });
