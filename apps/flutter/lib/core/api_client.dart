@@ -124,6 +124,18 @@ class AgentApi {
     await _request('/api/auth/logout', method: 'POST');
   }
 
+  Future<Map<String, dynamic>> pushDeviceStatus() =>
+    _request('/api/account/push');
+
+  Future<Map<String, dynamic>> enrollPushDevice({
+    required String token, required String platform, required String label,
+  }) => _request('/api/account/push',method:'POST',
+    body:{'token':token,'platform':platform,'label':label});
+
+  Future<Map<String, dynamic>> revokePushDevice(String id) =>
+    _request('/api/account/push/devices/' + Uri.encodeComponent(id),
+      method:'DELETE');
+
   Future<Map<String, dynamic>> accountInfo() => _request('/api/me');
 
   /// Owner-only: one-use invitation; never display operator tokens to members.
