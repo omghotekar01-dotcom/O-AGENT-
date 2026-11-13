@@ -1,6 +1,6 @@
 # Runs on Windows CI with Windows PowerShell 5.1.
 $ErrorActionPreference = 'Stop'
-foreach ($item in @('common.ps1', 'setup.ps1', 'start.ps1', 'stop.ps1', 'configure-projects.ps1', 'configure-ai.ps1', 'enable-remote.ps1', 'remote-control.ps1')) {
+foreach ($item in @('common.ps1', 'setup.ps1', 'start.ps1', 'stop.ps1', 'configure-projects.ps1', 'configure-ai.ps1', 'enable-remote.ps1', 'remote-control.ps1', 'install-vscode-companion.ps1')) {
     $path = Join-Path $PSScriptRoot $item
     $tokens = $null
     $errors = $null
