@@ -1,11 +1,21 @@
 # Runs on Windows CI with Windows PowerShell 5.1.
 $ErrorActionPreference = 'Stop'
-foreach ($item in @('common.ps1', 'setup.ps1', 'start.ps1', 'stop.ps1', 'configure-projects.ps1', 'configure-ai.ps1', 'enable-remote.ps1')) {
+foreach ($item in @('common.ps1', 'setup.ps1', 'start.ps1', 'stop.ps1', 'configure-projects.ps1', 'configure-ai.ps1', 'enable-remote.ps1', 'remote-control.ps1')) {
     $path = Join-Path $PSScriptRoot $item
     $tokens = $null
     $errors = $null
     $null = [Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors)
     if (@($errors).Count -gt 0) { throw "PowerShell parser rejected $($item): $($errors[0])" }
+}
+# Compile the Win32 input helper without injecting any mouse/keyboard
+# events. Native INPUT must be 40 bytes on Windows x64.
+$inputScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'remote-control.ps1') -Raw
+$pattern = "(?s)Add-Type -TypeDefinition @'\r?\n(.*?)\r?\n'@ -ErrorAction Stop"
+$match = [regex]::Match($inputScript, $pattern)
+if (-not $match.Success) { throw 'Could not locate Win32 helper type definition.' }
+Add-Type -TypeDefinition $match.Groups[1].Value -ErrorAction Stop
+if ([Environment]::Is64BitProcess -and [OAgentUserInput]::InputStructSize() -ne 40) {
+    throw 'Incorrect 64-bit Win32 INPUT marshaling size'
 }
 . "$PSScriptRoot\common.ps1"
 

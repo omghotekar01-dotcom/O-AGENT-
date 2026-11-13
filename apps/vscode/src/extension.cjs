@@ -1,6 +1,9 @@
 "use strict";
 const vscode = require("vscode");
 const { hostname } = require("node:os");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
+const execFileAsync = promisify(execFile);
 const { realpath, stat, readdir } = require("node:fs/promises");
 const { resolve, basename } = require("node:path");
 const { safeRelativePath, withinWorkspace } = require("./path-policy.cjs");
@@ -52,6 +55,49 @@ async function inventory() {
   }
   return {workspace:root,entries,source:"vscode_extension",capturedAt:new Date().toISOString()};
 }
+/** Only filenames and changed/dirty statuses are transmitted; never file text,
+ * diffs, VS Code chat, tabs, editor selections or authentication material.
+ */
+async function changedFiles() {
+  const root = await currentWorkspace();
+  const entries = new Map();
+  try {
+    const {stdout} = await execFileAsync("git",
+      ["-C", root, "status", "--porcelain=v1", "--untracked-files=normal"],
+      {timeout: 4500, maxBuffer: 30000, windowsHide: true});
+    for (const line of stdout.split(/\\r?\\n/).slice(0, 110)) {
+      if (line.length < 4) continue;
+      const code = line.slice(0, 2);
+      const file = line.slice(3).trim().slice(0, 300);
+      if (!file || file.includes("\\0") || /[\\r\\n]/.test(file)) continue;
+      const status = code === "??" ? "untracked" :
+        code.includes("U") ? "conflicted" :
+        code.includes("D") ? "deleted" :
+        code.includes("R") ? "renamed" :
+        code.includes("A") ? "added" : "modified";
+      entries.set(file, status);
+    }
+  } catch {
+    // Git isn't installed, repo has no Git root or status timed out.
+    // Dirty VS Code documents can still be reported independently.
+  }
+  for (const doc of vscode.workspace.textDocuments) {
+    if (!doc.isDirty || doc.uri.scheme !== "file" ||
+        !withinWorkspace(root, doc.uri.fsPath)) continue;
+    const relative = require("node:path").relative(root, doc.uri.fsPath);
+    if (relative && !relative.startsWith("..") && entries.size < 100)
+      entries.set(relative.slice(0, 300), "unsaved");
+  }
+  return {workspace: root,
+    changed: [...entries.entries()].slice(0, 100).map(([path, status]) =>
+      ({path, status}))};
+}
+
+async function publishChangedFiles() {
+  const snapshot = await changedFiles();
+  await api("/api/workers/" + workerId + "/vscode/snapshot", snapshot);
+}
+
 async function openFile(task) {
   const root = await currentWorkspace();
   const relative = task.parameters?.relativePath;
@@ -82,6 +128,7 @@ async function poll() {
   pending = true;
   try {
     await api("/api/workers/" + workerId + "/heartbeat");
+    await publishChangedFiles();
     const {task} = await api("/api/workers/" + workerId + "/next");
     if (task) {
       try {
@@ -100,6 +147,10 @@ async function poll() {
   } finally { pending = false; }
 }
 async function stop() {
+  if (running) {
+    try { await api("/api/workers/" + workerId + "/vscode/snapshot", {}, "DELETE"); }
+    catch { /* server expires data independently */ }
+  }
   running = false;
   if (timer) clearInterval(timer);
   timer = null;
@@ -114,9 +165,10 @@ async function start() {
   try {
     await settings();
     const confirm = await vscode.window.showInformationMessage(
-      "Enroll this VS Code workspace? O-AGENT may list top-level file names. "
-      + "Opening a file always requires approval on the phone and this IDE. "
-      + "No files are edited or transmitted by the extension.",
+      "Enroll this VS Code workspace? O-AGENT may send a short list of changed "
+      + "and unsaved file names (NEVER file contents) to your private owner backend "
+      + "while this companion is enabled. Opening a file still requires approval "
+      + "on the phone and in this IDE. No edits or Copilot chats are transmitted.",
       {modal:true}, "Enable", "Cancel");
     if (confirm !== "Enable") return;
     await api("/api/workers/register",{id:workerId,name:"VS Code " + hostname(),capabilities:caps});

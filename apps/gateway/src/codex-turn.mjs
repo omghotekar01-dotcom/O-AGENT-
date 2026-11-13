@@ -53,6 +53,7 @@ export async function runCodexTurn(task, {
       child = spawnImpl(bin, argv, { stdio: ["pipe", "pipe", "pipe"], cwd: root, env: childEnv, windowsHide: true });
     } catch { rejectPromise(new Error("Codex CLI cannot start its app-server")); return; }
     let finished = false, stage = 0, total = 0, textBuffer = "", turnId = null, lastText = "";
+    let providerFailure = null;
     let deltaBuffer = "", flushTimer = null;
     let deliveries = Promise.resolve(), deliveryError = null;
     const timeout = setTimeout(() => finish(new Error("Codex turn timed out")), timeoutMs);
@@ -198,14 +199,20 @@ export async function runCodexTurn(task, {
         const item = params.item ?? {};
         if (item.type === "agentMessage") {
           if (msg.method === "item/completed" && !lastText && item.text) appendDelta(item.text);
-        } else {
+        } else if (item.type !== "userMessage" && item.type !== "reasoning") {
           const kind = clean(item.type, 60) || "tool";
           const description = item.type === "commandExecution" ? clean(item.command, 700)
             : item.type === "fileChange" ? "File changes in the approved workspace" : kind;
           enqueue(msg.method === "item/started" ? "tool_started" : "tool_finished", description || kind);
         }
       } else if (msg.method === "error") {
-        enqueue("error", clean(params.error?.message, 500) || "Codex reported a model/tool error");
+        const rawError = clean(params.error?.message, 500) || "Codex reported a model/tool error";
+        // Preserve a truthful actionable cause without persisting arbitrary
+        // sensitive text that provider error messages may contain.
+        providerFailure = /usage limit|quota|rate limit/i.test(rawError)
+          ? "CODEX_USAGE_LIMIT: Codex account usage limit reached. Wait until your provider resets the allowance or use another authorized agent account."
+          : "CODEX_PROVIDER_FAILED: Codex reported a model/tool error. Inspect the live event for details.";
+        enqueue("error", rawError);
       } else if (msg.method === "turn/completed") {
         if (turnId && params.turn?.id && params.turn.id !== turnId) return;
         flush();
@@ -213,7 +220,8 @@ export async function runCodexTurn(task, {
         enqueue("turn_completed", providerStatus);
         finish(null, {
           provider: "codex_cli", threadId: sessionId, turnId,
-          providerStatus, output: lastText, completedAt: new Date().toISOString(),
+          providerStatus, output: lastText, providerFailure,
+          completedAt: new Date().toISOString(),
         });
       }
     }
