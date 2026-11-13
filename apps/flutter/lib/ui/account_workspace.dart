@@ -479,7 +479,7 @@ class _TabButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Expanded(child: InkWell(
+  Widget build(BuildContext context) => InkWell(
     borderRadius: BorderRadius.circular(13), onTap: onTap,
     child: Container(padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 7),
       decoration: BoxDecoration(
@@ -493,7 +493,7 @@ class _TabButton extends StatelessWidget {
           maxLines: 1, overflow: TextOverflow.ellipsis),
       ]),
     ),
-  ));
+  );
 }
 class _Panel extends StatelessWidget {
   const _Panel({required this.child, this.color = Colors.white});
