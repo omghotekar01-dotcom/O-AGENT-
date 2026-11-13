@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { resolve, dirname, sep } from "node:path";
 
 const RUN_TYPES = new Map([
   ["claude_agent_turn", { env: "OAGENT_ENABLE_CLAUDE_AGENT_SDK", pkg: "@anthropic-ai/claude-agent-sdk" }],
@@ -82,6 +82,34 @@ export async function runProviderTurn(task, {
   const actual = await realpathImpl(cwd);
   if (!permittedPath(actual, root) || resolve(actual).toLowerCase() !== resolve(cwd).toLowerCase())
     throw Error("Workspace must be an existing folder inside enrolled worker root");
+  // Resolve real existing paths and parents to prevent symlink escapes. The
+  // OS/container ACL remains the final security boundary for shell commands.
+  const safeFilePath = async (value, create = false) => {
+    if (typeof value !== "string" || !value || value.length > 600 ||
+        /[\x00-\x1f]/.test(value)) return false;
+    const requested = resolve(actual, value);
+    if (!permittedPath(requested, actual)) return false;
+    try {
+      const verified = await realpathImpl(requested);
+      return permittedPath(verified, actual);
+    } catch {
+      if (!create) return false;
+      try {
+        const verifiedParent = await realpathImpl(dirname(requested));
+        return permittedPath(verifiedParent, actual);
+      } catch { return false; }
+    }
+  };
+  const safeArgs = async (args, create = false) => {
+    if (!args || typeof args !== "object") return true;
+    for (const key of ["file_path","path","fileName","cwd","workingDirectory",
+      "directory","base_path"]) {
+      if (args[key] != null && !await safeFilePath(args[key],create)) return false;
+    }
+    if (typeof args.pattern === "string" &&
+        args.pattern.split(/[\\/]/).some(x => x === "..")) return false;
+    return true;
+  };
   const sdk = await importSdk(type.pkg).catch(() => {
     throw Error(type.pkg + " unavailable: install the official SDK on the enrolled machine");
   });
@@ -104,10 +132,9 @@ export async function runProviderTurn(task, {
     if (!WRITE_TOOLS.has(tool) && !["shell", "write"].includes(tool))
       return false; // No network, MCP, browser, external folders, unknown tools.
     const fields = input && typeof input === "object" ? input : {};
-    for (const key of ["file_path", "path", "fileName", "cwd", "workingDirectory"]) {
-      if (typeof fields[key] === "string" &&
-          !permittedPath(resolve(actual, fields[key]), actual)) return false;
-    }
+    if (["Bash","bash","shell"].includes(tool) &&
+        env.OAGENT_ALLOW_SHELL_TOOLS !== "1") return false;
+    if (!await safeArgs(fields,true)) return false;
     // Each request gets its own random ID, fresh expiry and exact decision.
     const decision = await askPermission({
       id: randomUUID(), kind,
@@ -128,18 +155,16 @@ export async function runProviderTurn(task, {
         options: {
           cwd: actual, ...(sessionId ? { resume: sessionId } : {}),
           permissionMode: "default",
-          // Restrict auto-approved tools to read-only operations.
-          allowedTools: [...READ_TOOLS].filter(n => /^[A-Z]/.test(n)),
+          // Never bypass the path-checking callback with a broad allowlist.
+          allowedTools: [],
           disallowedTools: mode === "read_only"
             ? ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
             : ["WebFetch", "WebSearch"],
           canUseTool: async (toolName, input) => {
             if (READ_TOOLS.has(toolName)) {
-              // SDK read operations remain within OS permissions. Tool-supplied
-              // path is checked when present, no mass permission granted.
-              const file = input?.file_path ?? input?.path;
-              if (typeof file === "string" &&
-                  !permittedPath(resolve(actual, file), actual))
+              // Resolve actual filesystem paths (not just their text),
+              // including symlinks, before allowing reads.
+              if (!await safeArgs(input))
                 return { behavior: "deny", message: "Outside enrolled workspace" };
               return { behavior: "allow", updatedInput: input };
             }
@@ -173,16 +198,29 @@ export async function runProviderTurn(task, {
         workingDirectory: actual, streaming: true,
         // managed policies are still enforced by Copilot's own runtime.
         hooks: {
-          onPreToolUse: async input => ({
-            permissionDecision: READ_TOOLS.has(input?.toolName)
-              ? "allow" : mode === "workspace_write" ? "ask" : "deny",
-          }),
+          onPreToolUse: async input => {
+            const tool = input?.toolName;
+            if (READ_TOOLS.has(tool)) {
+              const verified = await safeArgs(input.toolArgs);
+              return { permissionDecision: verified ? "allow" : "deny",
+                ...(!verified ? {permissionDecisionReason:"Outside enrolled workspace"} : {}) };
+            }
+            // Never delegate unknown external/MCP/browser tools to a generic
+            // "approve once" prompt. Only a bounded write can ask the owner.
+            if (mode !== "workspace_write" || !WRITE_TOOLS.has(tool) ||
+                (["shell","bash","Bash"].includes(tool) &&
+                  env.OAGENT_ALLOW_SHELL_TOOLS !== "1") ||
+                !await safeArgs(input?.toolArgs, true)) {
+              return { permissionDecision:"deny",
+                permissionDecisionReason:"O-AGENT does not permit this tool" };
+            }
+            return { permissionDecision:"ask" };
+          },
         },
         onPermissionRequest: async request => {
           if (request?.kind === "read") {
             const path = request.path;
-            if (typeof path !== "string" ||
-                permittedPath(resolve(actual, path), actual))
+            if (await safeFilePath(path))
               return { kind: "approve-once" };
             return { kind: "reject", feedback: "Outside enrolled workspace" };
           }
