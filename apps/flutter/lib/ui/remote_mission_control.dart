@@ -19,6 +19,7 @@ class RemoteMissionControlScreen extends StatefulWidget {
 class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
     with WidgetsBindingObserver {
   Timer? poller;
+  StreamSubscription<Map<String, dynamic>>? liveEvents;
   Map<String, dynamic>? data;
   String? error;
   bool loading = false;
@@ -27,18 +28,44 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _refresh();
-    poller = Timer.periodic(const Duration(seconds: 3), (_) => _refresh());
+    _watchEvents();
+    poller = Timer.periodic(const Duration(seconds: 12), (_) {
+      _refresh();
+      if (liveEvents == null) _watchEvents();
+    });
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refresh();
+    if (state == AppLifecycleState.resumed) {
+      _refresh();
+      if (liveEvents == null) _watchEvents();
+    }
   }
   @override
   void dispose() {
     poller?.cancel();
+    liveEvents?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+  void _watchEvents() {
+    final api = widget.controller.client;
+    if (api == null || liveEvents != null) return;
+    liveEvents = api.ownerEventStream().listen((event) {
+      if (!mounted || api != widget.controller.client) return;
+      final type = event['type']?.toString() ?? '';
+      if (type.startsWith('codex.') || type.startsWith('task.') ||
+          type.startsWith('provider.codex_local.') ||
+          type == 'machine.online') {
+        _refresh();
+      }
+    }, onError: (Object _) {
+      liveEvents = null; // Restore from the 12-second fallback refresh.
+    }, onDone: () {
+      liveEvents = null;
+    }, cancelOnError: true);
+  }
+
   Future<void> _refresh() async {
     if (!mounted || loading) return;
     final api = widget.controller.client;
@@ -150,7 +177,8 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
           const Text('See actual Codex CLI projects, running turns, output '
-            'and permission requests. Refreshes every 3 seconds while open. '
+            'and permission requests. Live authenticated event notifications '
+            'are supported, with a 12-second fallback refresh. '
             'No separate OpenAI API chatbot key is required for Codex CLI.',
             style: TextStyle(fontSize: 12, color: Colors.grey, height: 1.5)),
           if (data == null && loading) const Padding(

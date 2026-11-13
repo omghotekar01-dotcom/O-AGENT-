@@ -14,7 +14,7 @@ owned-session IDs, streamed output, scoped permissions and durable state.
   updates and pending per-action approval counts. No fake active IDE status.
 - Remote tab → Remote agent mission control shows status and lets the owner
   open supervised Codex sessions, review exact approval requests and prompt
-  a saved thread. Updates refresh every 3 seconds while open.
+  a saved thread. Changes arrive through the authenticated server-sent event stream, with a 12-second refresh fallback while open.
 - Existing official Codex app-server adapter resumes a real saved thread in a
   separate supervised process, not via keyboard injection into an already-open
   terminal. All prompts require owner approval; supported file/command
