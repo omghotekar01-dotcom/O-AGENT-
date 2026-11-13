@@ -1,3 +1,20 @@
+## v0.4.0 — Remote Codex mission-control staging build
+
+O-AGENT's primary owner workflow is **Remote → Remote agent mission control**,
+not a separate chatbot. With explicit local Codex CLI sync enabled on the
+Windows laptop, the Android owner can see real session metadata, submit an
+approval-gated turn through official Codex app-server, watch agent output,
+and review exact tool permission requests.
+
+See docs/REMOTE_MISSION_CONTROL.md for Windows opt-in, Tailscale setup,
+provider capability limits and honest test/production gates.
+
+**Not yet implemented:** live laptop/browser screen streaming, takeover of
+existing ChatGPT/Claude consumer website tabs, independent Claude Code/Copilot/
+Cursor/VS Code session adapters or true always-on cloud agent runtimes.
+Do not present these as connected without explicit real provider verification.
+Personal API-key chat remains separately available under My AI accounts.
+
 ## Mobile user accounts and low-cost batched APK builds
 
 The owner can now tap **Settings → My AI accounts & invitations** to connect individual **OpenAI, Claude or Gemini API keys inside the phone**, test a provider, keep separate personal chats, and invite someone with a short-lived one-time code. Invited members receive their own identity and never inherit machine, project, approval or worker access. Windows securely generates an AES-256-GCM vault key encrypted with DPAPI on first updated launch; secrets are not committed or bundled into the APK.
