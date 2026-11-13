@@ -429,6 +429,23 @@ class AgentApi {
     'mode': mode,
   }, idempotencyKey: createIdempotencyKey());
 
+  Future<Map<String, dynamic>> createSupervisedAgentTurn({
+    required String workerId, required String providerKind,
+    required String cwd, required String prompt,
+    required String mode, String? sessionId,
+  }) {
+    if (!const {'claude_agent_turn', 'copilot_sdk_turn'}.contains(providerKind)) {
+      throw const ApiException('Unknown agent bridge capability');
+    }
+    final random = Random.secure();
+    final key = base64UrlEncode(List<int>.generate(24, (_) => random.nextInt(256)));
+    return _request('/api/tasks', method: 'POST', idempotencyKey: key, body: {
+      'workerId': workerId, 'kind': providerKind, 'cwd': cwd,
+      'prompt': prompt, 'mode': mode,
+      if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId,
+    });
+  }
+
   Future<Map<String, dynamic>> taskDetail(String id) =>
       _request('/api/tasks/${Uri.encodeComponent(id)}');
 
