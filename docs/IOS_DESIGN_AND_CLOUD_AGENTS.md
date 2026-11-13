@@ -140,3 +140,15 @@ account, real prompt, remote approval/deny, reconnect and offline cases.
 **Native APK packaging only after these changes form one approved milestone.**
 Do not rebuild Android for ordinary code commits; guard with the existing
 mobile-release trigger.
+
+## Authenticated live Cursor Cloud run stream
+
+The v1 run-scoped stream API is relayed through each user's authenticated
+O-AGENT connection. In the mobile run list, active runs show Watch live,
+which streams actual assistant deltas, simple tool name/status updates and
+the final run result. The bridge explicitly strips provider thinking,
+interaction updates, raw tool arguments and tool results; this is not a
+screen-sharing facility or an unrestricted model reasoning transcript.
+Event IDs are forwarded for continuation. An expired stream falls back
+to the official final run status endpoint, and event feeds close when the
+phone leaves the page. Background notifications remain unimplemented.

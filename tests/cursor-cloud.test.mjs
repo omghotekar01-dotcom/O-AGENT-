@@ -142,3 +142,47 @@ test("provider failures expose safe codes and never echo upstream secret strings
   const agents = await wrong.listAgents("private-key-123456");
   assert.equal(agents.agents[0].url, null);
 });
+
+test("run SSE forwards assistant and tool status but drops thinking and tool args", async () => {
+  const emitted = [
+    'event: status\ndata: {"runId":"' + run + '","status":"RUNNING"}\n\n',
+    'id: 1713033005000-0\nevent: thinking\ndata: {"text":"secret internal reasoning"}\n\n',
+    'id: 1713033006000-0\nevent: assistant\ndata: {"text":"Real work in progress"}\n\n',
+    'id: 1713033007000-0\nevent: tool_call\ndata: {"name":"read_file","status":"completed","args":{"path":"/secret"},"result":{"content":"SENSITIVE"}}\n\n',
+    'id: 1713033008000-0\nevent: result\ndata: {"text":"Completed work","status":"FINISHED"}\n\n',
+    'id: 1713033009000-0\nevent: done\ndata: {}\n\n',
+  ].join("");
+  let capturedHeaders;
+  const client = new CursorCloudClient({ fetchImpl: async (url, opts) => {
+    assert.ok(url.endsWith("/runs/" + run + "/stream"));
+    capturedHeaders = opts.headers;
+    return { ok: true, status: 200,
+      body: new ReadableStream({ start(controller) {
+        const encoded = new TextEncoder().encode(emitted);
+        controller.enqueue(encoded.subarray(0, 41));
+        controller.enqueue(encoded.subarray(41));
+        controller.close();
+      } }) };
+  } });
+  const events = [];
+  for await (const item of client.streamRun("key-alice-123456789", agent, run,
+    { lastEventId: "1713033004000-0" })) events.push(item);
+  assert.deepEqual(events.map(e => e.event),
+    ["status", "assistant", "tool_call", "result", "done"]);
+  assert.equal(events[1].data.text, "Real work in progress");
+  assert.deepEqual(events[2].data, { name: "read_file", status: "completed" });
+  assert.equal(capturedHeaders["Last-Event-ID"], "1713033004000-0");
+  assert.doesNotMatch(JSON.stringify(events), /SENSITIVE|secret internal reasoning|\/secret/);
+});
+test("expired Cursor SSE forces a fresh run read, unknown IDs are rejected", async () => {
+  const client = new CursorCloudClient({ fetchImpl: async () =>
+    ({ ok: false, status: 410 }) });
+  const stream = client.streamRun("key-alice-123456789", agent, run);
+  await assert.rejects(async () => {
+    for await (const event of stream) void event;
+  }, /stream expired/);
+  await assert.rejects(async () => {
+    for await (const event of client.streamRun("key-alice-123456789", agent, run,
+      { lastEventId: "bad\r\nInjected-Header:foo" })) void event;
+  }, /Invalid Cursor event cursor/);
+});
