@@ -140,6 +140,16 @@ const server = createServer(async (req, res) => {
       if (verifyPath && req.method === "POST") {
         return send(res, 200, await accountHub.verifyConnection(userId, verifyPath[1]));
       }
+      if (req.method === "GET" && path === "/api/account/attachments") {
+        return send(res, 200, { attachments: accountHub.attachments(userId) });
+      }
+      if (req.method === "POST" && path === "/api/account/attachments") {
+        return send(res, 201, accountHub.saveAttachment(userId, await readJson(req, 2200000)));
+      }
+      const attachment = path.match(/^\/api\/account\/attachments\/([0-9a-f-]+)$/);
+      if (req.method === "DELETE" && attachment) {
+        return send(res, 200, accountHub.deleteAttachment(userId, attachment[1]));
+      }
       if (req.method === "GET" && path === "/api/account/threads") {
         return send(res, 200, { threads: accountHub.threads(userId) });
       }

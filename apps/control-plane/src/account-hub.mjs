@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { DomainError } from "./core.mjs";
 import { AgentRuntime } from "./agent-runtime.mjs";
+import { MAX_ATTACHMENT_BYTES, validateFile, attachmentForModel } from "./attachments.mjs";
 
 const PROVIDERS = Object.freeze({
   openai: { label: "OpenAI API", defaultModel: "gpt-5.6-luna", env: "OPENAI_API_KEY" },
@@ -25,6 +26,7 @@ export class AccountHub {
     this.data.invitations ??= {};
     this.data.connections ??= {};
     this.data.threads ??= {};
+    this.data.attachments ??= {};
     this.master = null;
     if (env.OAGENT_VAULT_KEY_BASE64) {
       const decoded = Buffer.from(env.OAGENT_VAULT_KEY_BASE64, "base64");
@@ -207,9 +209,10 @@ export class AccountHub {
     }
   }
 
-  async send(userId, { provider, message, threadId }) {
+  async send(userId, { provider, message, threadId, attachmentIds = [] }) {
     if (!PROVIDERS[provider]) throw new DomainError(400, "Choose a supported provider");
     if (!validLabel(message, 4000)) throw new DomainError(400, "Message must contain 1–4000 characters");
+    const attachments = this.resolveAttachments(userId, attachmentIds);
     const busyId = userId + ":" + (threadId ?? "new");
     if ([...this.busy].filter(key => key.startsWith(userId + ":")).length >= 2) {
       throw new DomainError(429, "Too many simultaneous personal AI requests");
@@ -222,7 +225,8 @@ export class AccountHub {
         throw new DomainError(409, "Conversation belongs to another provider");
       }
       // Personal BYOK chats have no machine-operation agent or tool privileges.
-      const result = await runtime.send({ agentId: "navigator", threadId, message });
+      const result = await runtime.send({ agentId: "navigator", threadId, message, attachments });
+      if (attachments.length) result.messages[result.messages.length - 2].attachments = attachments.map(a => ({ name: a.name, mimeType: a.mimeType }));
       result.provider ??= provider;
       this.commit("account.chat.saved", { userId, provider, threadId: result.id });
       this.recordHealth(userId, provider, "connected");
@@ -232,6 +236,45 @@ export class AccountHub {
         error.status === 503 ? "rate_limited" : "failed", error.message);
       throw error;
     } finally { this.busy.delete(busyId); }
+  }
+
+  attachments(userId) {
+    return Object.values(this.data.attachments[userId] ?? {}).map(({ id, name, mimeType, size, createdAt }) =>
+      ({ id, name, mimeType, size, createdAt })).sort((a, b) => b.createdAt - a.createdAt);
+  }
+  saveAttachment(userId, { name, mimeType, base64 }) {
+    const bytes = validateFile({ name, mimeType, base64 });
+    if (!this.vaultReady) throw new DomainError(503, "Secure vault unavailable on this backend");
+    const mine = this.data.attachments[userId] ??= {};
+    const files = Object.values(mine);
+    if (files.length >= 12 || files.reduce((sum, f) => sum + f.size, bytes.length) > 10 * MAX_ATTACHMENT_BYTES) {
+      throw new DomainError(409, "Attachment limit reached. Remove older files first.");
+    }
+    const id = randomUUID();
+    const record = { id, name, mimeType, size: bytes.length, createdAt: this.now(),
+      secret: this.encrypt(userId, "file:" + id, bytes.toString("base64")) };
+    mine[id] = record;
+    this.commit("account.attachment.saved", { userId, attachmentId: id });
+    const { secret, ...metadata } = record;
+    return metadata;
+  }
+  deleteAttachment(userId, id) {
+    const mine = this.data.attachments[userId];
+    if (!mine?.[id]) throw new DomainError(404, "Attachment unavailable");
+    delete mine[id];
+    this.commit("account.attachment.deleted", { userId, attachmentId: id });
+    return { removed: true };
+  }
+  resolveAttachments(userId, ids) {
+    if (!Array.isArray(ids) || ids.length > 3 || new Set(ids).size !== ids.length) {
+      throw new DomainError(400, "Choose up to three different attachments");
+    }
+    return ids.map(id => {
+      const file = this.data.attachments[userId]?.[id];
+      if (!file) throw new DomainError(404, "Attachment unavailable");
+      const binary = this.decrypt(userId, "file:" + id, file.secret);
+      return attachmentForModel(file, binary);
+    });
   }
 
   threads(userId) {
