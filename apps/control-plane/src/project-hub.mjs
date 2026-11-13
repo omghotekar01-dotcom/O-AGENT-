@@ -133,6 +133,7 @@ export class ProjectHub {
     const now = this.now();
     const machines = this.core.snapshot().workers.map(w => ({
       id: w.id, name: w.name, status: w.status, lastSeenAt: w.lastSeenAt,
+      capabilities: (w.capabilities ?? []).filter(x => typeof x === "string"),
     }));
     const sessions = Object.values(this.core.data.codexLocalProjects).flatMap(p => {
       const synced = now - p.syncedAt < 120000;
