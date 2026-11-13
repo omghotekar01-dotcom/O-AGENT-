@@ -9,6 +9,7 @@ import { ProjectHub } from "./project-hub.mjs";
 import { AccountHub } from "./account-hub.mjs";
 import { PublicAuth } from "./public-auth.mjs";
 import { ScreenShare } from "./screen-share.mjs";
+import { PushHub } from "./push-hub.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
 const workerToken = process.env.OAGENT_WORKER_TOKEN ?? "";
@@ -33,6 +34,7 @@ const projectHub = new ProjectHub(core, agentRuntime);
 const accountHub = new AccountHub(core);
 const publicAuth = new PublicAuth(core);
 const screenShare = new ScreenShare();
+const pushHub = new PushHub(core, accountHub);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
   res.writeHead(code, JSON_HEADERS);
@@ -176,7 +178,16 @@ const server = createServer(async (req, res) => {
       return send(res, 200, revoked);
     }
     if (!isWorkerRoute && path.startsWith("/api/account/")) {
-      if (req.method === "GET" && path === "/api/account/connections") {
+      if (path === "/api/account/push") {
+      if (req.method === "GET") return send(res, 200, pushHub.status(userId));
+      if (req.method === "POST") return send(res, 201,
+        pushHub.register(userId, await readJson(req, 8192)));
+    }
+    const pushDelete = path.match(/^\/api\/account\/push\/devices\/([0-9a-f-]{36})$/);
+    if (req.method === "DELETE" && pushDelete) {
+      return send(res, 200, pushHub.unregister(userId, pushDelete[1]));
+    }
+    if (req.method === "GET" && path === "/api/account/connections") {
         return send(res, 200, accountHub.listConnections(userId));
       }
       const connectionPath = path.match(/^\/api\/account\/connections\/(openai|anthropic|gemini)$/);
