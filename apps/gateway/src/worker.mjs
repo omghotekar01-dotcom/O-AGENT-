@@ -4,6 +4,7 @@ import { resolve, basename, join } from "node:path";
 import { readCodexCloudTasks, submitCodexCloudTask } from "./codex-cloud.mjs";
 import { readCodexLocalSessions } from "./codex-local.mjs";
 import { runCodexTurn } from "./codex-turn.mjs";
+import { runProviderTurn } from "./provider-turn.mjs";
 
 const endpoint = new URL(process.env.OAGENT_SERVER_URL || "http://127.0.0.1:8787");
 if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname))) {
@@ -46,6 +47,25 @@ async function execute(task) {
     if (!task.parameters || typeof task.parameters !== "object") throw new Error("Missing approved task parameters");
     // Only runs AFTER the operator has approved the exact immutable task.
     return submitCodexCloudTask(task.parameters.environmentId, task.parameters.prompt);
+  }
+  if (task.kind === "claude_agent_turn" || task.kind === "copilot_sdk_turn") {
+    return runProviderTurn(task, {
+      sendUpdate: event => api("/api/workers/" + id + "/tasks/" + task.id + "/update", event),
+      askPermission: async request => {
+        await api("/api/workers/" + id + "/tasks/" + task.id + "/approvals", request);
+        const expires = Date.now() + 180000;
+        while (Date.now() < expires) {
+          await sleep(1800);
+          try {
+            const result = await api("/api/workers/" + id + "/tasks/" +
+              task.id + "/approvals/" + request.id, {}, "GET");
+            if (result.state === "approved") return true;
+            if (result.state === "denied" || result.state === "expired") return false;
+          } catch { return false; }
+        }
+        return false;
+      },
+    });
   }
   if (task.kind === "codex_cli_turn") {
     if (process.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC !== "1") throw new Error("Codex CLI session control is disabled");
@@ -115,7 +135,7 @@ async function main() {
           void (async () => {
             try {
               const result = await execute(task);
-              if (task.kind === "codex_cli_turn" &&
+              if (["codex_cli_turn","claude_agent_turn","copilot_sdk_turn"].includes(task.kind) &&
                   result.providerStatus !== "completed") {
                 await api(`/api/workers/${id}/tasks/${task.id}/finish`,
                   { ok: false, error: "Codex turn ended with provider status: " + result.providerStatus });
