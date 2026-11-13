@@ -44,7 +44,7 @@ services:
     depends_on:
       https:
         condition: service_started
-    env_file: .env.cloud
+    env_file: .env.worker
     environment:
       OAGENT_WORKER_ID: cloud-worker-1
       OAGENT_SERVER_URL: https://${OAGENT_DOMAIN:?Set OAGENT_DOMAIN}
