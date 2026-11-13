@@ -8,6 +8,7 @@ import { AgentRuntime } from "./agent-runtime.mjs";
 import { ProjectHub } from "./project-hub.mjs";
 import { AccountHub } from "./account-hub.mjs";
 import { PublicAuth } from "./public-auth.mjs";
+import { ScreenShare } from "./screen-share.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
 const workerToken = process.env.OAGENT_WORKER_TOKEN ?? "";
@@ -31,6 +32,7 @@ const agentRuntime = new AgentRuntime(core);
 const projectHub = new ProjectHub(core, agentRuntime);
 const accountHub = new AccountHub(core);
 const publicAuth = new PublicAuth(core);
+const screenShare = new ScreenShare();
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
   res.writeHead(code, JSON_HEADERS);
@@ -63,6 +65,21 @@ function readJson(req, maxLength = 32768) {
     req.on("error", reject);
   });
 }
+function readBinary(req, maxBytes) {
+  return new Promise((resolveData, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", chunk => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new DomainError(413, "Screen frame too large"));
+        req.destroy();
+      } else chunks.push(chunk);
+    });
+    req.on("end", () => resolveData(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
 function staticFile(res, filename, type) {
   const bytes = readFileSync(join(publicDir, filename));
   res.writeHead(200, { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'" });
@@ -74,6 +91,8 @@ const server = createServer(async (req, res) => {
     const path = url.pathname;
     if (req.method === "GET" && path === "/health") return send(res, 200, { status: "ok", service: "oagent-control-plane" });
     if (req.method === "GET" && path === "/") return staticFile(res, "index.html", "text/html; charset=utf-8");
+    if (req.method === "GET" && path === "/screen-capture") return staticFile(res, "screen-capture.html", "text/html; charset=utf-8");
+    if (req.method === "GET" && path === "/screen-capture.js") return staticFile(res, "screen-capture.js", "text/javascript; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.css") return staticFile(res, "dashboard.css", "text/css; charset=utf-8");
     if (req.method === "GET" && path === "/dashboard.js") return staticFile(res, "dashboard.js", "text/javascript; charset=utf-8");
     // Anonymous email/password endpoints have per-address throttling.
@@ -110,6 +129,34 @@ const server = createServer(async (req, res) => {
       return send(res, 200, publicAuth.logout(authHeader.slice(7)));
     }
 
+    // View-only live preview is a separate owner-only capability. A random
+    // short-lived capture lease is additionally required to upload frames.
+    if (path.startsWith("/api/screen/")) {
+      if (!owner) throw new DomainError(403, "Only the owner can view or share a screen");
+      if (req.method === "GET" && path === "/api/screen/status")
+        return send(res, 200, screenShare.status());
+      if (req.method === "POST" && path === "/api/screen/start")
+        return send(res, 201, screenShare.start());
+      if (req.method === "POST" && path === "/api/screen/stop")
+        return send(res, 200, screenShare.stop());
+      if (req.method === "POST" && path === "/api/screen/frame") {
+        const image = await readBinary(req, ScreenShare.maxFrameBytes);
+        return send(res, 200, screenShare.publish(
+          req.headers["x-oagent-capture-token"], image));
+      }
+      if (req.method === "GET" && path === "/api/screen/frame") {
+        const image = screenShare.frame();
+        res.writeHead(200, {
+          "content-type": "image/jpeg",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "x-oagent-frame-sequence": String(image.sequence),
+        });
+        res.end(image.bytes);
+        return;
+      }
+      throw new DomainError(404, "Unknown screen-share endpoint");
+    }
     if (req.method === "GET" && path === "/api/me") {
       return send(res, 200, owner
         ? { id: "owner", displayName: "Workspace owner", role: "owner", vaultReady: accountHub.vaultReady }
