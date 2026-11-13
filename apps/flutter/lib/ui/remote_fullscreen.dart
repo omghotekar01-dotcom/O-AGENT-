@@ -70,7 +70,7 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
   }
 
   Future<void> _pair() async {
-    final code = TextEditingController();
+    String codeInput = '';
     final value = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -80,7 +80,7 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
           const Text('On your laptop, keep screen sharing active and double-click REMOTE-CONTROL.cmd. Type ENABLE in its visible window. Enter the 8-digit code it displays.',
             style: TextStyle(fontSize: 13, height: 1.5)),
           const SizedBox(height: 12),
-          TextField(controller: code, autofocus: true,
+          TextField(autofocus: true, onChanged: (value) => codeInput = value,
             keyboardType: TextInputType.number, maxLength: 8,
             decoration: const InputDecoration(labelText: '8-digit pairing code')),
           const SizedBox(height: 8),
@@ -90,12 +90,11 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, code.text.trim()),
+          FilledButton(onPressed: () => Navigator.pop(ctx, codeInput.trim()),
             child: const Text('Pair')),
         ],
       ),
     );
-    code.dispose();
     if (value == null || !mounted) return;
     try {
       await widget.controller.client?.pairRemoteInput(value);
