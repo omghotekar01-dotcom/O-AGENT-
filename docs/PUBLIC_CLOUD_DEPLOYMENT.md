@@ -45,3 +45,35 @@ agent UI screen sharing, arbitrary remote shell access or unapproved write actio
 - Model defaults were refreshed, but actual model access remains provider- and account-specific; use the in-app **Test** action after entering your key.
 
 This release is for private staging and app verification, not security-certified public SaaS hosting.
+
+
+## v0.3.0 Android test checklist
+
+After installing the debug APK from the single release workflow:
+
+1. Start the existing Windows O-AGENT backend with the updated code and vault enabled.
+2. Connect as the owner using the same existing private HTTPS backend URL and operator token.
+   Confirm Projects / agents / machine status and all existing task approvals still work.
+3. Open Settings → **My AI accounts & invitations**. Add or update each user's OpenAI,
+   Anthropic or Gemini API key and a supported model ID. Press **Test** to verify the
+   actual billable provider connection. Confirm the app shows the provider error
+   if the key or model access fails.
+4. In **Chat**, send a message, attach a small TXT, PDF, PNG/JPEG/WEBP or DOCX file;
+   confirm the response references only the selected files. Delete files from
+   **Account** after testing. Provider API request may incur usage charges.
+5. In **Connections**, link your personal read-only GitHub token; confirm verified
+   username and repository listing. Choose **Ask AI** on a repo with a README.
+   Disconnect GitHub and verify the user context disappears.
+6. Test a separate invited phone account and ensure it cannot access the owner's
+   machine/control project endpoints. Test revocation from the owner's Account tab.
+7. On a correctly deployed public HTTPS server, use **Public cloud account:
+   sign up / sign in** to create an account, receive email code, verify, sign
+   in, sign out, reset password, and confirm old sessions are revoked.
+   Without a deployed backend and email service the app deliberately returns
+   a setup error rather than creating fake accounts.
+
+**Debug APK note:** This is an installable staging build and not a Play Store
+release. Distribution signing/Play Store production credentials and device
+acceptance are not yet completed. Existing installed debug APKs might require
+uninstall/reinstall if their signing certificate changed; back up any local
+session information and backend settings first.

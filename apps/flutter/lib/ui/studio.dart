@@ -774,7 +774,7 @@ class _StudioConnectState extends State<StudioConnect> {
           const Text('Only real machines and real AI responses appear here. Connect to your own control plane to begin.',
             style: TextStyle(fontSize: 14, color: _muted, height: 1.5)),
           const SizedBox(height: 31),
-          const Text('Development connection', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const Text('Choose your workspace connection', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           const SizedBox(height: 11),
           Row(children: [
             Expanded(child: ChoiceChip(label: const Text('My owner workspace'),
@@ -857,7 +857,7 @@ class _StudioConnectState extends State<StudioConnect> {
           if (widget.controller.error != null) Padding(padding: const EdgeInsets.only(top: 12),
             child: Text(widget.controller.error!, style: const TextStyle(color: _alert))),
           const SizedBox(height: 25),
-          const _Note('Owners use their original operator token. Invited users enter a 15-minute one-time code from the owner and receive a separate personal token. API keys can then be added privately in the mobile Connections tab. Use trusted HTTPS remote access.'),
+          const _Note('Owners use their existing token; invited members use a one-time code. New public accounts require an HTTPS hosted backend with verified email configured. Everyone supplies their own AI keys in Connections. Computer controls stay owner-only.'),
         ],
       )),
     )))),
