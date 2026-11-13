@@ -342,21 +342,28 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                 subtitle: 'Browse real coding projects and saved conversations',
                 onTap: _openProjects, color: OVisual.mint),
               const SizedBox(height: 10),
-              OIconTile(icon: CupertinoIcons.globe,
-                title: 'AI apps & ChatGPT shortcuts',
-                subtitle: 'Open ChatGPT, Grok, Gemini and your saved links. Browser access only; not live session sync.',
-                onTap: _openAiApps, color: OVisual.primary),
-              const SizedBox(height: 10),
               OIconTile(icon: CupertinoIcons.desktopcomputer,
-                title: 'See my laptop',
-                subtitle: 'View a window you explicitly choose on your laptop. '
-                  'View only; no hidden capture.',
+                title: 'Live laptop view & trackpad',
+                subtitle: 'Fullscreen selected screen. Optional Windows pointer and '
+                  'keyboard control requires a visible helper and one-time pairing.',
                 onTap: _openScreen, color: OVisual.primary),
+              const SizedBox(height: 10),
+              OIconTile(icon: CupertinoIcons.square_stack_3d_up,
+                title: 'VS Code live file changes',
+                subtitle: 'Real Git changes and unsaved filenames from a '
+                  'trusted editor companion, not simulated code history.',
+                onTap: () => _openVsCode(), color: OVisual.mint),
+              const SizedBox(height: 10),
+              OIconTile(icon: CupertinoIcons.globe,
+                title: 'AI website bookmarks (not integrations)',
+                subtitle: 'Convenient browser links only. They do not sync '
+                  'ChatGPT, Grok, Claude or other existing chats.',
+                onTap: _openAiApps, color: OVisual.primary),
               ExpansionTile(
                 title: const Text('Connect more AI tools (optional)',
                   style: TextStyle(fontWeight: FontWeight.w700)),
-                subtitle: const Text('Cursor, Claude, Copilot and VS Code '
-                  'require separate authorized setup.',
+                subtitle: const Text('Cursor Cloud and official Claude/Copilot '
+                  'SDK runtimes require individual sign-in and enrollment.',
                   style: TextStyle(fontSize: 11)),
                 childrenPadding: const EdgeInsets.symmetric(
                   horizontal: 9, vertical: 8),
@@ -371,11 +378,6 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                     title: 'Claude & GitHub Copilot',
                     subtitle: 'Use a signed-in agent SDK on your laptop',
                     onTap: () => _openBridge(), color: OVisual.primary),
-                  const SizedBox(height: 8),
-                  OIconTile(icon: CupertinoIcons.square_stack_3d_up,
-                    title: 'VS Code companion',
-                    subtitle: 'Opt-in editor connection with local approval',
-                    onTap: () => _openVsCode(), color: OVisual.primary),
                 ],
               ),
               OSectionTitle('Laptop connection',
