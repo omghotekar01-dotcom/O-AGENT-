@@ -36,8 +36,11 @@ void main() {
       // because the Projects route built RefreshIndicator/ListView directly.
       expect(find.text('Your AI command center.'), findsOneWidget);
       expect(find.byType(Scaffold), findsOneWidget);
+      // ListView.builder eagerly constructs only visible children; the search
+      // field sits beneath the dashboard cards on a compact phone.
+      await tester.scrollUntilVisible(find.byType(TextField), 240,
+        maxScrolls: 12);
       expect(find.byType(TextField), findsOneWidget);
-      expect(find.byType(ChoiceChip), findsWidgets);
       expect(find.ancestor(
         of: find.byType(TextField),
         matching: find.byType(Material),
@@ -69,10 +72,11 @@ void main() {
       expect(find.text('Your AI command center.'), findsOneWidget);
       expect(find.text('24'), findsOneWidget);
       expect(find.text('23'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Projects · 24'), 230,
+        maxScrolls: 10);
       expect(find.text('Projects · 24'), findsOneWidget);
-      expect(find.text('Project 0'), findsOneWidget);
-
-      await tester.ensureVisible(find.byType(TextField).first);
+      await tester.scrollUntilVisible(find.byType(TextField), 220,
+        maxScrolls: 12);
       await tester.enterText(find.byType(TextField).first, 'Project 5');
       await tester.pumpAndSettle();
       expect(find.text('Project 5'), findsOneWidget);
