@@ -482,6 +482,16 @@ class AgentApi {
     'mode': mode,
   }, idempotencyKey: createIdempotencyKey());
 
+  /// User confirms one exact read/edit prompt; turn is queued in the same
+  /// authenticated request. Individual provider write approvals remain.
+  Future<Map<String,dynamic>> sendConfirmedCodexTurn({
+    required String projectId, required String sessionId,
+    required String prompt, required String mode,
+  }) => _request('/api/providers/codex/local/turns/confirm',
+    method:'POST',idempotencyKey:createIdempotencyKey(),
+    body:{'projectId':projectId,'sessionId':sessionId,'prompt':prompt,
+      'mode':mode,'consent':'authorize-exact-prompt'});
+
   Future<Map<String, dynamic>> createSupervisedAgentTurn({
     required String workerId, required String providerKind,
     required String cwd, required String prompt,

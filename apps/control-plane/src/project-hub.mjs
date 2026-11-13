@@ -372,6 +372,17 @@ export class ProjectHub {
     }, requestKey);
   }
 
+  confirmLocalCodexTurn(body, requestKey) {
+    // The owner already reviewed and accepted the exact immutable prompt in
+    // the phone confirmation dialog. This is a single, idempotent consent
+    // transaction; project-edit tool approvals remain individually required.
+    if (body?.consent !== "authorize-exact-prompt")
+      throw new DomainError(400, "You must explicitly confirm the exact Codex instruction");
+    const task = this.requestLocalCodexTurn(body, requestKey);
+    if (task.status === "waiting_for_approval") return this.core.decide(task.id, true);
+    return task; // Idempotent replay of an already approved or terminal task.
+  }
+
   requestCodexTask(body, requestKey) {
     if (this.env.OAGENT_ENABLE_CODEX_CLOUD_SYNC !== "1") {
       throw new DomainError(403, "Codex Cloud connector must be enabled explicitly");
