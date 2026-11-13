@@ -17,16 +17,21 @@ function cleanText(value, limit = LIMIT_PER_MESSAGE) {
 export function conversationMessages(thread) {
   const turns = Array.isArray(thread?.turns) ? thread.turns.slice(-MAX_TURNS) : [];
   const messages = [];
+  let clipped = Array.isArray(thread?.turns) && thread.turns.length > MAX_TURNS;
   for (const turn of turns) {
     if (!Array.isArray(turn?.items)) continue;
     for (const item of turn.items) {
       if (!item || typeof item !== "object") continue;
       if (item.type === "userMessage") {
         const parts = Array.isArray(item.content) ? item.content : [];
-        const text = cleanText(parts.filter(p => p?.type === "text" &&
-          typeof p.text === "string").map(p => p.text).join("\n"));
+        const raw = parts.filter(p => p?.type === "text" &&
+          typeof p.text === "string").map(p => p.text).join("\n");
+        if (raw.length > LIMIT_PER_MESSAGE) clipped = true;
+        const text = cleanText(raw);
         if (text.trim()) messages.push({ role:"user", text });
       } else if (item.type === "agentMessage" || item.type === "plan") {
+        if (typeof item.text === "string" &&
+            item.text.length > LIMIT_PER_MESSAGE) clipped = true;
         const text = cleanText(item.text);
         if (text.trim()) messages.push({ role:"assistant", text });
       }
@@ -39,14 +44,14 @@ export function conversationMessages(thread) {
   for (const message of messages.slice(-MAX_MESSAGES).reverse()) {
     const remaining = MAX_TEXT - used;
     if (remaining <= 0) break;
+    if (message.text.length > remaining) clipped = true;
     const text = message.text.slice(0, remaining);
     selected.push({role:message.role,text});
     used += text.length;
   }
   return {
     messages:selected.reverse(),
-    truncated: messages.length > selected.length ||
-      selected.some(x => x.text.length < 1) || turns.length >= MAX_TURNS,
+    truncated: clipped || messages.length > selected.length,
   };
 }
 
