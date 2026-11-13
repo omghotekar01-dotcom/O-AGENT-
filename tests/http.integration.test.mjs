@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,7 +24,7 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
   const port = await unusedPort();
   const directory = mkdtempSync(join(tmpdir(), "oagent-test-"));
   const child = spawn(process.execPath, [resolve("apps/control-plane/src/server.mjs")], {
-    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), OAGENT_API_TOKEN: apiToken, OAGENT_WORKER_TOKEN: workerToken, OAGENT_DATA_FILE: join(directory, "state.json"), OAGENT_GITHUB_REPOS: "", OAGENT_ENABLE_CODEX_CLOUD_SYNC: "1", OAGENT_ENABLE_CODEX_LOCAL_SYNC: "1" },
+    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port), OAGENT_API_TOKEN: apiToken, OAGENT_WORKER_TOKEN: workerToken, OAGENT_DATA_FILE: join(directory, "state.json"), OAGENT_VAULT_KEY_BASE64: randomBytes(32).toString("base64"), OAGENT_GITHUB_REPOS: "", OAGENT_ENABLE_CODEX_CLOUD_SYNC: "1", OAGENT_ENABLE_CODEX_LOCAL_SYNC: "1" },
     stdio: "ignore",
   });
   const url = `http://127.0.0.1:${port}`;
@@ -43,6 +44,59 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
       await new Promise(r => setTimeout(r, 100));
     }
     assert.equal(ready, true, "Control-plane HTTP server must start");
+    // Invitation-only members are separate identities. A member must never
+    // become an operator simply by connecting to the same host.
+    const whoOwner = await call("/api/me", apiToken);
+    assert.equal(whoOwner.payload.role, "owner");
+    assert.equal(whoOwner.payload.vaultReady, true);
+    assert.equal((await call("/api/accounts/invitations", workerToken, "POST",
+      { label: "Unauthorized request" })).status, 401);
+    const invited = await call("/api/accounts/invitations", apiToken, "POST",
+      { label: "Mobile tester" });
+    assert.equal(invited.status, 201);
+    const oneUseCode = invited.payload.invitationCode;
+    assert.match(oneUseCode, /^join_/);
+    const claimed = await call("/api/accounts/claim", "not-an-authenticated-member", "POST",
+      { invitationCode: oneUseCode, displayName: "Invited tester" });
+    assert.equal(claimed.status, 201);
+    const personalToken = claimed.payload.token;
+    assert.equal((await call("/api/accounts/claim", "bad", "POST",
+      { invitationCode: oneUseCode, displayName: "Replay" })).status, 401);
+    assert.equal((await call("/api/me", personalToken)).payload.role, "member");
+    assert.equal((await call("/api/state", personalToken)).payload.workers.length, 0);
+    assert.equal((await call("/api/projects", personalToken)).status, 403);
+    assert.equal((await call("/api/ai/threads", personalToken)).status, 403);
+    assert.equal((await call("/api/workers/register", personalToken, "POST",
+      { id: "bad-guest", name: "Impostor" })).status, 401);
+    assert.equal((await call("/api/tasks", personalToken, "POST",
+      { workerId: "ci-worker", kind: "system_info" })).status, 403);
+    assert.equal((await call("/api/accounts/invitations", personalToken, "POST",
+      { label: "Guest cannot invite" })).status, 403);
+    const publicConnectionState = await call("/api/account/connections", personalToken);
+    assert.equal(publicConnectionState.status, 200);
+    assert.equal(publicConnectionState.payload.vaultReady, true);
+    assert.equal(publicConnectionState.payload.providers.every(p => !p.connected), true);
+    const personalKey = "fake-provider-key-safe-for-tests-123456789";
+    const connected = await call("/api/account/connections/gemini", personalToken, "PUT",
+      { apiKey: personalKey, model: "gemini-2.5-flash" });
+    assert.equal(connected.status, 200);
+    assert.equal(connected.payload.providers.find(p => p.id === "gemini").connected, true);
+    assert.equal(JSON.stringify(connected.payload).includes(personalKey), false);
+    const ownerConnections = await call("/api/account/connections", apiToken);
+    assert.equal(ownerConnections.payload.providers.find(p => p.id === "gemini").connected, false);
+    const stateFile = await import("node:fs").then(fs =>
+      fs.readFileSync(join(directory, "state.json"), "utf8"));
+    assert.equal(stateFile.includes(personalKey), false);
+    assert.equal(stateFile.includes(personalToken), false);
+    assert.equal(stateFile.includes(oneUseCode), false);
+    const removeKey = await call("/api/account/connections/gemini", personalToken, "DELETE");
+    assert.equal(removeKey.status, 200);
+    assert.equal(removeKey.payload.providers.find(p => p.id === "gemini").connected, false);
+    assert.equal((await call("/api/accounts/members", apiToken)).payload.members.length, 1);
+    const revoked = await call("/api/accounts/members/" + claimed.payload.user.id, apiToken, "DELETE");
+    assert.equal(revoked.status, 200);
+    assert.equal((await call("/api/me", personalToken)).status, 401);
+
     assert.equal((await call("/api/state", "wrong")).status, 401);
     assert.equal((await call("/api/ai/status", "wrong")).status, 401);
     const providerStatus = await call("/api/ai/status", apiToken);
