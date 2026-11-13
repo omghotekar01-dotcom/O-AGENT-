@@ -9,11 +9,64 @@ $ErrorActionPreference = 'Stop'
 $config = Read-OAgentConfig
 $workerId = [string]$config.WorkerId
 $secret = Unlock-OAgentSecret $config.WorkerTokenEncrypted
+# Follow the actual port saved by O-AGENT.cmd, even when this companion
+# is launched in a NEW Explorer/PowerShell process without OAGENT_PORT.
 $port = 8787
+$running = Get-OAgentPidState
+if ($running -and ($running.PSObject.Properties.Name -contains 'Port') -and $running.Port) {
+    $port = [int]$running.Port
+}
 if ($env:OAGENT_PORT) { $port = [int]$env:OAGENT_PORT }
+if ($port -lt 1024 -or $port -gt 65535) { throw 'Invalid O-AGENT backend port.' }
 $origin = "http://127.0.0.1:$port"
 $headers = @{ Authorization = "Bearer $secret" }
 $secret = $null
+
+function Get-OAgentInputError([System.Management.Automation.ErrorRecord]$failure) {
+    # Prefer the backend's sanitized JSON error over PS 5.1's generic
+    # "remote server returned an error" status. Never print token/headers.
+    $details = $null
+    if ($failure.ErrorDetails) { $details = $failure.ErrorDetails.Message }
+    $webException = $failure.Exception
+    if (($webException -isnot [System.Net.WebException]) -and
+        ($webException.InnerException -is [System.Net.WebException])) {
+        $webException = $webException.InnerException
+    }
+    if (-not $details -and ($webException -is [System.Net.WebException]) -and
+        $webException.Response) {
+        try {
+            $stream = $webException.Response.GetResponseStream()
+            if ($stream) {
+                $reader = New-Object System.IO.StreamReader($stream)
+                try { $details = $reader.ReadToEnd() }
+                finally { $reader.Dispose() }
+            }
+        } catch { }
+    }
+    if ($details) {
+        try {
+            $json = $details | ConvertFrom-Json
+            if ($json -and ($json.PSObject.Properties.Name -contains 'error') -and $json.error) {
+                return ([string]$json.error).Substring(0, [Math]::Min(400, ([string]$json.error).Length))
+            }
+        } catch { }
+    }
+    if ($webException -is [System.Net.WebException] -and -not $webException.Response) {
+        return "Local backend not reachable at $origin. Start O-AGENT.cmd first."
+    }
+    return 'Local backend request failed; check the backend and sharing status.'
+}
+
+function Assert-OAgentBackendReady {
+    try { $health = Invoke-RestMethod -Uri "$origin/health" -Method Get -TimeoutSec 3 }
+    catch {
+        throw "O-AGENT backend is OFFLINE at $origin. Double-click O-AGENT.cmd and confirm ONLINE, then retry REMOTE-CONTROL.cmd. This is a local Windows connection; Tailscale is not required here."
+    }
+    if ($health.status -ne 'ok' -or $health.service -ne 'oagent-control-plane') {
+        throw "Port $port is not running the expected O-AGENT backend. Stop the conflicting service and restart O-AGENT.cmd."
+    }
+}
+
 
 Write-Host ''
 Write-Host 'O-AGENT — opt-in Windows remote pointer and keyboard' -ForegroundColor Cyan
@@ -105,11 +158,16 @@ public static class OAgentUserInput {
 
 function Send-OAgentInputRequest([string]$action, [hashtable]$data) {
     $data['workerId'] = $workerId
-    return Invoke-RestMethod -Method Post -Uri "$origin/api/workers/remote-input/$action" -Headers $headers -ContentType 'application/json' -Body ($data | ConvertTo-Json -Compress) -TimeoutSec 6
+    try {
+        return Invoke-RestMethod -Method Post -Uri "$origin/api/workers/remote-input/$action" -Headers $headers -ContentType 'application/json' -Body ($data | ConvertTo-Json -Compress) -TimeoutSec 6
+    } catch {
+        throw (Get-OAgentInputError $_)
+    }
 }
 
 $armed = $false
 try {
+    Assert-OAgentBackendReady
     $pair = Send-OAgentInputRequest 'prepare' @{}
     $armed = $true
     Write-Host ''
@@ -143,7 +201,8 @@ try {
     }
 } catch {
     Write-Host "Could not enable remote input: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host 'Make sure O-AGENT and the consented laptop screen share are running.'
+    Write-Host "Required: O-AGENT backend ONLINE at $origin; selected screen sharing active; same enrolled worker token." -ForegroundColor Yellow
+    Write-Host 'Screen preview must say Receiving images before you start this helper.' -ForegroundColor Yellow
     exit 1
 } finally {
     if ($armed) {

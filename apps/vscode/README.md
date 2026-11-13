@@ -5,7 +5,24 @@ This extension is **not** a VS Code chat takeover or remote desktop tool.
 
 ## Installation
 
-Download the \`o-agent-vscode-companion\` VSIX artifact from the consolidated
+**Do not double-click the `.vsix` file in Windows Explorer.** Windows
+may launch the *Visual Studio 2022/2026* VSIXInstaller, which rejects this
+**Visual Studio Code** extension with `NoApplicableSKUsException`.
+
+After downloading and extracting the `o-agent-vscode-companion-vsix` artifact:
+
+- Double-click `INSTALL-VSCODE-COMPANION.cmd` in your updated O-AGENT source
+  folder. The installer uses the VS Code `code.cmd` command and searches the
+  default extracted Downloads path.
+- Or open **Visual Studio Code** (blue icon), then **Extensions →
+  ... → Install from VSIX...** and choose the extracted `o-agent-vscode-companion.vsix`.
+- Or run:
+  `code --install-extension "%USERPROFILE%\\Downloads\\o-agent-vscode-companion-vsix\\o-agent-vscode-companion.vsix" --force`
+  in a CMD shell with VS Code's `code` command installed.
+
+Do not attempt installation into Visual Studio Community or Visual Studio Installer.
+
+Download the ``o-agent-vscode-companion\` VSIX artifact from the consolidated
 GitHub Actions release, then choose **Extensions → ... → Install from VSIX...**
 in VS Code. You may also package it from source with
 \`npx @vscode/vsce package --no-dependencies --skip-license --allow-missing-repository\`.
