@@ -25,10 +25,17 @@ $secret = $null
 function Get-OAgentInputError([System.Management.Automation.ErrorRecord]$failure) {
     # Prefer the backend's sanitized JSON error over PS 5.1's generic
     # "remote server returned an error" status. Never print token/headers.
-    $details = $failure.ErrorDetails.Message
-    if (-not $details -and $failure.Exception.Response) {
+    $details = $null
+    if ($failure.ErrorDetails) { $details = $failure.ErrorDetails.Message }
+    $webException = $failure.Exception
+    if (($webException -isnot [System.Net.WebException]) -and
+        ($webException.InnerException -is [System.Net.WebException])) {
+        $webException = $webException.InnerException
+    }
+    if (-not $details -and ($webException -is [System.Net.WebException]) -and
+        $webException.Response) {
         try {
-            $stream = $failure.Exception.Response.GetResponseStream()
+            $stream = $webException.Response.GetResponseStream()
             if ($stream) {
                 $reader = New-Object System.IO.StreamReader($stream)
                 try { $details = $reader.ReadToEnd() }
@@ -44,8 +51,7 @@ function Get-OAgentInputError([System.Management.Automation.ErrorRecord]$failure
             }
         } catch { }
     }
-    $web = $failure.Exception
-    if ($web -is [System.Net.WebException] -and -not $web.Response) {
+    if ($webException -is [System.Net.WebException] -and -not $webException.Response) {
         return "Local backend not reachable at $origin. Start O-AGENT.cmd first."
     }
     return 'Local backend request failed; check the backend and sharing status.'
