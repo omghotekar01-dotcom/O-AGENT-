@@ -9,6 +9,7 @@ import 'public_account.dart';
 import '../core/models.dart';
 import '../theme.dart';
 import 'remote_mission_control.dart';
+import 'free_ai_hub.dart';
 
 const _muted = Color(0xFF777A78);
 const _ok = Color(0xFF437963);
@@ -149,6 +150,9 @@ class _StudioShellState extends State<StudioShell> {
     );
     if (ok) setState(() => index = kind == 'workspace_inventory' ? 4 : 3);
   }
+
+  void _openAiApps() => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) => const FreeAiHubScreen()));
 
   void _settings() {
     showModalBottomSheet<void>(
@@ -439,7 +443,20 @@ class _StudioShellState extends State<StudioShell> {
             ? 'Ask ${activeAgent['name']} anything. It can also look up real machine and task state through approved tools.'
             : 'Your agent will be ready after you configure an API key on the backend.',
             style: const TextStyle(fontSize: 13, color: _muted, height: 1.5)),
-          const SizedBox(height: 22),
+          if (!aiVerified) Padding(
+            padding: const EdgeInsets.only(top: 15),
+            child: Text(aiReady
+              ? 'Provider not verified: a saved API key does not mean OpenAI accepted it. A ChatGPT subscription is separate from API billing.'
+              : 'You can still use official free-tier AI web apps without configuring an API key here.',
+              style: const TextStyle(color: _alert, fontSize: 12, height: 1.4)),
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: _openAiApps,
+            icon: const Icon(Icons.public),
+            label: const Text('Explore free-tier AI web apps'),
+          ),
+          const SizedBox(height: 18),
           for (final prompt in [
             'Which of my laptops are online?',
             'Check recent tasks and tell me what happened.',
