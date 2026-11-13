@@ -73,7 +73,7 @@ test("verified Cloud Agent v1 client uses fixed Cursor origin, safe output and r
   assert.equal((await client.cancelRun("key-alice-123456789", agent, run)).cancelled, true);
   assert.equal(calls.length, 8);
   assert.ok(calls.every(c => c.opts.headers.Authorization === "Bearer key-alice-123456789"));
-  assert.throws(() => client.getRun("key-alice-123456789", "../../secret", run),
+  await assert.rejects(client.getRun("key-alice-123456789", "../../secret", run),
     /Invalid agent ID/);
   await assert.rejects(client.followUp("key-alice-123456789", agent,
     { prompt: "hi", delivery: "force" }), /Invalid delivery/);

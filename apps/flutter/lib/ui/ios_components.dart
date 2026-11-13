@@ -92,7 +92,7 @@ class OSectionTitle extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(2, 26, 2, 11),
     child: Row(children: [
       Expanded(child: Text(title, style: TextStyle(
-        fontSize: 19, fontWeight: FontWeight.w750,
+        fontSize: 19, fontWeight: FontWeight.w700,
         letterSpacing: -0.35, color: OVisual.label(context)))),
       if (action != null) TextButton(onPressed: onAction,
         child: Text(action!, style: const TextStyle(fontSize: 13))),

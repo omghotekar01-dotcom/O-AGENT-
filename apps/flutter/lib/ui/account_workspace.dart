@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/controller.dart';
 import '../core/api_client.dart';
 import '../theme.dart';
+import 'cursor_cloud.dart';
+import 'ios_components.dart';
 
 /// Personal account workspace. Every operation is authenticated and scoped to
 /// this invited account. No member ever receives the owner's machine controls.
@@ -501,6 +503,15 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
                 fontSize: 11, color: Color(0xFF9B4835))),
           ])),
         ),
+      const OSectionTitle('Cloud coding agents'),
+      OIconTile(
+        icon: Icons.cloud_circle_outlined,
+        title: 'Cursor Cloud Agents',
+        subtitle: 'Use your own encrypted Cursor API key to view existing '
+          'cloud agents, send follow-ups, steer and cancel real runs.',
+        onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+          builder: (_) => CursorCloudScreen(controller: widget.controller))),
+      ),
       const SizedBox(height: 20),
       const Text('GITHUB CODING CONTEXT', style: TextStyle(fontSize: 10,
         color: OTheme.violet, fontWeight: FontWeight.w800, letterSpacing: 1.4)),
