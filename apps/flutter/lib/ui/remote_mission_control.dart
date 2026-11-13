@@ -320,7 +320,15 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                   title: 'No conversations found yet',
                   message: 'Sign in to Codex on your laptop, create a '
                     'conversation, and enable local sync in CONFIGURE-PROJECTS.cmd.'),
-              for (final session in sessions) _sessionCard(session),
+              for (final session in sessions.take(4)) _sessionCard(session),
+              if (sessions.length > 4) Padding(
+                padding: const EdgeInsets.only(top: 5, bottom: 8),
+                child: TextButton.icon(
+                  onPressed: _openProjects,
+                  icon: const Icon(CupertinoIcons.square_stack, size: 17),
+                  label: Text('Browse all ${sessions.length} conversations'),
+                )),
+
               const OSectionTitle('Start here'),
               OIconTile(icon: CupertinoIcons.folder_fill,
                 title: 'My projects',
