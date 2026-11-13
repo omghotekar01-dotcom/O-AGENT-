@@ -148,7 +148,6 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
                 const Text('Showing 50 changed paths. Open VS Code for more.',
                   style:TextStyle(fontSize:11)),
             ]))),
-          ),
           const OSectionTitle('Remote file navigation'),
           if(taskId==null)OSurface(child:Column(
             crossAxisAlignment:CrossAxisAlignment.start,children:[
