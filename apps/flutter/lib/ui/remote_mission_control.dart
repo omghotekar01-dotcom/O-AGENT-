@@ -224,11 +224,14 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   Widget _sessionCard(Map<String, dynamic> session) {
     final ready = session['syncFresh'] == true &&
       session['workerOnline'] == true;
+    final project = session['projectTitle']?.toString() ?? 'Codex project';
+    final preview = (session['title']?.toString() ?? '').trim();
+    final projectLabel = project.isNotEmpty ? project : 'Codex project';
     return Padding(padding: const EdgeInsets.only(bottom: 10),
       child: OSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Text(session['title']?.toString() ?? 'Saved Codex session',
+            Expanded(child: Text(projectLabel,
               maxLines: 2, overflow: TextOverflow.ellipsis,
               style: TextStyle(color: OVisual.label(context),
                 fontWeight: FontWeight.w700, fontSize: 15))),
@@ -236,10 +239,11 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
               label: ready ? 'Available' : 'Unavailable'),
           ]),
           const SizedBox(height: 6),
-          Text(session['cwd']?.toString() ?? '',
+          Text(preview.isEmpty ? 'Saved Codex conversation'
+            : 'Last conversation: ' + preview,
             maxLines: 2, overflow: TextOverflow.ellipsis,
             style: TextStyle(color: OVisual.muted(context),
-              fontSize: 11, height: 1.45)),
+              fontSize: 12, height: 1.45)),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity,
             child: FilledButton.tonalIcon(
