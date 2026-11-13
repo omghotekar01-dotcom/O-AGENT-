@@ -72,6 +72,13 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal((await call("/api/me", personalToken)).payload.role, "member");
     assert.equal((await call("/api/state", personalToken)).payload.workers.length, 0);
     assert.equal((await call("/api/projects", personalToken)).status, 403);
+    // Remote coding-agent sessions and approvals are strictly owner-only.
+    assert.equal((await call("/api/remote/overview", personalToken)).status, 403);
+    const remote = await call("/api/remote/overview", apiToken);
+    assert.equal(remote.status, 200);
+    assert.equal(remote.payload.screenStreaming.supported, false);
+    assert.equal(remote.payload.activeRuns, 0);
+    assert.ok(Array.isArray(remote.payload.sources));
     assert.equal((await call("/api/ai/threads", personalToken)).status, 403);
     assert.equal((await call("/api/workers/register", personalToken, "POST",
       { id: "bad-guest", name: "Impostor" })).status, 401);

@@ -147,3 +147,44 @@ test("the official Codex exec command is fixed, and user prompt is never compose
   assert.equal(result.state, "submitted_to_provider");
   assert.match(result.message, /Task URL/);
 });
+
+test("owner remote overview reflects actual sessions, active task and approvals without inventing browser states", () => {
+  let time = 1794500000000;
+  const core = new ControlPlane({}, () => {}, () => time);
+  core.registerWorker({ id: "my-laptop", name: "Actual laptop" });
+  const hub = new ProjectHub(core, stubAi(), {
+    env: { OAGENT_ENABLE_CODEX_LOCAL_SYNC: "1" }, now: () => time,
+  });
+  const sessionId = "22222222-3333-4444-8555-666666666666";
+  hub.publishCodexLocal("my-laptop", { sessions: [
+    { id: sessionId, cwd: "C:\\Projects\\Alpha", title: "A real saved session",
+      state: "notLoaded", updatedAt: "2026-11-13T05:00:00Z" },
+  ] });
+  const overview = hub.remoteOverview();
+  assert.equal(overview.sessions.length, 1);
+  assert.equal(overview.sessions[0].observedState, "saved_session");
+  assert.equal(overview.sessions[0].lastKnownState, "notLoaded");
+  assert.equal(overview.screenStreaming.supported, false);
+  assert.equal(overview.sources.find(s => s.id === "copilot_sdk").status, "not_implemented");
+  const projectId = overview.sessions[0].projectId;
+  const task = hub.requestLocalCodexTurn({
+    projectId, sessionId, prompt: "Run unit tests after review", mode: "workspace_write",
+  }, "owner-remote-overview-test-001");
+  assert.equal(hub.remoteOverview().pendingApprovals, 1);
+  core.decide(task.id, true);
+  core.claim("my-laptop");
+  core.appendTaskUpdate("my-laptop", task.id, { type: "agent_delta", text: "Actual progress" });
+  core.requestCodexApproval("my-laptop", task.id, {
+    id: "approval-123456789", kind: "command", description: "Run npm test",
+  });
+  const active = hub.remoteOverview();
+  assert.equal(active.activeRuns, 1);
+  assert.equal(active.pendingApprovals, 1);
+  assert.equal(active.runs[0].pendingApprovals[0].description, "Run npm test");
+  assert.equal(active.runs[0].latestEvent.text, "Actual progress");
+  assert.equal(active.runs[0].canOpenSession, true);
+  assert.equal(active.sessions[0].workerOnline, true);
+  time += 121000;
+  assert.equal(hub.remoteOverview().sessions[0].observedState, "stale_session");
+  assert.equal(new ControlPlane(core.data).data.codexLocalProjects[projectId].cwd, "C:\\Projects\\Alpha");
+});

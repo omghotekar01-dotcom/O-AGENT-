@@ -189,6 +189,11 @@ const server = createServer(async (req, res) => {
       throw new DomainError(403, "This account is not authorized to operate the owner's workspace");
     }
 
+    // A member's private AI token never unlocks owner remote-agent activity.
+    if (req.method === "GET" && path === "/api/remote/overview") {
+      return send(res, 200, projectHub.remoteOverview());
+    }
+
     // Unified, capability-aware project registry: no simulated external work.
     if (req.method === "GET" && path === "/api/projects") {
       return send(res, 200, await projectHub.list());
