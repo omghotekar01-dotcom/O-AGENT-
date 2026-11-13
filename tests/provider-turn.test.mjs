@@ -127,7 +127,7 @@ test("Provider worker must advertise its explicit SDK capability before task can
   });
   assert.throws(() => c.createTask(request("copilot_sdk_turn"),"unique-key-copilot1234"),
     /not enrolled/);
-  const ok = c.createTask(request("claude_agent_turn"),"unique-key-claude12345");
+  const ok = c.createTask({ ...request("claude_agent_turn"), mode:"workspace_write" },"unique-key-claude12345");
   assert.equal(ok.status,"waiting_for_approval");
   assert.equal(c.decide(ok.id,true).status,"queued");
   const work = c.claim("worker-123456");
