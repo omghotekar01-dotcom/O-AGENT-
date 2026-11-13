@@ -221,6 +221,10 @@ class AgentApi {
   Future<Map<String, dynamic>> stopRemoteInput() =>
     _request('/api/input/stop', method: 'POST');
 
+  /// Names and statuses only from explicitly enrolled VS Code windows.
+  Future<Map<String, dynamic>> vscodeWorkspaces() =>
+    _request('/api/vscode/workspaces');
+
   /// Owner-only remote session, run and approval status.
   Future<Map<String, dynamic>> remoteAgentOverview() => _request('/api/remote/overview');
 
