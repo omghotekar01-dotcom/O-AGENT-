@@ -278,7 +278,7 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
         allowedExtensions: ['txt', 'md', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx']);
       if (file == null) return;
       final length = file.lengthSync() ?? await file.length();
-      if (length < 1 || length > 1500000) {
+      if (length == null || length < 1 || length > 1500000) {
         throw const ApiException('Choose a file of 1.5 MB or less.');
       }
       final bytes = await file.readAsBytes();

@@ -12,6 +12,7 @@ void main() {
     expect(find.text('Sign in'), findsWidgets);
     expect(find.text('Verify email'), findsWidgets);
     expect(find.text('Forgot password'), findsWidgets);
+    expect(find.text('Resend code'), findsWidgets);
     await tester.tap(find.widgetWithText(ChoiceChip, 'Create account'));
     await tester.pump();
     expect(find.text('Display name'), findsOneWidget);
