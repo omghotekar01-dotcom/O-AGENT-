@@ -667,9 +667,20 @@ class _CursorAgentDetailState extends State<CursorAgentDetailScreen> {
                   'artifacts, they appear here. This is a saved artifact '
                   'viewer, not live computer screen sharing.'),
             for (final item in artifacts)
-              Padding(padding: const EdgeInsets.only(bottom: 10),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
                 child: OIconTile(
-                  icon: RegExp(r'\.(png|jpg|jpeg|webp|gif)
+                  icon: _value(item['path']).toLowerCase().endsWith('.png') ||
+                        _value(item['path']).toLowerCase().endsWith('.jpg') ||
+                        _value(item['path']).toLowerCase().endsWith('.webp')
+                    ? CupertinoIcons.photo : CupertinoIcons.doc,
+                  title: _value(item['path']).split('/').last,
+                  subtitle: _value(item['sizeBytes'], 'Unknown size') +
+                    ' bytes · ' + _value(item['updatedAt'], 'Saved file'),
+                  onTap: busy ? null : () => _openArtifact(item),
+                ),
+              ),
+            const OSectionTitle('Permissions and limits'),
             const OIconTile(icon: CupertinoIcons.checkmark_shield,
               title: 'Cursor account permissions apply',
               subtitle: 'You can only operate agents your Cursor API key permits. '
