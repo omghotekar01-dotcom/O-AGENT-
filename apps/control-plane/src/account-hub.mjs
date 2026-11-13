@@ -314,6 +314,12 @@ export class AccountHub {
   async cursorRuns(userId, agentId) {
     return this.cursor.listRuns(this.cursorKey(userId), agentId);
   }
+  async cursorArtifacts(userId, agentId) {
+    return this.cursor.listArtifacts(this.cursorKey(userId), agentId);
+  }
+  async cursorArtifactLink(userId, agentId, artifactPath) {
+    return this.cursor.artifactLink(this.cursorKey(userId), agentId, artifactPath);
+  }
   async cursorRun(userId, agentId, runId) {
     return this.cursor.getRun(this.cursorKey(userId), agentId, runId);
   }
