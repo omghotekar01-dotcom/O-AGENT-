@@ -177,22 +177,50 @@ try {
         }
     } catch { Write-Host '  AI: provider status unavailable.' }
 
-    # Phone needs USB debugging and authorization once.
+    # ADB is optional. Its first launch prints daemon startup messages to stderr,
+    # which Windows PowerShell can promote to terminating errors under Stop.
+    # A phone/USB failure must never bring down the healthy backend or gateway.
     if ($env:OAGENT_SKIP_ADB -ne '1') {
-        $adb = Get-OAgentAdb
-        if ($adb) {
-            $lines = @(& $adb devices 2>$null)
-            $device = $lines | Where-Object { $_ -match "^\S+\s+device\s*$" } | Select-Object -First 1
-            if ($device) {
-                & $adb reverse tcp:$port tcp:$port | Out-Null
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "  Phone USB bridge: READY (use $baseUrl in Android)" -ForegroundColor Green
+        try {
+            $adb = Get-OAgentAdb
+            if ($adb) {
+                $previousErrorActionPreference = $ErrorActionPreference
+                try {
+                    $ErrorActionPreference = 'Continue'
+                    $lines = @(& $adb devices 2>$null)
+                    $adbExitCode = $LASTEXITCODE
+                } finally {
+                    $ErrorActionPreference = $previousErrorActionPreference
+                }
+
+                if ($adbExitCode -ne 0) {
+                    Write-Host '  Phone USB bridge: ADB device check failed. Web dashboard is still available.' -ForegroundColor Yellow
+                } else {
+                    $device = $lines | Where-Object { $_ -match "^\S+\s+device\s*$" } | Select-Object -First 1
+                    if ($device) {
+                        $previousErrorActionPreference = $ErrorActionPreference
+                        try {
+                            $ErrorActionPreference = 'Continue'
+                            & $adb reverse tcp:$port tcp:$port 2>$null | Out-Null
+                            $reverseExitCode = $LASTEXITCODE
+                        } finally {
+                            $ErrorActionPreference = $previousErrorActionPreference
+                        }
+                        if ($reverseExitCode -eq 0) {
+                            Write-Host "  Phone USB bridge: READY (use $baseUrl in Android)" -ForegroundColor Green
+                        } else {
+                            Write-Host '  Phone USB bridge: reverse forwarding failed. Reconnect and authorize USB debugging; web dashboard still works.' -ForegroundColor Yellow
+                        }
+                    } else {
+                        Write-Host '  Phone not detected or not authorized: connect via USB and allow USB debugging. Web dashboard still works.' -ForegroundColor Yellow
+                    }
                 }
             } else {
-                Write-Host '  Phone not detected: connect via USB, then double-click O-AGENT again.' -ForegroundColor Yellow
+                Write-Host '  ADB not found: web works; install Android Platform-Tools for phone bridging.' -ForegroundColor Yellow
             }
-        } else {
-            Write-Host '  ADB not found: web works; install Android Platform-Tools for phone bridging.' -ForegroundColor Yellow
+        } catch {
+            Write-Host "  Phone USB bridge unavailable: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host '  O-AGENT remains online; USB is optional.' -ForegroundColor Yellow
         }
     }
     Write-Host "  Logs: $logDir"
