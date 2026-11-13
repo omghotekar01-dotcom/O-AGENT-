@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../core/controller.dart';
+import '../core/push_bootstrap.dart';
 import 'ios_components.dart';
 
 /// Firebase project identity is app-level configuration, never a personal
@@ -19,14 +19,7 @@ class _PushDeviceState extends State<PushDeviceScreen> {
   bool working=false;
   String? error;
   StreamSubscription<String>? refreshSubscription;
-  static const firebaseKey = String.fromEnvironment('OAGENT_FIREBASE_API_KEY');
-  static const firebaseProject = String.fromEnvironment('OAGENT_FIREBASE_PROJECT_ID');
-  static const firebaseSender = String.fromEnvironment('OAGENT_FIREBASE_SENDER_ID');
-  static const androidAppId = String.fromEnvironment('OAGENT_FIREBASE_ANDROID_APP_ID');
-  static const iosAppId = String.fromEnvironment('OAGENT_FIREBASE_IOS_APP_ID');
-  bool get configuredOnDevice => firebaseKey.isNotEmpty &&
-    firebaseProject.isNotEmpty && firebaseSender.isNotEmpty &&
-    (Platform.isIOS ? iosAppId.isNotEmpty : androidAppId.isNotEmpty);
+  bool get configuredOnDevice => hasPushConfiguration;
   @override void initState(){super.initState();_refresh();}
   @override void dispose(){refreshSubscription?.cancel();super.dispose();}
   Future<void> _refresh() async {
@@ -50,12 +43,9 @@ class _PushDeviceState extends State<PushDeviceScreen> {
     }
     setState(()=>working=true);
     try{
-      if(Firebase.apps.isEmpty){
-        await Firebase.initializeApp(options:FirebaseOptions(
-          apiKey:firebaseKey,projectId:firebaseProject,
-          messagingSenderId:firebaseSender,
-          appId:Platform.isIOS?iosAppId:androidAppId,
-        ));
+      if (!await configureFirebaseMessaging()) {
+        throw StateError('Firebase initialization failed. Check the app build '
+          'configuration against the project registered in Firebase Console.');
       }
       final messaging=FirebaseMessaging.instance;
       final permission=await messaging.requestPermission(
