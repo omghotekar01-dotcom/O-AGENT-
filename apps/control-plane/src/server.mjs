@@ -349,6 +349,9 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/api/projects") {
       return send(res, 200, await projectHub.list());
     }
+    if (req.method === "POST" && path === "/api/providers/codex/local/history") {
+      return send(res, 201, projectHub.requestLocalCodexHistory(await readJson(req), req.headers["idempotency-key"]));
+    }
     if (req.method === "POST" && path === "/api/providers/codex/local/turns") {
       return send(res, 201, projectHub.requestLocalCodexTurn(await readJson(req), req.headers["idempotency-key"]));
     }

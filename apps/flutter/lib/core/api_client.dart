@@ -462,6 +462,14 @@ class AgentApi {
 
   /// Submit a turn to the exact saved Codex CLI session. The server requires
   /// explicit initial approval and enforces per-action approvals during runs.
+  /// Fetch only saved user/assistant conversation text, without resuming a
+  /// possibly-active Codex thread. Owner-triggered read; no API key required.
+  Future<Map<String, dynamic>> loadCodexConversation({
+    required String projectId, required String sessionId,
+  }) => _request('/api/providers/codex/local/history',
+    method:'POST',idempotencyKey:createIdempotencyKey(),
+    body:{'projectId':projectId,'sessionId':sessionId});
+
   Future<Map<String, dynamic>> requestCodexLocalTurn({
     required String projectId,
     required String sessionId,
