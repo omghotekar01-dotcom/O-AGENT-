@@ -45,7 +45,13 @@ export class ControlPlane {
     const name = requiredString(body.name, "worker name");
     const now = this.clock();
     const existing = this.data.workers[id];
-    this.data.workers[id] = { id, name, capabilities: [...TASK_TYPES], registeredAt: existing?.registeredAt ?? now, lastSeenAt: now };
+    const declared = Array.isArray(body.capabilities) ? body.capabilities : [
+      "system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn",
+    ];
+    if (declared.length > 8 || declared.some(c => typeof c !== "string" || !TASK_TYPES.has(c)))
+      throw new DomainError(400, "Invalid worker capabilities");
+    const capabilities = [...new Set(declared)];
+    this.data.workers[id] = { id, name, capabilities, registeredAt: existing?.registeredAt ?? now, lastSeenAt: now };
     this.commit("machine.online", { workerId: id });
     return this.data.workers[id];
   }
@@ -61,6 +67,8 @@ export class ControlPlane {
     const kind = requiredString(body.kind, "kind", 60);
     if (!TASK_TYPES.has(kind)) throw new DomainError(400, "Unsupported task capability");
     if (!this.data.workers[workerId]) throw new DomainError(404, "Worker is not registered");
+    if (!this.data.workers[workerId].capabilities?.includes(kind))
+      throw new DomainError(409, "This worker has not enrolled the requested capability");
     let parameters = null;
     if (kind === "codex_cloud_submit") {
       const environmentId = requiredString(body.environmentId, "Codex Cloud environmentId", 120);
