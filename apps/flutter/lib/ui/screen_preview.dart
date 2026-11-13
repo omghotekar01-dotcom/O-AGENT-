@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/controller.dart';
 import 'ios_components.dart';
+import 'remote_fullscreen.dart';
 
-/// View-only, explicitly consented live screen previews. No mouse or keyboard
-/// injection, no background capture, no saved screenshots, no browser takeover.
+/// Explicitly consented screen preview. Fullscreen and separately paired
+/// Windows remote input are opt-in; viewing alone never permits OS input.
 class ScreenPreviewScreen extends StatefulWidget {
   const ScreenPreviewScreen({super.key, required this.controller});
   final ControlController controller;
@@ -78,6 +79,10 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
     final sharing = status?['capturing'] == true;
     return Scaffold(backgroundColor: OVisual.canvas(context),
       appBar: AppBar(title: const Text('View desktop'), actions: [
+        IconButton(tooltip: 'Fullscreen desktop', onPressed: frame == null ? null : () =>
+          Navigator.push(context, MaterialPageRoute<void>(
+            builder: (_) => RemoteFullscreenScreen(controller: widget.controller))),
+          icon: const Icon(Icons.fullscreen)),
         IconButton(tooltip: 'Refresh preview', onPressed: _refresh,
           icon: const Icon(CupertinoIcons.refresh)),
       ]),
@@ -88,7 +93,8 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
             const OScreenTitle(eyebrow: 'Private view-only preview',
               title: 'See what is on screen.',
               subtitle: 'Only the window or display explicitly chosen '
-                'on your laptop is visible here. No remote input or hidden recording.'),
+                'on your laptop is visible. Windows input requires separate, '
+                'visible local pairing. No hidden recording.'),
             const SizedBox(height: 19),
             OSurface(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -142,6 +148,12 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
                     color: OVisual.rose, fontSize: 12))),
                 const SizedBox(height: 13),
                 Wrap(spacing: 9, runSpacing: 9, children: [
+                  FilledButton.icon(
+                    onPressed: frame == null ? null : () =>
+                      Navigator.push(context, MaterialPageRoute<void>(
+                        builder: (_) => RemoteFullscreenScreen(controller: widget.controller))),
+                    icon: const Icon(Icons.fullscreen),
+                    label: const Text('Full screen / trackpad')),
                   FilledButton.tonalIcon(onPressed: _copyLink,
                     icon: const Icon(CupertinoIcons.link, size: 18),
                     label: const Text('Copy laptop sharing URL')),
