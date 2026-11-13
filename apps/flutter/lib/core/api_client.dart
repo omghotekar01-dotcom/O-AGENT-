@@ -54,7 +54,7 @@ class AgentApi {
     String? idempotencyKey,
   }) async {
     try {
-      final timeout = path == "/api/ai/chat" || path == "/api/ai/refine" || path.endsWith("/messages") ? const Duration(seconds: 85) : const Duration(seconds: 15);
+      final timeout = path == "/api/ai/chat" || path == "/api/account/chat" || path.endsWith("/verify") || path == "/api/ai/refine" || path.endsWith("/messages") ? const Duration(seconds: 85) : const Duration(seconds: 15);
       final url = endpoint.resolve(path);
       final request = await _http.openUrl(method, url).timeout(timeout);
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');

@@ -4,9 +4,9 @@ import { AgentRuntime } from "./agent-runtime.mjs";
 import { MAX_ATTACHMENT_BYTES, validateFile, attachmentForModel } from "./attachments.mjs";
 
 const PROVIDERS = Object.freeze({
-  openai: { label: "OpenAI API", defaultModel: "gpt-5.6-luna", env: "OPENAI_API_KEY" },
-  anthropic: { label: "Claude API", defaultModel: "claude-sonnet-4-5", env: "ANTHROPIC_API_KEY" },
-  gemini: { label: "Google Gemini API", defaultModel: "gemini-2.5-flash", env: "GEMINI_API_KEY" },
+  openai: { label: "OpenAI API", defaultModel: "gpt-6-luna", env: "OPENAI_API_KEY" },
+  anthropic: { label: "Claude API", defaultModel: "claude-sonnet-5", env: "ANTHROPIC_API_KEY" },
+  gemini: { label: "Google Gemini API", defaultModel: "gemini-3.8-flash", env: "GEMINI_API_KEY" },
 });
 const hash = value => createHash("sha256").update(value).digest("hex");
 const validLabel = (value, max) =>

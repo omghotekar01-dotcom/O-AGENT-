@@ -35,3 +35,13 @@ Codex CLI sessions remain available only while the enrolled laptop worker is onl
 
 **Not part of these APIs:** ChatGPT/Claude/Cursor website-session takeover,
 agent UI screen sharing, arbitrary remote shell access or unapproved write actions.
+
+## Latest test-release hardening
+
+- Personal AI chat and provider verification use longer mobile request timeouts to match provider network latency.
+- A failed GitHub repository lookup no longer prevents provider/chat data from loading in the account screen.
+- Unauthenticated invitation redemption is rate limited per network address.
+- Public signup stays disabled unless the backend also has an initialized vault key, and single-server public registration is capped at 500 accounts to protect the JSON development store.
+- Model defaults were refreshed, but actual model access remains provider- and account-specific; use the in-app **Test** action after entering your key.
+
+This release is for private staging and app verification, not security-certified public SaaS hosting.

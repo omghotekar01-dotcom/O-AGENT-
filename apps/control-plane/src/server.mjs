@@ -94,6 +94,7 @@ const server = createServer(async (req, res) => {
     }
     // Joining requires a previously authorized one-time invitation.
     if (req.method === "POST" && path === "/api/accounts/claim") {
+      publicAuth.throttle(req.socket.remoteAddress || "unknown", "claim");
       return send(res, 201, accountHub.claimInvitation(await readJson(req, 4096)));
     }
     const isWorkerRoute = path.startsWith("/api/workers/");

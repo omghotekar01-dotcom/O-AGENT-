@@ -11,7 +11,8 @@ function setup() {
   const mail = [];
   let time = Date.now();
   const env = { OAGENT_PUBLIC_ACCOUNTS: "1", OAGENT_RESEND_API_KEY: "fake-private-mail-key",
-    OAGENT_MAIL_FROM: "test@example.org", OAGENT_PUBLIC_URL: "https://agent.example.org" };
+    OAGENT_MAIL_FROM: "test@example.org", OAGENT_PUBLIC_URL: "https://agent.example.org",
+    OAGENT_VAULT_KEY_BASE64: randomBytes(32).toString("base64") };
   const auth = new PublicAuth(core, { env, now: () => time,
     fetchImpl: async (_url, opts) => { mail.push(JSON.parse(opts.body)); return { ok: true }; } });
   return { core, auth, mail, snapshot: () => snapshot, advance: ms => { time += ms; } };

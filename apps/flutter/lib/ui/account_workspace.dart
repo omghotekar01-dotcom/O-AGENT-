@@ -59,8 +59,17 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
         .map((x) => Map<String, dynamic>.from(x as Map)).toList();
       final recent = await api.accountThreads();
       final files = await api.accountAttachments();
-      final git = await api.githubStatus();
-      final repositories = git['connected'] == true ? await api.githubRepos() : <Map<String, dynamic>>[];
+      Map<String, dynamic> git = {};
+      List<Map<String, dynamic>> repositories = [];
+      String? githubWarning;
+      try {
+        git = await api.githubStatus();
+        if (git['connected'] == true) repositories = await api.githubRepos();
+      } catch (_) {
+        // A broken GitHub integration must never hide the user's AI keys or chats.
+        githubWarning = 'GitHub is temporarily unavailable. Reconnect or try refreshing.';
+        try { git = await api.githubStatus(); } catch (_) { /* Older backend. */ }
+      }
       final people = owner ? await api.members() : <Map<String, dynamic>>[];
       if (!mounted) return;
       setState(() {
@@ -70,6 +79,7 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
         storedAttachments = files;
         github = git;
         githubRepos = repositories;
+        error = githubWarning;
         if (!providers.any((p) => p['id'] == selectedProvider && p['connected'] == true)) {
           for (final p in providers) {
             if (p['connected'] == true) {
@@ -78,7 +88,6 @@ class _AccountWorkspaceState extends State<AccountWorkspaceScreen> {
             }
           }
         }
-        error = null;
       });
     } catch (e) {
       if (mounted) setState(() => error = e.toString());

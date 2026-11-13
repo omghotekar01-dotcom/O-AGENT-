@@ -31,6 +31,7 @@ export class PublicAuth {
   get enabled() {
     return this.env.OAGENT_PUBLIC_ACCOUNTS === "1" &&
       !!this.env.OAGENT_RESEND_API_KEY && !!this.env.OAGENT_MAIL_FROM &&
+      !!this.env.OAGENT_VAULT_KEY_BASE64 &&
       /^https:\/\//.test(this.env.OAGENT_PUBLIC_URL || "");
   }
   config() {
@@ -72,6 +73,9 @@ export class PublicAuth {
         typeof displayName !== "string" || !displayName.trim() || displayName.length > 80 ||
         !passwordValid(password)) throw new DomainError(400, "Enter a valid email, name and password of 12–128 characters");
     if (this.find(normalized) || this.pendingRegistrations.has(normalized)) throw new DomainError(409, "Account already exists. Sign in or recover your password.");
+    if (Object.values(this.accounts.members).filter(m => !m.revokedAt).length >= 500) {
+      throw new DomainError(503, "Registration capacity reached. Contact the administrator.");
+    }
     const id = randomUUID();
     const salt = randomBytes(24).toString("base64");
     const verifyCode = code("verify");
@@ -197,8 +201,13 @@ export class PublicAuth {
     return { ok: true };
   }
   revokeUser(memberId) {
+    let changed = false;
     for (const [digest, session] of Object.entries(this.accounts.sessions)) {
-      if (session.userId === memberId) delete this.accounts.sessions[digest];
+      if (session.userId === memberId) {
+        delete this.accounts.sessions[digest];
+        changed = true;
+      }
     }
+    if (changed) this.core.commit("account.session.revoked_all", { memberId });
   }
 }

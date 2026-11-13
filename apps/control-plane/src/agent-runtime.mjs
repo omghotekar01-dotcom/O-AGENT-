@@ -123,7 +123,7 @@ export class AgentRuntime {
   }
 
   get provider() { return ["openai", "anthropic", "gemini"].includes(this.env.OAGENT_AI_PROVIDER) ? this.env.OAGENT_AI_PROVIDER : "openai"; }
-  get model() { return this.env.OAGENT_AI_MODEL || (this.provider === "openai" ? "gpt-5.6-terra" : this.provider === "anthropic" ? "claude-sonnet-4-5" : "gemini-2.5-flash"); }
+  get model() { return this.env.OAGENT_AI_MODEL || (this.provider === "openai" ? "gpt-6-luna" : this.provider === "anthropic" ? "claude-sonnet-5" : "gemini-3.8-flash"); }
   get key() { return this.provider === "openai" ? this.env.OPENAI_API_KEY : this.provider === "anthropic" ? this.env.ANTHROPIC_API_KEY : this.env.GEMINI_API_KEY; }
 
   status() {
