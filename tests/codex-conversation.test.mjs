@@ -26,7 +26,7 @@ const history = {
   ],
 };
 const task = {kind:"codex_cli_history",parameters:{sessionId}};
-function fakeServer(resultOrError) {
+function fakeServer(resultOrError, pageOverride = null) {
   const child = new EventEmitter();
   const requests = [];
   child.stdin = {write(text) {
@@ -35,6 +35,10 @@ function fakeServer(resultOrError) {
       Buffer.from(JSON.stringify({id:1,result:{}})+"\n")));
     if(m.id===2)queueMicrotask(()=>child.stdout.emit("data",
       Buffer.from(JSON.stringify(resultOrError)+"\n")));
+    if(m.id===3)queueMicrotask(()=>child.stdout.emit("data",
+      Buffer.from(JSON.stringify(pageOverride ?? {id:3,result:{
+        data:history.turns.slice().reverse(),nextCursor:null
+      }})+"\n")));
   },end(){}};
   child.stdout=new EventEmitter();
   child.stderr=new EventEmitter();
@@ -54,9 +58,12 @@ test("Codex history reads persisted real user/assistant messages without resumin
       OAGENT_VAULT_KEY_BASE64:"private",PATH:"demo"},
   });
   assert.deepEqual(f.requests.map(x=>x.method),
-    ["initialize","initialized","thread/read"]);
+    ["initialize","initialized","thread/read","thread/turns/list"]);
   assert.equal(f.requests[2].params.threadId,sessionId);
-  assert.equal(f.requests[2].params.includeTurns,true);
+  assert.equal(f.requests[2].params.includeTurns,false);
+  assert.equal(f.requests[3].params.itemsView,"summary");
+  assert.equal(f.requests[3].params.sortDirection,"desc");
+  assert.equal(f.requests[0].params.capabilities.experimentalApi,true);
   assert.deepEqual(result.messages.map(x=>x.role),
     ["user","assistant","user","assistant"]);
   assert.equal(result.messages[0].text,"Please check the app");
@@ -79,6 +86,34 @@ test("Codex history refuses mismatched session and does not mix user chat data",
     spawnImpl:()=>f.child,isWindows:false,timeoutMs:2000,
   }),/different conversation/);
 });
+test("large Codex histories show a bounded recent page without loading all turns",async()=>{
+  const recent={...history, turns:[history.turns.at(-1)]};
+  const f=fakeServer({id:2,result:{thread:{id:sessionId,status:{type:"notLoaded"},turns:[]}}},
+    {id:3,result:{data:recent.turns,nextCursor:"older-page-cursor"}});
+  const result=await readCodexHistory(task,{spawnImpl:()=>f.child,isWindows:false,timeoutMs:2000});
+  assert.equal(result.truncated,true);
+  assert.equal(result.messages.length,2);
+  assert.equal(result.messages[0].text,"What comes next?");
+  assert.equal(f.requests.some(x=>x.method==="thread/resume"),false);
+});
+
+test("legacy Codex history falls back after unsupported pagination",async()=>{
+  const f=fakeServer({id:2,result:{thread:{id:sessionId,status:{type:"notLoaded"}}}},
+    {id:3,error:{code:-32601,message:"Method not found"}});
+  const originalWrite=f.child.stdin.write;
+  f.child.stdin.write=(line)=>{
+    const m=JSON.parse(line);
+    if(m.id===4){
+      f.requests.push(m);
+      queueMicrotask(()=>f.child.stdout.emit("data",
+        Buffer.from(JSON.stringify({id:4,result:{thread:history}})+"\\n".replace("\\\\n","\\n"))));
+    } else originalWrite(line);
+  };
+  const result=await readCodexHistory(task,{spawnImpl:()=>f.child,isWindows:false,timeoutMs:2000});
+  assert.equal(result.messages.length,4);
+  assert.equal(f.requests.at(-1).params.includeTurns,true);
+});
+
 test("provider errors explain real conditions without echoing raw secrets",async()=>{
   const cases=[
     [{code:-32600,message:"thread already in use: SECRET_PATH"},
