@@ -85,7 +85,8 @@ export class RemoteInput {
     const code = String(randomInt(0, 100000000)).padStart(8, "0");
     const now = this.now();
     this.session = { workerId, code, active: false, preparedAt: now,
-      expiresAt: now + PAIR_TTL, lastPoll: now, lastAction: 0, queue: [] };
+      expiresAt: now + PAIR_TTL, lastPoll: now, lastAction: 0,
+      failedPairAttempts: 0, queue: [] };
     // This code goes ONLY to the worker-token-authenticated LOCAL helper.
     return { pairingCode: code, expiresInSeconds: PAIR_TTL / 1000 };
   }
@@ -95,8 +96,11 @@ export class RemoteInput {
       "No pending Windows pairing request. Start the local remote-control companion");
     const code = input?.code;
     if (typeof code !== "string" || !CODE_PATTERN.test(code) ||
-        !timingSafeEqual(Buffer.from(code), Buffer.from(s.code)))
-      throw new DomainError(403, "Incorrect or expired pairing code");
+        !timingSafeEqual(Buffer.from(code), Buffer.from(s.code))) {
+      s.failedPairAttempts += 1;
+      if (s.failedPairAttempts >= 5) this.session = null;
+      throw new DomainError(403, "Incorrect pairing code. Five failures revoke the code");
+    }
     if (!this.captureFresh()) throw new DomainError(409,
       "The laptop must be actively sharing a selected screen");
     s.active = true;
