@@ -8,7 +8,6 @@ import 'account_workspace.dart';
 import 'public_account.dart';
 import '../core/models.dart';
 import '../theme.dart';
-import 'projects.dart';
 import 'remote_mission_control.dart';
 
 const _muted = Color(0xFF777A78);

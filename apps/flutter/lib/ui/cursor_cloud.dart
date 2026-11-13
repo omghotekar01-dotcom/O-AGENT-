@@ -471,7 +471,7 @@ class _CursorAgentDetailState extends State<CursorAgentDetailScreen> {
             const OSectionTitle('Actual cloud runs'),
             if (busy && runs.isEmpty) const OLoadingState(),
             if (!busy && runs.isEmpty) const OEmptyState(
-              icon: CupertinoIcons.terminal,
+              icon: Icons.terminal_rounded,
               title: 'No runs returned',
               message: 'Cursor has no recorded runs for this agent. '
                 'Tap Send prompt to start an explicitly confirmed follow-up.'),

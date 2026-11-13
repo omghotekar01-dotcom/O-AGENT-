@@ -40,34 +40,16 @@ class _ProjectHubState extends State<ProjectHubScreen> {
   void dispose() { timer?.cancel(); super.dispose(); }
 
   Future<void> _create() async {
-    final title = TextEditingController();
-    final description = TextEditingController();
     final form = await showDialog<Map<String, String>>(context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New O-AGENT project'),
-        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: title, maxLength: 120,
-            decoration: const InputDecoration(labelText: 'Project name')),
-          const SizedBox(height: 10),
-          TextField(controller: description, maxLength: 500, minLines: 2, maxLines: 3,
-            decoration: const InputDecoration(labelText: 'What is it for?')),
-        ])),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () {
-            if (title.text.trim().isEmpty) return;
-            Navigator.pop(ctx, {'title': title.text.trim(), 'description': description.text.trim()});
-          }, child: const Text('Create')),
-        ],
-      ),
-    );
-    title.dispose(); description.dispose();
+      builder: (_) => const ProjectCreateDialog());
     if (form == null || !mounted) return;
     try {
-      await widget.controller.client!.createProject(form['title']!, form['description']!);
+      await widget.controller.client!.createProject(
+        form['title']!, form['description']!);
       if (mounted) _refresh();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -617,5 +599,48 @@ class InfoPanel extends StatelessWidget {
       borderRadius: BorderRadius.circular(17),
       border: Border.all(color: OTheme.hairline)),
     child: child,
+  );
+}
+
+
+/// Text controllers are disposed with the dialog's actual route lifecycle.
+/// This prevents Flutter's _dependents.isEmpty assertion during pop animation.
+class ProjectCreateDialog extends StatefulWidget {
+  const ProjectCreateDialog({super.key});
+  @override State<ProjectCreateDialog> createState() => _ProjectCreateDialogState();
+}
+class _ProjectCreateDialogState extends State<ProjectCreateDialog> {
+  final title = TextEditingController();
+  final description = TextEditingController();
+  @override
+  void dispose() { title.dispose(); description.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('New project'),
+    content: SingleChildScrollView(child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Create a private O-AGENT project workspace. '
+          'This does not automatically start an external agent.',
+          style: TextStyle(fontSize: 12, height: 1.5)),
+        const SizedBox(height: 13),
+        TextField(controller: title, maxLength: 120,
+          decoration: const InputDecoration(labelText: 'Project name')),
+        const SizedBox(height: 10),
+        TextField(controller: description, maxLength: 500, minLines: 2, maxLines: 4,
+          decoration: const InputDecoration(labelText: 'Project description')),
+      ],
+    )),
+    actions: [
+      TextButton(onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel')),
+      FilledButton(onPressed: () {
+        if (title.text.trim().isEmpty) return;
+        Navigator.pop(context, <String, String>{
+          'title': title.text.trim(), 'description': description.text.trim(),
+        });
+      }, child: const Text('Create project')),
+    ],
   );
 }
