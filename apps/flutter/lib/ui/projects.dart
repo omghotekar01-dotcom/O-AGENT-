@@ -67,7 +67,23 @@ class _ProjectHubState extends State<ProjectHubScreen> {
         return [p['title'], p['cwd'], p['sourceRef'], p['description']]
           .whereType<String>().any((value) => value.toLowerCase().contains(term));
       }).toList();
-      return RefreshIndicator(
+      // ProjectHubScreen opens as its own route from Remote mission control.
+      // A route must install a Material surface before TextField, ChoiceChip,
+      // InkWell, IconButton and their focus/ink semantics are built.
+      return Scaffold(
+        backgroundColor: OTheme.paper,
+        appBar: AppBar(
+          title: const Text('Projects', style: TextStyle(
+            fontWeight: FontWeight.w800)),
+          actions: [
+            IconButton(
+              onPressed: _refresh,
+              tooltip: 'Refresh project sources',
+              icon: const Icon(Icons.sync_rounded),
+            ),
+          ],
+        ),
+        body: SafeArea(child: RefreshIndicator(
         onRefresh: () async { _refresh(); try { await future; } catch (_) {} },
         child: ListView(padding: const EdgeInsets.fromLTRB(22, 16, 22, 36), children: [
           Row(children: [
@@ -252,6 +268,7 @@ class _ProjectHubState extends State<ProjectHubScreen> {
           const Text('Provider integrations are capability-based. GitHub and Codex Cloud views do not expose their live browser screens or permissions.',
             style: TextStyle(color: muted, fontSize: 11, height: 1.5)),
         ]),
+        )),
       );
     },
   );
