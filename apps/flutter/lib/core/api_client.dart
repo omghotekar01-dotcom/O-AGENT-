@@ -85,6 +85,44 @@ class AgentApi {
     }
   }
 
+  /// Public endpoints never send a bearer token or AI provider secret.
+  static Future<Map<String, dynamic>> publicAccountRequest({
+    required String backend,
+    required String path,
+    required Map<String, dynamic> body,
+  }) async {
+    final origin = validateEndpoint(backend);
+    if (!const {'/api/auth/register', '/api/auth/verify', '/api/auth/login',
+      '/api/auth/forgot', '/api/auth/reset'}.contains(path)) {
+      throw const ApiException('Unsupported account action');
+    }
+    final http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    try {
+      final request = await http.postUrl(origin.resolve(path))
+        .timeout(const Duration(seconds: 20));
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode(body));
+      final response = await request.close().timeout(const Duration(seconds: 20));
+      final payload = await utf8.decoder.bind(response).join().timeout(const Duration(seconds: 20));
+      final data = Map<String, dynamic>.from(jsonDecode(payload) as Map);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(data['error']?.toString() ?? 'Account action failed',
+          response.statusCode);
+      }
+      return data;
+    } on SocketException {
+      throw const ApiException('Cannot reach the backend. Check the network and HTTPS address.');
+    } on HandshakeException {
+      throw const ApiException('Backend HTTPS certificate is not trusted.');
+    } finally {
+      http.close(force: true);
+    }
+  }
+
+  Future<void> logoutPersonalSession() async {
+    await _request('/api/auth/logout', method: 'POST');
+  }
+
   Future<Map<String, dynamic>> accountInfo() => _request('/api/me');
 
   /// Owner-only: one-use invitation; never display operator tokens to members.

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import '../core/api_client.dart';
 import 'account_workspace.dart';
+import 'public_account.dart';
 import '../core/models.dart';
 import '../theme.dart';
 import 'projects.dart';
@@ -782,6 +783,14 @@ class _StudioConnectState extends State<StudioConnect> {
             Expanded(child: ChoiceChip(label: const Text('Join with invitation'),
               selected: joining, onSelected: (_) => setState(() => joining = true))),
           ]),
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
+              builder: (_) => PublicAccountScreen(controller: widget.controller,
+                backend: url.text, remember: rememberDevice))),
+            icon: const Icon(Icons.person_add_alt_outlined),
+            label: const Text('Public cloud account: sign up / sign in'),
+          ),
           const SizedBox(height: 14),
           TextField(controller: url, keyboardType: TextInputType.url,
             decoration: const InputDecoration(labelText: 'Backend HTTPS URL', prefixIcon: Icon(Icons.link))),
