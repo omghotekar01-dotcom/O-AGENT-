@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn"]);
+const TASK_TYPES = new Set(["system_info", "workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn"]);
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted", "rejected"]);
 const MAX_EVENTS = 5000;
 export class DomainError extends Error {
@@ -78,6 +78,20 @@ export class ControlPlane {
       if (!["read_only", "workspace_write"].includes(mode)) throw new DomainError(400, "Invalid Codex execution mode");
       parameters = { projectId, sessionId, cwd, prompt, mode };
     }
+    if (["claude_agent_turn", "copilot_sdk_turn"].includes(kind)) {
+      const cwd = requiredString(body.cwd, "enrolled workspace folder", 600);
+      if (!/^(?:[A-Za-z]:[\\/]|\/)/.test(cwd) || /[\x00-\x1f]/.test(cwd))
+        throw new DomainError(400, "Expected absolute workspace path");
+      const prompt = requiredString(body.prompt, "agent instruction", 4000);
+      const mode = body.mode ?? "read_only";
+      if (!["read_only", "workspace_write"].includes(mode))
+        throw new DomainError(400, "Invalid provider permission mode");
+      const sessionId = body.sessionId ?? null;
+      if (sessionId != null && (typeof sessionId !== "string" ||
+          !/^[a-zA-Z0-9_-]{8,120}$/.test(sessionId)))
+        throw new DomainError(400, "Invalid SDK session ID");
+      parameters = { cwd, prompt, mode, sessionId };
+    }
     const key = requiredString(requestKey, "Idempotency-Key", 200);
     if (key.length < 12) throw new DomainError(400, "Idempotency-Key must be at least 12 characters");
     const existing = Object.values(this.data.tasks).find(t => t.requestKey === key);
@@ -87,7 +101,7 @@ export class ControlPlane {
     }
     const task = {
       id: randomUUID(), requestKey: key, workerId, kind, parameters,
-      status: ["workspace_inventory", "codex_cloud_submit", "codex_cli_turn"].includes(kind) ? "waiting_for_approval" : "queued",
+      status: ["workspace_inventory", "codex_cloud_submit", "codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn"].includes(kind) ? "waiting_for_approval" : "queued",
       updates: [], approvals: {},
       createdAt: this.clock(), updatedAt: this.clock(), result: null, error: null,
     };
@@ -136,7 +150,7 @@ export class ControlPlane {
   appendTaskUpdate(workerId, taskId, body) {
     const task = this.getTask(taskId);
     if (task.workerId !== workerId) throw new DomainError(403, "Incorrect worker");
-    if (task.kind !== "codex_cli_turn" || task.status !== "running") throw new DomainError(409, "Not a running Codex turn");
+    if (!["codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn"].includes(task.kind) || task.status !== "running") throw new DomainError(409, "Not a running supervised turn");
     const type = requiredString(body?.type, "event type", 60);
     const allowed = new Set(["session_resumed","turn_started","agent_delta","tool_started","tool_finished","turn_completed","error","status"]);
     if (!allowed.has(type)) throw new DomainError(400, "Unsupported Codex event type");
@@ -156,7 +170,7 @@ export class ControlPlane {
   requestCodexApproval(workerId, taskId, body) {
     const task = this.getTask(taskId);
     if (task.workerId !== workerId) throw new DomainError(403, "Incorrect worker");
-    if (task.kind !== "codex_cli_turn" || task.status !== "running") throw new DomainError(409, "Not a running Codex turn");
+    if (!["codex_cli_turn", "claude_agent_turn", "copilot_sdk_turn"].includes(task.kind) || task.status !== "running") throw new DomainError(409, "Not a running supervised turn");
     if (task.parameters?.mode === "read_only") throw new DomainError(403, "Read-only Codex turns cannot request permission escalation");
     if (Object.values(task.approvals ?? {}).filter(a => a.state === "pending").length > 3) throw new DomainError(429, "Too many pending approvals");
     const id = requiredString(body?.id, "approval ID", 80);
