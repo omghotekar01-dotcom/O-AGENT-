@@ -2,7 +2,7 @@
   "name": "oagent-vscode-companion",
   "displayName": "O-AGENT Workspace Companion",
   "description": "Opt-in VS Code workspace presence and owner-approved file navigation",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "oagent-local",
   "private": true,
   "engines": {
