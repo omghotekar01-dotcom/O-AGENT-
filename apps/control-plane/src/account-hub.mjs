@@ -358,6 +358,9 @@ export class AccountHub {
       throw error;
     } finally { this.cursorPending.delete(inFlight); }
   }
+  cursorEvents(userId, agentId, runId, options = {}) {
+    return this.cursor.streamRun(this.cursorKey(userId), agentId, runId, options);
+  }
   async cursorCancel(userId, agentId, runId) {
     const key = this.cursorKey(userId);
     const response = await this.cursor.cancelRun(key, agentId, runId);
