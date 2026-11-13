@@ -139,3 +139,55 @@ test("Provider worker must advertise its explicit SDK capability before task can
   assert.equal(c.decideCodexApproval(work.id,a.id,false).state,"denied");
   assert.equal(c.codexApprovalStatus("worker-123456",work.id,a.id).state,"denied");
 });
+
+test("canonical file paths reject escaping symlinks even with mobile write permission", async () => {
+  const requests=[];
+  const fake=(options)=>(async function* () {
+    const input={file_path:"/workspace/app/link/secrets.txt"};
+    const action=await options.options.canUseTool("Edit",input);
+    assert.equal(action.behavior,"deny");
+    const read=await options.options.canUseTool("Read",{file_path:"/workspace/app/link/config.env"});
+    assert.equal(read.behavior,"deny");
+    yield {type:"result",result:"Denied out-of-root requests"};
+  })();
+  const result=await runProviderTurn(projectTask("claude_agent_turn","workspace_write"),{
+    env,importSdk:async()=>({query:fake}),
+    realpathImpl:async path=>{
+      if(path.includes("/link/")) return "/outside/private.txt";
+      return path;
+    },
+    sendUpdate:async()=>{},
+    askPermission:async r=>{requests.push(r);return true;},
+  });
+  assert.equal(result.providerStatus,"completed");
+  assert.equal(requests.length,0);
+});
+test("Copilot unknown tools, external reads and shell are denied before SDK permission execution",async()=>{
+  const inspected={};
+  class FakeCopilot{
+    async start(){}
+    async createSession(options){
+      inspected.unknown=await options.hooks.onPreToolUse({
+        toolName:"browser_open",toolArgs:{url:"https://external.example"}});
+      inspected.external=await options.hooks.onPreToolUse({
+        toolName:"read_file",toolArgs:{path:"/outside/private.txt"}});
+      inspected.shell=await options.hooks.onPreToolUse({
+        toolName:"shell",toolArgs:{fullCommandText:"cat /etc/passwd"}});
+      inspected.badRead=await options.onPermissionRequest({kind:"read"});
+      return {sessionId:"sdk-session-12345678",on(){},
+        async sendAndWait(){return {data:{content:"Path checks applied"}}},
+        async disconnect(){}};
+    }
+    async stop(){}
+  }
+  const out=await runProviderTurn(projectTask("copilot_sdk_turn","workspace_write"),{
+    env,realpathImpl,importSdk:async()=>({CopilotClient:FakeCopilot}),
+    sendUpdate:async()=>{},
+    askPermission:async()=>{throw Error("No unknown tool may request generic permission");},
+  });
+  assert.equal(out.providerStatus,"completed");
+  assert.equal(inspected.unknown.permissionDecision,"deny");
+  assert.equal(inspected.external.permissionDecision,"deny");
+  assert.equal(inspected.shell.permissionDecision,"deny");
+  assert.equal(inspected.badRead.kind,"reject");
+});
