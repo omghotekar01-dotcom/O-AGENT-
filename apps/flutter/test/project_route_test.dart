@@ -79,7 +79,8 @@ void main() {
         maxScrolls: 12);
       await tester.enterText(find.byType(TextField).first, 'Project 5');
       await tester.pumpAndSettle();
-      expect(find.text('Project 5'), findsOneWidget);
+      // Search text appears both in the editable field and the matching card.
+      expect(find.text('Project 5'), findsNWidgets(2));
       expect(find.text('Project 6'), findsNothing);
       expect(tester.takeException(), isNull);
     });
