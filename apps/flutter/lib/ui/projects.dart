@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/controller.dart';
 import '../theme.dart';
 import 'codex_session.dart';
+import 'remote_mission_control.dart';
 
 const muted = Color(0xFF737771);
 Map<String, dynamic> asMap(Object? value) =>
@@ -99,6 +100,18 @@ class _ProjectHubState extends State<ProjectHubScreen> {
           const SizedBox(height: 7),
           const Text('Actual projects, connected agents and verified work. Never simulated.',
             style: TextStyle(color: muted, fontSize: 12, height: 1.5)),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            icon: const Icon(Icons.settings_remote_rounded),
+            label: const Text('Remote agent mission control'),
+            onPressed: () => Navigator.push(context, MaterialPageRoute<void>(
+              builder: (_) => RemoteMissionControlScreen(controller: widget.controller))),
+          ),
+          const SizedBox(height: 7),
+          const Text('Control existing saved Codex CLI sessions, inspect live '
+            'output, and decide approvals. This uses your authenticated laptop '
+            'worker, not an OpenAI API chatbot key.',
+            style: TextStyle(color: muted, fontSize: 11, height: 1.4)),
           const SizedBox(height: 18),
           Row(children: [
             Expanded(child: _MetricCard(
