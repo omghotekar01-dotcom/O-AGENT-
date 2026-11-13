@@ -22,6 +22,7 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
   final path = TextEditingController();
   Timer? timer;
   List<Map<String,dynamic>> machines = [];
+  List<Map<String,dynamic>> workspaces = [];
   Map<String,dynamic>? task;
   String? workerId,taskId,error;
   bool busy=false;
@@ -35,9 +36,11 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
     try{
       final api=widget.controller.client!;
       final remote=await api.remoteAgentOverview();
+      final workspaceFeed=await api.vscodeWorkspaces();
       final details=taskId==null?null:await api.taskDetail(taskId!);
       if(!mounted||api!=widget.controller.client)return;
       setState((){
+        workspaces=vsList(workspaceFeed['items']);
         machines=vsList(remote['machines']).where((m)=>
           m['status']=='online' && m['capabilities'] is List &&
           (m['capabilities'] as List).contains('vscode_open_file')).toList();
@@ -105,11 +108,47 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
         children:[
           const OScreenTitle(eyebrow:'Opt-in editor connection',
             title:'Your editor.\nWith permission.',
-            subtitle:'Request that an enrolled VS Code instance open '
-              'a file, only after remote owner approval and local confirmation.'),
+            subtitle:'Inspect actual Git/unsaved file status from an '
+              'explicitly enrolled editor. Opening a file requires owner '
+              'approval and a second local confirmation.'),
           if(error!=null)Padding(padding:const EdgeInsets.only(top:12),
             child:OSurface(child:Text(error!,
               style:const TextStyle(color:OVisual.rose)))),
+          const OSectionTitle('Live workspace changes'),
+          if(workspaces.isEmpty) const OSurface(child:Text(
+            'No opted-in VS Code file feed is online yet. Install and start '
+            'the O-AGENT VS Code companion in a trusted project to see Git '
+            'changes and unsaved file names. No file contents are uploaded.')),
+          for(final workspace in workspaces) Padding(
+            padding:const EdgeInsets.only(bottom:10),
+            child:OSurface(child:Column(
+              crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(vsText(workspace['workspace']),
+                style:const TextStyle(fontSize:13,fontWeight:FontWeight.w700)),
+              const SizedBox(height:5),
+              Text('Live filenames · '+
+                vsText(workspace['trackedAt']),
+                style:const TextStyle(fontSize:11)),
+              const SizedBox(height:10),
+              if(vsList(workspace['changed']).isEmpty)
+                const Text('No Git or unsaved changes detected.',
+                  style:TextStyle(fontSize:12)),
+              for(final file in vsList(workspace['changed']).take(50))
+                Padding(padding:const EdgeInsets.only(bottom:7),
+                  child:Row(children:[
+                    const Icon(Icons.description_outlined,size:17),
+                    const SizedBox(width:8),
+                    Expanded(child:Text(vsText(file['path']),
+                      style:const TextStyle(fontSize:12))),
+                    const SizedBox(width:8),
+                    Text(vsText(file['status']),
+                      style:const TextStyle(fontSize:11)),
+                  ])),
+              if(vsList(workspace['changed']).length>50)
+                const Text('Showing 50 changed paths. Open VS Code for more.',
+                  style:TextStyle(fontSize:11)),
+            ]))),
+          ),
           const OSectionTitle('Remote file navigation'),
           if(taskId==null)OSurface(child:Column(
             crossAxisAlignment:CrossAxisAlignment.start,children:[
