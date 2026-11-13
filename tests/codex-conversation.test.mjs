@@ -106,7 +106,7 @@ test("legacy Codex history falls back after unsupported pagination",async()=>{
     if(m.id===4){
       f.requests.push(m);
       queueMicrotask(()=>f.child.stdout.emit("data",
-        Buffer.from(JSON.stringify({id:4,result:{thread:history}})+"\\n".replace("\\\\n","\\n"))));
+        Buffer.from(JSON.stringify({id:4,result:{thread:history}})+"\n")));
     } else originalWrite(line);
   };
   const result=await readCodexHistory(task,{spawnImpl:()=>f.child,isWindows:false,timeoutMs:2000});
