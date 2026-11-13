@@ -39,7 +39,7 @@ void main() {
       // ListView.builder eagerly constructs only visible children; the search
       // field sits beneath the dashboard cards on a compact phone.
       await tester.scrollUntilVisible(find.byType(TextField), 240,
-        maxScrolls: 12);
+        maxScrolls: 12, scrollable: find.byType(Scrollable).first);
       expect(find.byType(TextField), findsOneWidget);
       expect(find.ancestor(
         of: find.byType(TextField),
@@ -73,10 +73,10 @@ void main() {
       expect(find.text('24'), findsOneWidget);
       expect(find.text('23'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('Projects · 24'), 230,
-        maxScrolls: 10);
+        maxScrolls: 10, scrollable: find.byType(Scrollable).first);
       expect(find.text('Projects · 24'), findsOneWidget);
       await tester.scrollUntilVisible(find.byType(TextField), 220,
-        maxScrolls: 12);
+        maxScrolls: 12, scrollable: find.byType(Scrollable).first);
       await tester.enterText(find.byType(TextField).first, 'Project 5');
       await tester.pumpAndSettle();
       // Search text appears both in the editable field and the matching card.
