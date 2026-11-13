@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'models.dart';
 
@@ -162,6 +163,38 @@ class AgentApi {
         // Ignore an invalid server event; the periodic refresh is authoritative.
       }
     }
+  }
+
+  /// View-only screen frames captured on the user's laptop with the native
+  /// browser display picker. No remote keyboard/mouse control is supported.
+  Future<Map<String, dynamic>> screenStatus() => _request('/api/screen/status');
+
+  Future<Map<String, dynamic>> stopScreenShare() =>
+    _request('/api/screen/stop', method: 'POST');
+
+  Future<Uint8List?> screenFrame() async {
+    final request = await _http.getUrl(endpoint.resolve('/api/screen/frame'))
+      .timeout(const Duration(seconds: 10));
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
+    request.headers.set(HttpHeaders.acceptHeader, 'image/jpeg');
+    final response = await request.close().timeout(const Duration(seconds: 10));
+    if (response.statusCode == 404) {
+      await response.drain<void>();
+      return null;
+    }
+    if (response.statusCode != 200 ||
+        response.headers.contentType?.mimeType != 'image/jpeg') {
+      await response.drain<void>();
+      throw ApiException('Screen preview not available', response.statusCode);
+    }
+    final chunks = BytesBuilder(copy: false);
+    await for (final bytes in response) {
+      chunks.add(bytes);
+      if (chunks.length > 160000) {
+        throw const ApiException('Invalid oversized screen frame');
+      }
+    }
+    return chunks.takeBytes();
   }
 
   /// Owner-only remote session, run and approval status.
