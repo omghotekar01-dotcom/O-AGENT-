@@ -315,13 +315,18 @@ class _CodexSessionState extends State<CodexSessionScreen> {
           decoration: const BoxDecoration(color: OTheme.paper,
             border: Border(top: BorderSide(color: OTheme.hairline))),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              ChoiceChip(label: const Text('Read-only'), selected: mode == 'read_only',
-                onSelected: active ? null : (_) => setState(() => mode = 'read_only')),
-              const SizedBox(width: 8),
-              ChoiceChip(label: const Text('Project edits'), selected: mode == 'workspace_write',
-                onSelected: active ? null : (_) => setState(() => mode = 'workspace_write')),
-            ]),
+            Align(alignment: Alignment.centerLeft, child: Wrap(
+              spacing: 8, runSpacing: 4, children: [
+                ChoiceChip(label: const Text('Read-only'),
+                  selected: mode == 'read_only',
+                  onSelected: active ? null : (_) =>
+                    setState(() => mode = 'read_only')),
+                ChoiceChip(label: const Text('Project edits'),
+                  selected: mode == 'workspace_write',
+                  onSelected: active ? null : (_) =>
+                    setState(() => mode = 'workspace_write')),
+              ],
+            )),
             const Text('Read-only blocks changes, not all reads outside this folder.',
               style: TextStyle(fontSize: 10, color: Colors.grey)),
             const SizedBox(height: 8),
