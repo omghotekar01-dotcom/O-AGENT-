@@ -186,3 +186,28 @@ test("a trustworthy live helper resets the expired control lease to view-only",(
   broker.activateTrusted();
   assert.equal(broker.status().paired,true);
 });
+
+test("image paste remains ephemeral, bounded and requires active owner control",()=>{
+  let now=700000;
+  const broker=new RemoteInput({now:()=>now,captureFresh:()=>true});
+  const png=Buffer.concat([
+    Buffer.from([137,80,78,71,13,10,26,10]),Buffer.alloc(100,0x33),
+  ]);
+  assert.throws(()=>broker.image(png,"image/png"),/Pair/);
+  broker.prepare("my-laptop",{trusted:true});
+  broker.activateTrusted();
+  assert.throws(()=>broker.image(Buffer.alloc(100),"image/png"),/Invalid image/);
+  assert.throws(()=>broker.image(png,"image/gif"),/JPEG\/PNG/);
+  assert.throws(()=>broker.image(Buffer.alloc(1500001),"image/png"),/1.5 MB/);
+  now+=25;
+  const queued=broker.image(png,"image/png");
+  assert.equal(queued.accepted,true);
+  assert.equal(JSON.stringify(broker.status()).includes("base64"),false);
+  const event=broker.next("my-laptop").action;
+  assert.equal(event.type,"paste_image");
+  assert.equal(event.mimeType,"image/png");
+  assert.deepEqual(Buffer.from(event.base64,"base64"),png);
+  broker.stop();
+  assert.equal(broker.next("my-laptop").action,null);
+  assert.equal(broker.status().queueDepth,0);
+});
