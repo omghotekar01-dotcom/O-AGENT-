@@ -14,6 +14,7 @@ const STORAGE_URL = "oagent.server";
 const STORAGE_TOKEN = "oagent.workerToken";
 let running = false, timer = null, pending = false, statusBar = null;
 let mobileEditsUntil = 0;
+let enrolledRoot = null;
 let contextRef = null;
 const workerId = "vscode-" + hostname().replace(/[^a-zA-Z0-9_-]/g,"").slice(0,32) + "-companion";
 const caps = ["workspace_inventory","vscode_open_file","vscode_workspace_files"];
@@ -124,7 +125,9 @@ async function openFile(task) {
   const relative = task.parameters?.relativePath;
   if (!safeRelativePath(relative)) throw Error("Invalid relative file path");
   const dest = resolve(root,relative);
-  const real = await realpath(dest);
+  let real;
+  try { real = await realpath(dest); }
+  catch { throw Error("File does not exist under the enrolled VS Code folder. Use Browse project files to pick an existing path."); }
   if (!withinWorkspace(root,real)) throw Error("File resolves outside trusted workspace");
   const s = await stat(real);
   if (!s.isFile()) throw Error("Target must be a file");
@@ -175,6 +178,12 @@ async function poll() {
   if (!running || pending) return;
   pending = true;
   try {
+    const actualRoot = await currentWorkspace();
+    if (!enrolledRoot || actualRoot !== enrolledRoot) {
+      await stop();
+      vscode.window.showWarningMessage("VS Code project folder changed. Start O-AGENT again to consent to the new workspace.");
+      return;
+    }
     await api("/api/workers/" + workerId + "/heartbeat");
     await publishChangedFiles();
     await processMobileFiles();
@@ -184,9 +193,13 @@ async function poll() {
         const result = await runTask(task);
         await api("/api/workers/" + workerId + "/tasks/" + task.id + "/finish",
           {ok:true,result});
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "VS Code operation unavailable";
+        const safe = /File does not exist|Invalid|denied|not a file|workspace/i.test(message)
+          ? message.slice(0,240)
+          : "VS Code operation unavailable. Open the exact project folder and retry.";
         await api("/api/workers/" + workerId + "/tasks/" + task.id + "/finish",
-          {ok:false,error:"VS Code operation denied or unavailable"}).catch(()=>{});
+          {ok:false,error:safe}).catch(()=>{});
       }
     }
     statusBar.text = "$(shield) O-AGENT: connected";
@@ -198,6 +211,7 @@ async function poll() {
 }
 async function stop() {
   mobileEditsUntil = 0;
+  enrolledRoot = null;
   if (running) {
     try { await api("/api/workers/" + workerId + "/vscode/files/stop",{}); }
     catch { /* ephemeral relay expires independently */ }
@@ -218,8 +232,10 @@ async function start() {
   try {
     await settings();
     await checkBackend();
+    const root = await currentWorkspace();
     const confirm = await vscode.window.showInformationMessage(
-      "Enable O-AGENT for this trusted workspace? The owner phone may list folders "
+      "Enroll this exact VS Code folder: " + root + "? "
+      + "Enable O-AGENT for this trusted workspace? The owner phone may list folders "
       + "and view non-secret text files within this project. Contents are relayed "
       + "temporarily and never stored in the backend database. Changes require "
       + "a separate locally enabled 30-minute editing window AND confirmation on "
@@ -227,6 +243,7 @@ async function start() {
       {modal:true}, "Enable", "Cancel");
     if (confirm !== "Enable") return;
     await api("/api/workers/register",{id:workerId,name:"VS Code " + hostname(),capabilities:caps});
+    enrolledRoot = root;
     running = true;
     statusBar.show();
     await poll();
