@@ -8,7 +8,12 @@ const create = (tag,text,className) => {
 };
 const NONE = Object.freeze([]);
 let config=null, accessToken=null, expiresAt=0,refreshing=false;
-let state={devices:[],runs:[],approvals:[],audit:[]};
+let state={devices:[],runs:[],approvals:[],audit:[],role:"viewer",workspaces:[],members:[],tenantId:null};
+const WORKSPACE_ID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+let workspaceId=sessionStorage.getItem("oagent_active_workspace");
+if(workspaceId && !WORKSPACE_ID.test(workspaceId)){
+  sessionStorage.removeItem("oagent_active_workspace");workspaceId=null;
+}
 let activeView="overview",pendingPair=sessionStorage.getItem("oagent_pending_pair")||null;
 let review=null, noticeTimeout=null;
 const ACTIVE=new Set(["queued","running","waiting_for_tool","needs_recovery"]);
@@ -60,7 +65,7 @@ function action(node,text,fn,style="secondary"){
   return b;
 }
 function navigate(view){
-  if(!["overview","approvals","runs","devices","audit"].includes(view))return;
+  if(!["overview","approvals","runs","devices","audit","team"].includes(view))return;
   activeView=view;
   for(const panel of document.querySelectorAll("[data-panel]"))
     panel.hidden=panel.dataset.panel!==view;
@@ -73,7 +78,7 @@ function navigate(view){
   $("viewName").textContent=({
     overview:"Overview",approvals:"Action inbox",
     runs:"Agent runs",devices:"Connected devices",
-    audit:"Security activity",
+    audit:"Security activity",team:"Team & workspaces",
   })[view];
   $("sidebar").classList.remove("open");
   window.scrollTo({top:0,behavior:"instant"});
@@ -146,6 +151,7 @@ async function api(path,{method="GET",body,headers}={}){
   const result=await fetch(path,{
     method,headers:{authorization:"Bearer "+accessToken,
       accept:"application/json",
+      ...(workspaceId?{"x-oagent-workspace":workspaceId}:{}),
       ...(body!==undefined?{"content-type":"application/json"}:{}),...headers},
     ...(body!==undefined?{body:JSON.stringify(body)}:{}),
     cache:"no-store",redirect:"error",
@@ -175,7 +181,7 @@ function renderDevice(node,device){
     "No provider execution capability advertised","entry-detail"));
   if(device.workspace_root)el.append(create("p",
     "Enrolled workspace: "+device.workspace_root,"entry-detail"));
-  if(!device.revoked_at){
+  if(!device.revoked_at && state.role==="owner"){
     const buttons=create("div",undefined,"entry-actions");
     action(buttons,"Revoke device",async()=>{
       const agree=await reviewExact({
@@ -219,7 +225,7 @@ function renderRun(node,run){
       buttons:"close",
     });
   });
-  if(["waiting_for_approval","queued"].includes(run.status)){
+  if(state.role!=="viewer" && ["waiting_for_approval","queued"].includes(run.status)){
     action(actions,"Cancel pending run",async()=>{
       const decision=await reviewExact({
         title:"Cancel the pending task?",
@@ -234,7 +240,7 @@ function renderRun(node,run){
       notice("Pending run cancelled.");await refresh();
     },"danger");
   }
-  if(run.status==="needs_recovery"){
+  if(state.role!=="viewer" && run.status==="needs_recovery"){
     action(actions,"Resolve interrupted run",async()=>{
       const exact=await api("/v1/runs/"+encodeURIComponent(run.id));
       const confirmed=await reviewExact({
@@ -261,8 +267,9 @@ function renderApproval(node,approval){
   el.append(create("p","Device "+approval.device_id+" · Expires "+
     dateText(approval.expires_at),"entry-detail"));
   const actions=create("div",undefined,"entry-actions");
-  const reviewButton=action(actions,"Review exact request",
+  const reviewButton=action(actions,state.role==="viewer"?"Viewer cannot decide":"Review exact request",
     ()=>approveDialog(approval),"primary");
+  if(state.role==="viewer")reviewButton.disabled=true;
   if(approval.actionable===false){
     reviewButton.disabled=true;
     el.append(create("p",approval.unavailableReason||
@@ -481,7 +488,8 @@ async function refresh(){
 }
 function disconnect(){
   accessToken=null;expiresAt=0;
-  state={devices:[],runs:[],approvals:[],audit:[]};
+  state={devices:[],runs:[],approvals:[],audit:[],role:"viewer",workspaces:[],members:[],tenantId:null};
+  workspaceId=null;sessionStorage.removeItem("oagent_active_workspace");
   showAuth(false);pillConnection(false);
 }
 function b64ToBytes(value){
@@ -585,7 +593,7 @@ async function bootstrap(){
     history.replaceState(null,"",location.pathname+location.search);
   }
   const requestedView=new URL(location.href).searchParams.get("view");
-  if(["overview","approvals","runs","devices","audit"].includes(requestedView)){
+  if(["overview","approvals","runs","devices","audit","team"].includes(requestedView)){
     navigate(requestedView);
   }
   try{
