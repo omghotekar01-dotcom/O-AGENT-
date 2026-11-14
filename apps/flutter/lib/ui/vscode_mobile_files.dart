@@ -265,7 +265,7 @@ class _MobileSourceEditorState extends State<_MobileSourceEditor> {
           Expanded(child:FilledButton.icon(
             onPressed:widget.readOnly||_saving||!_editing?null:_save,
             icon:const Icon(Icons.save_outlined),
-            label:const Text('Review & save')),
+            label:const Text('Review & save'))),
         ]))),
     ]),
   );
