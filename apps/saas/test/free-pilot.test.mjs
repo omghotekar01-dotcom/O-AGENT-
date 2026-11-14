@@ -43,6 +43,8 @@ test("self-host stack never publishes identity or postgres ports",()=>{
   assert.equal(realm.registrationAllowed,false);
   assert.equal(realm.clients[0].attributes["pkce.code.challenge.method"],"S256");
   assert.equal(realm.clients[0].publicClient,true);
+  assert.ok(realm.clients[0].defaultClientScopes.includes("basic"),
+    "Keycloak basic client scope is required for signed subject identity");
   assert.equal(realm.clients[0].implicitFlowEnabled,false);
   assert.equal(realm.clients[0].directAccessGrantsEnabled,false);
   assert.match(init,/NOBYPASSRLS/);

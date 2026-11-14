@@ -50,6 +50,7 @@
         "post.logout.redirect.uris": "${OAGENT_ORIGIN}/"
       },
       "defaultClientScopes": [
+        "basic",
         "profile",
         "email",
         "roles",

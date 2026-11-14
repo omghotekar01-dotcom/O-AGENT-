@@ -65,7 +65,7 @@ const configured=await request("/auth/admin/realms/oagent/clients/"+
   {authorization:adminAuth});
 if(configured.status!==200||!Array.isArray(configured.body))
   throw Error("OIDC client default scopes not available");
-const expected=["oagent-read","oagent-operate"];
+const expected=["basic","oagent-read","oagent-operate"];
 const createdNames=new Set(listing.body.map(x=>x.name));
 const linkedNames=new Set(configured.body.map(x=>x.name));
 for(const name of expected){
@@ -132,6 +132,7 @@ assert.equal(typeof token.body.access_token,"string");
 assert.ok(token.body.access_token.length>100);
 const scopes=new Set((token.body.scope||"").split(" "));
 assert.ok(scopes.has("oagent-read"),"OIDC read scope missing");
+// Keycloak 26 basic scope must issue a stable subject for tenant identity.
 assert.ok(scopes.has("oagent-operate"),"OIDC operate scope missing");
 const access=token.body.access_token;
 // The following checks display ONLY booleans for known authentication
