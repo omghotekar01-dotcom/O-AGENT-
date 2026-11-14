@@ -37,7 +37,10 @@ const projectHub = new ProjectHub(core, agentRuntime);
 const accountHub = new AccountHub(core);
 const publicAuth = new PublicAuth(core);
 const screenShare = new ScreenShare();
-const remoteInput = new RemoteInput({ captureFresh: () => screenShare.status().fresh });
+const remoteInput = new RemoteInput({
+  captureFresh: () => screenShare.status().fresh,
+  captureDisplay: () => screenShare.status().displaySurface === "monitor",
+});
 const vscodePresence = new VscodePresence();
 const vscodeFileRelay = new VscodeFileRelay();
 const pushHub = new PushHub(core, accountHub);
@@ -150,7 +153,7 @@ const server = createServer(async (req, res) => {
       if (req.method === "GET" && path === "/api/screen/status")
         return send(res, 200, screenShare.status());
       if (req.method === "POST" && path === "/api/screen/start")
-        return send(res, 201, screenShare.start());
+        return send(res, 201, screenShare.start(await readJson(req, 512)));
       if (req.method === "POST" && path === "/api/screen/stop") {
         remoteInput.stop();
         return send(res, 200, screenShare.stop());
