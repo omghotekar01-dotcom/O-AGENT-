@@ -1,8 +1,8 @@
 {
   "name": "oagent-vscode-companion",
   "displayName": "O-AGENT Workspace Companion",
-  "description": "Opt-in VS Code workspace presence and owner-approved file navigation",
-  "version": "0.4.0",
+  "description": "Connect your local O-AGENT Windows setup and manage trusted project files through a visible VS Code workspace sidebar",
+  "version": "0.5.0",
   "publisher": "oagent-local",
   "private": true,
   "engines": {
@@ -13,10 +13,16 @@
     "onCommand:oagent.configure",
     "onCommand:oagent.start",
     "onCommand:oagent.stop",
-    "onCommand:oagent.enableMobileEdits"
+    "onCommand:oagent.enableMobileEdits",
+    "onCommand:oagent.connectLocal",
+    "onView:oagent.workspace"
   ],
   "contributes": {
     "commands": [
+      {
+        "command": "oagent.connectLocal",
+        "title": "O-AGENT: Connect from This Windows Laptop (No Key Paste)"
+      },
       {
         "command": "oagent.configure",
         "title": "O-AGENT: Configure Secure Companion"
@@ -33,7 +39,26 @@
         "command": "oagent.enableMobileEdits",
         "title": "O-AGENT: Enable Mobile File Editing (30 minutes)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "oagentWorkspace",
+          "title": "O-AGENT",
+          "icon": "resources/oagent.svg"
+        }
+      ]
+    },
+    "views": {
+      "oagentWorkspace": [
+        {
+          "id": "oagent.workspace",
+          "name": "Connected workspace",
+          "type": "tree",
+          "visibility": "visible"
+        }
+      ]
+    }
   },
   "categories": [
     "Other"
