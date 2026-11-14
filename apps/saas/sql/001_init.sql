@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS push_tenant_idx ON push_subscriptions(tenant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS push_tenant_endpoint_idx ON push_subscriptions(tenant_id,endpoint_hash);
 ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE push_subscriptions FORCE ROW LEVEL SECURITY;
 
