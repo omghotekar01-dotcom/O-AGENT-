@@ -90,7 +90,6 @@ class _VsCodeFilesState extends State<VsCodeFilesScreen> {
             content:content,expectedHash:hash),
         ),
       ));
-      if(mounted) _load(_folder);
     } catch(error) {
       if(mounted)setState(()=>_error=error.toString());
     } finally {
