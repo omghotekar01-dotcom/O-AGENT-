@@ -2,7 +2,7 @@
   "name": "oagent-vscode-companion",
   "displayName": "O-AGENT Workspace Companion",
   "description": "Opt-in VS Code workspace presence and owner-approved file navigation",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "oagent-local",
   "private": true,
   "engines": {
@@ -12,7 +12,8 @@
   "activationEvents": [
     "onCommand:oagent.configure",
     "onCommand:oagent.start",
-    "onCommand:oagent.stop"
+    "onCommand:oagent.stop",
+    "onCommand:oagent.enableMobileEdits"
   ],
   "contributes": {
     "commands": [
@@ -27,6 +28,10 @@
       {
         "command": "oagent.stop",
         "title": "O-AGENT: Stop Remote Workspace Companion"
+      },
+      {
+        "command": "oagent.enableMobileEdits",
+        "title": "O-AGENT: Enable Mobile File Editing (30 minutes)"
       }
     ]
   },
