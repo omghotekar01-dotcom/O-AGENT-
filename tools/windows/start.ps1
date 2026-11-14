@@ -179,7 +179,7 @@ try {
                     $_.CommandLine.IndexOf('-Trusted', [StringComparison]::OrdinalIgnoreCase) -ge 0
                 })
             if ($existingHelpers.Count -eq 0) {
-                Start-Process -FilePath 'powershell.exe' -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "' + $helperScript + '" -Trusted') -WorkingDirectory $root -WindowStyle Normal | Out-Null
+                Start-Process -FilePath 'powershell.exe' -ArgumentList ('-NoProfile -STA -ExecutionPolicy Bypass -File "' + $helperScript + '" -Trusted') -WorkingDirectory $root -WindowStyle Normal | Out-Null
             }
             Write-Host '  Mobile desktop control: trusted companion launched visibly (off until the phone presses Control).' -ForegroundColor Green
         } catch {
