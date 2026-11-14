@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS runs (
   kind varchar(40) NOT NULL,
   mode varchar(30) NOT NULL,
   prompt text NOT NULL,
+  cwd text NOT NULL DEFAULT '',
   action_hash char(64) NOT NULL,
   request_key varchar(128) NOT NULL,
   status varchar(40) NOT NULL CHECK (status IN (
