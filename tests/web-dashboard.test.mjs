@@ -62,7 +62,7 @@ test("web action inbox uses authenticated exact-request review and never fakes e
   assert.match(js,/api\("\/api\/remote\/overview"\)/);
   assert.match(js,/async function reviewInboxDecision/);
   assert.match(js,/const task=await api\(path\)/);
-  assert.match(js,/item\.state!=="pending"/);
+  assert.ok(js.includes('item?.state!=="pending"'), "Expiring tool decisions require pending status");
   assert.match(js,/await confirmAction\("Review exact "/);
   assert.match(js,/ownerOverview\.error\?"Unavailable"/);
   assert.doesNotMatch(js,/Approve this exact task\?/);
