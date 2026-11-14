@@ -13,7 +13,9 @@ void main() {
     expect(find.textContaining('Choose your workspace connection'), findsOneWidget);
     expect(find.textContaining('Public cloud account'), findsOneWidget);
     expect(find.textContaining('Only real machines'), findsOneWidget);
-    expect(find.byType(TextField), findsNWidgets(2));
+    expect(find.byType(TextField), findsNWidgets(3));
+    expect(find.textContaining("Private HTTPS address from START-O-AGENT"), findsOneWidget);
+    expect(find.textContaining("Legacy backend URL"), findsOneWidget);
     expect(find.textContaining('demo'), findsNothing);
   });
 
