@@ -1,7 +1,7 @@
 name: o_agent_mobile
-description: Android and iOS control surface for the real O-AGENT development backend.
+description: Android and iOS control surface for O-AGENT with private SaaS PWA access.
 publish_to: none
-version: 0.11.0+13
+version: 0.12.0+14
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
