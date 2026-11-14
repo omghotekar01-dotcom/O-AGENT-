@@ -22,6 +22,7 @@ CREATE INDEX IF NOT EXISTS pending_devices_source_idx ON pending_devices(source_
 CREATE TABLE IF NOT EXISTS devices (
   id uuid PRIMARY KEY, tenant_id uuid NOT NULL REFERENCES tenants(id),
   name varchar(80) NOT NULL, capabilities jsonb NOT NULL DEFAULT '[]'::jsonb,
+  workspace_root varchar(600),
   created_at timestamptz NOT NULL DEFAULT now(),
   last_seen_at timestamptz, revoked_at timestamptz
 );
