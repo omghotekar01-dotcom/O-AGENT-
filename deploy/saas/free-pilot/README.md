@@ -10,7 +10,7 @@ docker compose --env-file .env.local -f compose.yaml up -d --build
 tailscale serve --bg 8791
 ```
 
-Run `tailscale serve status` and open the printed HTTPS URL on your phone. **Do not use Tailscale Funnel**, router port forwarding, or a public domain for this personal pilot.
+Run `node doctor.mjs` for seven explicit connection checks, then `tailscale serve status` and open the private HTTPS URL on your phone. **Do not use Tailscale Funnel**, router port forwarding, or a public domain for this personal pilot.
 
 The first import creates a private `pilot-owner` login with a randomly generated temporary password in your local `.env.local` (`OAGENT_OWNER_PASSWORD`). Sign in as `pilot-owner` using the dashboard and change the password when prompted. Enable MFA from Keycloak's account console. If needed, administer additional users at `https://YOUR-TAILNET-HOST/auth/admin/` with the separate `admin` and `OAGENT_KEYCLOAK_ADMIN_PASSWORD` credentials. No fixed/default password is embedded in GitHub.
 

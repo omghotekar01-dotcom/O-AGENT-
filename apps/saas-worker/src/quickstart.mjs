@@ -18,7 +18,7 @@ export async function getPilotOrigin(env=process.env){
 }
 export async function main({argv=process.argv,env=process.env}={}){
   const input=argv[2]||env.OAGENT_WORKSPACE_ROOT;
-  if(!input||!isAbsolute(resolve(input)))
+  if(!input||!isAbsolute(input))
     throw Error("Give the workspace path: node apps/saas-worker/src/quickstart.mjs /absolute/workspace/path");
   const workspace=await realpath(resolve(input));
   if(!(await stat(workspace)).isDirectory())

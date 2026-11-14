@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {tailnetOrigin} from "../../..//deploy/saas/free-pilot/setup.mjs";
+import {tailnetOrigin} from "../../../deploy/saas/free-pilot/setup.mjs";
 import {readSaasConfig} from "../src/config.mjs";
 
 const read=name=>readFileSync(new URL("../../../deploy/saas/free-pilot/"+name,import.meta.url),"utf8");
