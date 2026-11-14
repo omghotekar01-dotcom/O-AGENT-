@@ -2,6 +2,8 @@ import {createServer} from "node:http";
 import {Readable} from "node:stream";
 import {pipeline} from "node:stream/promises";
 import {createHmac,randomBytes} from "node:crypto";
+import {resolve} from "node:path";
+import {pathToFileURL} from "node:url";
 import {readSaasConfig} from "./config.mjs";
 import {createOidcVerifier} from "./oidc.mjs";
 import {createPool,withIdentity,withTenant} from "./store.mjs";
@@ -191,7 +193,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
   });
   return {server,close:async()=>{await mcp.close();await new Promise(ok=>server.close(ok));}};
 }
-if(process.argv[1]&&import.meta.url===new URL("file://"+process.argv[1]).href){
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const config=readSaasConfig();
   const pool=createPool(config);
   await pool.query("SELECT 1");
