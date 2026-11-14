@@ -12,6 +12,12 @@ companion, and the 0.9.0 mobile application.
 
 ## On the laptop: open the right folder
 
+For **O-AGENT VS Code Companion 0.5.0** on the same Windows laptop, first
+start O-AGENT.cmd, click the O-AGENT icon in VS Code's left sidebar and
+select **Connect using Windows setup**. You no longer need to manually
+copy the WORKER token or enter the local backend URL. Review the local
+Windows credential-import consent and the separate exact-folder consent.
+
 In VS Code select **File → Open Folder**. If your project is
 `C:\Users\ASUS\OneDrive\Desktop\O Agent\O-AGENT-`, open that
 **specific repository folder**, not its parent `O Agent`.
