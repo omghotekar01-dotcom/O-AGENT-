@@ -8,8 +8,8 @@ const RUN_KINDS=new Set(["workspace_inventory","claude_agent_turn",
   "copilot_sdk_turn","codex_cli_turn"]);
 const MODES=new Set(["read_only","workspace_write"]);
 export const isUUID=s=>typeof s==="string"&&ID.test(s);
-export function actionDigest({deviceId,kind,mode,prompt,cwd}) {
-  return hexSha256(JSON.stringify({deviceId,kind,mode,prompt,cwd}));
+export function actionDigest({deviceId,kind,mode,prompt,cwd,sessionId=null}) {
+  return hexSha256(JSON.stringify({deviceId,kind,mode,prompt,cwd,sessionId}));
 }
 function text(value,max,name) {
   if(typeof value!=="string"||!value.trim()||value.length>max||
@@ -95,17 +95,23 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
     throw httpError(400,"Invalid run request");
   const kind=body.kind, mode=body.mode;
   const prompt=kind==="workspace_inventory"?"Inspect enrolled workspace files":
-    text(body.prompt,8000,"prompt");
+    text(body.prompt,4000,"prompt");
   const cwd=kind==="workspace_inventory"?"":text(body.cwd,600,"workspace path");
   if(cwd && !/^(?:[A-Za-z]:[\\/]|\/)/.test(cwd))
     throw httpError(400,"Workspace must be an absolute enrolled directory");
+  const sessionId=body.sessionId??null;
+  if(sessionId!=null && (typeof sessionId!=="string" ||
+      !/^[A-Za-z0-9_-]{8,120}$/.test(sessionId)))
+    throw httpError(400,"Invalid native provider session ID");
+  if(kind==="codex_cli_turn" && sessionId===null)
+    throw httpError(400,"Codex CLI requires a verified saved session ID");
   const device=await client.query(
     "SELECT capabilities FROM devices WHERE id=$1 AND revoked_at IS NULL AND last_seen_at>now()-interval '2 minutes'",
     [body.deviceId]);
   const caps=device.rows[0]?.capabilities;
   if(!Array.isArray(caps)||!caps.includes(kind))
     throw httpError(409,"The enrolled device is offline or does not support this provider");
-  const digest=actionDigest({deviceId:body.deviceId,kind,mode,prompt,cwd});
+  const digest=actionDigest({deviceId:body.deviceId,kind,mode,prompt,cwd,sessionId});
   const prior=await client.query("SELECT id,action_hash,status FROM runs WHERE request_key=$1",
     [requestKey]);
   if(prior.rows[0]) {
@@ -114,8 +120,8 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
   }
   const runId=randomUUID(),approvalId=randomUUID();
   const created=await client.query(
-    "INSERT INTO runs(id,tenant_id,device_id,kind,mode,prompt,cwd,action_hash,request_key,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'waiting_for_approval') ON CONFLICT (tenant_id,request_key) DO NOTHING RETURNING id",
-    [runId,tenantId,body.deviceId,kind,mode,prompt,cwd,digest,requestKey]);
+    "INSERT INTO runs(id,tenant_id,device_id,kind,mode,prompt,cwd,session_id,action_hash,request_key,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'waiting_for_approval') ON CONFLICT (tenant_id,request_key) DO NOTHING RETURNING id",
+    [runId,tenantId,body.deviceId,kind,mode,prompt,cwd,sessionId,digest,requestKey]);
   if(!created.rowCount){
     const retry=await client.query("SELECT id,action_hash,status FROM runs WHERE request_key=$1",[requestKey]);
     if(retry.rows[0]?.action_hash===digest)
@@ -136,7 +142,7 @@ export async function listRuns(client) {
 export async function runDetail(client,id) {
   if(!isUUID(id))throw httpError(400,"Invalid run ID");
   const {rows}=await client.query(
-    "SELECT id,device_id,kind,mode,prompt,cwd,status,result,error,created_at,updated_at FROM runs WHERE id=$1",[id]);
+    "SELECT id,device_id,kind,mode,prompt,cwd,session_id,status,result,error,created_at,updated_at FROM runs WHERE id=$1",[id]);
   if(!rows[0])throw httpError(404,"Run not found");
   return rows[0];
 }
@@ -176,7 +182,7 @@ export async function claimRun(client,tenantId,deviceId) {
     "SELECT id FROM runs WHERE device_id=$1 AND status IN ('running','waiting_for_tool') LIMIT 1",[deviceId]);
   if(active.rowCount)return {run:null,reason:"active_run"};
   const {rows}=await client.query(
-    "SELECT id,kind,mode,prompt,cwd FROM runs WHERE device_id=$1 AND status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",
+    "SELECT id,kind,mode,prompt,cwd,session_id FROM runs WHERE device_id=$1 AND status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1",
     [deviceId]);
   if(!rows[0])return {run:null};
   const leaseToken=randomUUID();
