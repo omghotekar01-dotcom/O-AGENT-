@@ -90,7 +90,7 @@ test("private realm renderer inserts generated owner password and HTTPS redirect
   assert.equal(realm.clients[0].directAccessGrantsEnabled,false);
   assert.ok(!JSON.stringify(realm).includes("$"+"{OAGENT_"));
   const compose=read("compose.yaml");
-  assert.match(compose,/\.private\/oagent-realm\.json:\/opt\/keycloak/);
+  assert.match(compose,/\.private\/oagent-realm\.json:\/incoming\/realm\.json/);
 });
 
 test("one-shot private realm copy stays isolated and readable only by Keycloak uid",()=>{
