@@ -63,3 +63,15 @@ test("MCP internal handler receives verified identity, not end-user authorizatio
   assert.match(server,/authInfo:\{/);
   assert.match(server,/clientId:identity\.subject/);
 });
+
+test("home-screen PWA contains real network-only security behavior",()=>{
+  const manifest=JSON.parse(readFileSync(new URL("../public/manifest.webmanifest",import.meta.url),"utf8"));
+  const worker=readFileSync(new URL("../public/sw.js",import.meta.url),"utf8");
+  assert.equal(manifest.display,"standalone");
+  assert.equal(manifest.start_url,"/");
+  assert.ok(manifest.icons[0].src==="/icon.svg");
+  assert.match(ui,/rel="manifest"/);
+  assert.match(script,/serviceWorker\.register\("\/sw\.js"/);
+  assert.doesNotMatch(worker,/addEventListener\("fetch"/);
+  assert.doesNotMatch(worker,/caches\.open/);
+});

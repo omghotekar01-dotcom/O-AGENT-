@@ -71,7 +71,9 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
       }
       expectedHost(config,req);
       const assets={"/":"../public/index.html",
-        "/app.js":"../public/app.js","/style.css":"../public/style.css"};
+        "/app.js":"../public/app.js","/style.css":"../public/style.css",
+        "/manifest.webmanifest":"../public/manifest.webmanifest",
+        "/sw.js":"../public/sw.js","/icon.svg":"../public/icon.svg"};
       if(method==="GET"&&Object.hasOwn(assets,path)){
         const content=await readFile(new URL(assets[path],import.meta.url));
         const tokenOrigin=config.webAuth?
@@ -79,13 +81,17 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         res.writeHead(200,{
           "content-type":path==="/"
             ?"text/html; charset=utf-8":path.endsWith(".js")
-              ?"text/javascript; charset=utf-8":"text/css; charset=utf-8",
+              ?"text/javascript; charset=utf-8":path.endsWith(".css")
+                ?"text/css; charset=utf-8":path.endsWith(".svg")
+                  ?"image/svg+xml":path.endsWith(".webmanifest")
+                    ?"application/manifest+json":"application/octet-stream",
           "cache-control":"no-store",
           "content-security-policy":"default-src 'none'; script-src 'self'; "+
             "style-src 'self'; connect-src 'self' "+tokenOrigin+"; "+
             "img-src 'self' data:; base-uri 'none'; form-action 'none'; "+
             "frame-ancestors 'none'",
           "x-content-type-options":"nosniff","referrer-policy":"no-referrer",
+          "service-worker-allowed":"/",
         });
         res.end(content);return;
       }

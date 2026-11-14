@@ -509,4 +509,9 @@ $("pairApprove").addEventListener("click",async()=>{
 });
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)void refresh();});
 setInterval(()=>{if(loggedIn())void refresh();},12000);
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("/sw.js",{scope:"/"}).catch(()=>{
+    // Installability is optional. Security-critical API calls work without SW.
+  });
+}
 void bootstrap();
