@@ -9,6 +9,31 @@ const execute=(binary,args)=>execFileSync(binary,args,{
   cwd:folder,stdio:["ignore","pipe","pipe"],encoding:"utf8",timeout:180000,
 });
 const compose=["compose","--env-file",".env.local","-f","compose.yaml"];
+const allowedProxy=new Set(["http://127.0.0.1:8791",
+  "http://localhost:8791","127.0.0.1:8791"]);
+/** Fail closed if Tailscale already hosts any unrelated Serve or Funnel app.
+ * Installing O-AGENT must not replace the user's existing private services.
+ */
+export function verifyPrivateServeAvailability(json){
+  const parsed=typeof json==="string"?JSON.parse(json):json;
+  if(parsed==null)return {compatible:true,existing:false};
+  if(typeof parsed!=="object"||Array.isArray(parsed))
+    throw Error("Invalid existing Tailscale Serve status");
+  if(Object.values(parsed.AllowFunnel||{}).some(Boolean))
+    throw Error("An existing Funnel must be reviewed and disabled manually");
+  const web=Object.values(parsed.Web||{});
+  const handlers=web.flatMap(site=>Object.values(site?.Handlers||{}));
+  const tcp=Object.keys(parsed.TCP||{});
+  if(handlers.length===0){
+    if(web.length || tcp.length || Object.keys(parsed.Services||{}).length)
+      throw Error("Existing Tailscale configuration may not be replaced automatically");
+    return {compatible:true,existing:false};
+  }
+  if(handlers.some(h=>typeof h?.Proxy!=="string"||
+      !allowedProxy.has(h.Proxy))||tcp.some(p=>p!=="443"))
+    throw Error("Another Tailscale Serve app is configured");
+  return {compatible:true,existing:true};
+}
 /**
  * Single-command, repeatable private pilot boot. No Funnel, router exposure,
  * paid cloud provisioning, provider auth bypass, or mobile/APK builds.
@@ -28,6 +53,12 @@ export async function startFreePilot({
     run("docker",[...compose,"config","--quiet"]);
   }catch{
     throw Error("Private Compose configuration is invalid. Run node doctor.mjs.");
+  }
+  try{
+    verifyPrivateServeAvailability(
+      run("tailscale",["serve","status","--json"]));
+  }catch{
+    throw Error("Existing Tailscale Serve/Funnel configuration could conflict. Review tailscale serve status manually; no service has been changed.");
   }
   try{
     run("docker",[...compose,"up","-d","--build"]);

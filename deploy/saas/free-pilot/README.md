@@ -8,7 +8,7 @@ cd deploy/saas/free-pilot
 node start.mjs
 ```
 
-Windows users can double-click `start.cmd` instead. The start command checks Compose and Tailscale, generates device-owned private credentials only on this machine, boots the isolated services, enables **Serve** (never Funnel), and prints the readiness checks without exposing secrets.
+Windows users can double-click `start.cmd` instead. The start command checks Compose and Tailscale, generates device-owned private credentials only on this machine, boots the isolated services, enables **Serve** (never Funnel), and prints the readiness checks without exposing secrets. It refuses to overwrite any existing unrelated Tailscale Serve or Funnel configuration.
 
 Run `node doctor.mjs` for eight explicit connection checks, then `tailscale serve status` and open the private HTTPS URL on your phone. **Do not use Tailscale Funnel**, router port forwarding, or a public domain for this personal pilot.
 
