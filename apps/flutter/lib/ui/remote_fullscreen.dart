@@ -253,7 +253,7 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
     _send({'type': 'move', 'dx': dx, 'dy': dy});
   }
 
-  void _typeOnDesktop() {
+  void _typeOnDesktop({bool submit = false}) {
     _text.clear();
     showModalBottomSheet<void>(
       context: context, isScrollControlled: true, showDragHandle: true,
@@ -263,11 +263,18 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
         child: Column(mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Type into the focused laptop window',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(submit ? 'Send a prompt to the focused AI app'
+              : 'Type into the focused laptop window',
+              style: const TextStyle(fontSize: 18,
+                fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            const Text('Only ordinary text. Do not enter passwords, API keys, payment details or sensitive data.',
-              style: TextStyle(fontSize: 12)),
+            Text(submit
+              ? 'First tap the actual ChatGPT, VS Code, Copilot or other text '
+                'field on the shared screen. The phone will type this prompt '
+                'and press Enter. Review the exact text before sending.'
+              : 'Only ordinary text. Do not enter passwords, API keys, payment '
+                'details or sensitive data.',
+              style: const TextStyle(fontSize: 12)),
             TextField(controller: _text, maxLength: 300, autofocus: true,
               decoration: const InputDecoration(hintText: 'Text to type on laptop'),
               minLines: 1, maxLines: 3),
@@ -275,10 +282,13 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
               onPressed: () {
                 final value = _text.text;
                 Navigator.pop(sheet);
-                if (value.isNotEmpty) _send({'type': 'text', 'text': value});
+                if (value.isNotEmpty) {
+                  _send({'type': 'text', 'text': value});
+                  if (submit) _send({'type': 'key', 'key': 'enter'});
+                }
               },
               icon: const Icon(Icons.keyboard),
-              label: const Text('Type on laptop')),
+              label: Text(submit ? 'Send prompt & Enter' : 'Type on laptop')),
           ],
         )),
     );
@@ -430,7 +440,12 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
                     IconButton(tooltip: 'Scroll down', onPressed: () =>
                       _send({'type': 'scroll', 'steps': -1}),
                       icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white)),
-                    IconButton(tooltip: 'Type text', onPressed: _typeOnDesktop,
+                    FilledButton.icon(
+                      onPressed: () => _typeOnDesktop(submit: true),
+                      icon: const Icon(Icons.send, size: 17),
+                      label: const Text('Send prompt')),
+                    IconButton(tooltip: 'Type text without Enter',
+                      onPressed: () => _typeOnDesktop(),
                       icon: const Icon(Icons.keyboard, color: Colors.white)),
                     TextButton(onPressed: () => _send({'type': 'key', 'key': 'enter'}),
                       child: const Text('Enter', style: TextStyle(color: Colors.white))),
