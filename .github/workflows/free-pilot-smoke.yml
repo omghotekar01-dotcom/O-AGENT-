@@ -1,0 +1,155 @@
+name: O-AGENT Private Pilot Container Smoke (No APK)
+on:
+  workflow_dispatch:
+  # Initial integration smoke once on this implementation branch; later runs
+  # are manual so a free-tier account does not pay repeated container pulls.
+  push:
+    branches: ["feat/saas-secure-control-plane-20261114"]
+    paths:
+      - ".github/workflows/free-pilot-smoke.yml"
+      - "deploy/saas/free-pilot/oagent-realm.json"
+      - "deploy/saas/free-pilot/ci-oidc-smoke.mjs"
+      - "deploy/saas/free-pilot/compose.yaml"
+      - "deploy/saas/free-pilot/setup.mjs"
+      - ".dockerignore"
+concurrency:
+  group: oagent-pilot-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+jobs:
+  boot-private-stack:
+    name: Boot actual PostgreSQL, Keycloak, API and local Caddy
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      OAGENT_TAILNET_HOST: ci-runner.example.ts.net
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable synthetic password grant ONLY inside disposable CI realm
+        run: |
+          node --input-type=module <<'JS'
+          import {readFileSync,writeFileSync} from "node:fs";
+          const path="deploy/saas/free-pilot/oagent-realm.json";
+          const realm=JSON.parse(readFileSync(path,"utf8"));
+          const web=realm.clients.find(x=>x.clientId==="oagent-web");
+          web.directAccessGrantsEnabled=true;
+          const user=realm.users.find(x=>x.username==="pilot-owner");
+          user.credentials[0].temporary=false;
+          writeFileSync(path,JSON.stringify(realm));
+          JS
+      - name: Generate ephemeral local-only pilot secrets and private realm
+        run: node deploy/saas/free-pilot/setup.mjs
+      - name: Validate Caddy gateway syntax before starting containers
+        run: |
+          docker run --rm -v "$PWD/deploy/saas/free-pilot/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.9-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null
+      - name: Verify gateway runs without elevated container capabilities
+        run: |
+          docker build -f deploy/saas/free-pilot/Dockerfile.gateway -t oagent/free-pilot-gateway:local .
+          docker run --rm --read-only --security-opt no-new-privileges:true             --cap-drop ALL --entrypoint /usr/bin/caddy             oagent/free-pilot-gateway:local version
+      - name: Validate private Compose and build all containers
+        run: |
+          docker compose --env-file deploy/saas/free-pilot/.env.local \
+            -f deploy/saas/free-pilot/compose.yaml config --quiet
+          docker compose --env-file deploy/saas/free-pilot/.env.local \
+            -f deploy/saas/free-pilot/compose.yaml up -d --build
+      - name: Probe API readiness, realm discovery and secure browser config
+        run: |
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import http from "node:http";
+          const origin="https://ci-runner.example.ts.net";
+          const correctHost="ci-runner.example.ts.net";
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          // Node fetch does not reliably override the Host header. Send
+          // protocol-accurate HTTP/1.1 to the loopback gateway instead.
+          async function probe(path,host=correctHost){
+            return new Promise((resolve,reject)=>{
+              const req=http.get({hostname:"127.0.0.1",port:8791,path,
+                headers:{Host:host}},res=>{
+                const chunks=[];
+                res.on("data",chunk=>chunks.push(chunk));
+                res.on("end",()=>{
+                  try{resolve({status:res.statusCode,
+                    body:JSON.parse(Buffer.concat(chunks).toString("utf8"))});}
+                  catch(error){reject(error);}
+                });
+              });
+              req.on("error",reject);
+              req.setTimeout(4000,()=>req.destroy(Error("Gateway timeout")));
+            });
+          }
+          async function read(path){
+            const result=await probe(path);
+            if(result.status!==200)throw Error(path+" HTTP "+result.status);
+            return result.body;
+          }
+          let lastError;
+          for(let attempt=0;attempt<35;attempt++){
+            try{
+              const health=await read("/health/ready");
+              assert.equal(health.status,"ready");
+              const oidc=await read(
+                "/auth/realms/oagent/.well-known/openid-configuration");
+              assert.equal(oidc.issuer,origin+"/auth/realms/oagent");
+              assert.ok(oidc.authorization_endpoint.startsWith(origin+"/auth/"));
+              const web=await read("/v1/public-config");
+              assert.equal(web.authEnabled,true);
+              assert.equal(web.clientId,"oagent-web");
+              assert.equal(web.redirectUri,origin+"/");
+              assert.equal(web.audience,"oagent-api");
+              const push=await probe("/v1/push/config");
+              assert.equal(push.status,401,"Push endpoints require real OIDC");
+              const invalidHost=await probe("/v1/public-config","localhost:8791");
+              assert.equal(invalidHost.status,403,
+                "Untrusted hostnames must still be rejected");
+              console.log("Private pilot booted: PostgreSQL, Keycloak OIDC, Caddy, API and HTTP access guard verified.");
+              process.exit(0);
+            }catch(error){lastError=error;await sleep(3000);}
+          }
+          throw Error("Private pilot container startup failed checks: "+lastError?.message);
+          JS
+      - name: Verify real PostgreSQL migration history before identity test
+        run: |
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml exec -T db             psql -U postgres -d oagent -Atc "SELECT name FROM schema_migrations ORDER BY name" |             grep -q "002_legacy_upgrade.sql"
+      - name: Verify genuine CI Keycloak token and tenant-scoped APIs
+        env:
+          OAGENT_CI_ALLOW_PASSWORD_GRANT: "1"
+        run: node deploy/saas/free-pilot/ci-oidc-smoke.mjs
+      - name: Prove encrypted DB backup and CI-only restore
+        env:
+          OAGENT_BACKUP_PASSPHRASE: "CI-ONLY-Ephemeral-AEAD-Backup-2026-Never-Use-For-Users"
+          OAGENT_RESTORE_CONFIRM: "I_ACCEPT_DESTRUCTIVE_PILOT_RESTORE"
+        run: |
+          node deploy/saas/free-pilot/backup.mjs "$RUNNER_TEMP/oagent-ci-backup"
+          test -s "$RUNNER_TEMP/oagent-ci-backup/oagent.oagent.enc"
+          test -s "$RUNNER_TEMP/oagent-ci-backup/keycloak.oagent.enc"
+          if grep -a -q "CREATE TABLE" "$RUNNER_TEMP/oagent-ci-backup/oagent.oagent.enc"; then
+            echo "Encrypted backup unexpectedly contains plaintext SQL"; exit 1
+          fi
+          node deploy/saas/free-pilot/restore.mjs "$RUNNER_TEMP/oagent-ci-backup"
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml up -d
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml exec -T db psql -U postgres -d oagent -Atc "SELECT count(*) FROM schema_migrations" > "$RUNNER_TEMP/oagent-migrations-count"
+          grep -qE "^[1-9][0-9]*$" "$RUNNER_TEMP/oagent-migrations-count"
+          rm -rf "$RUNNER_TEMP/oagent-ci-backup" "$RUNNER_TEMP/oagent-migrations-count"
+          echo "Disposable encrypted backup and database restore succeeded"
+      - name: Show static gateway errors on failure (not account secrets)
+        if: failure()
+        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=80 gateway
+      - name: Show isolated realm installer errors on failure (never print realm JSON)
+        if: failure()
+        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=30 realm-init
+      - name: Show identity startup failure classification (never display credential values)
+        if: failure()
+        run: |
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=120 identity | grep -E 'Permission denied|FileNotFoundException|Failed to start|ERROR.*realm import' || true
+      - name: Show container status on failure (never print environment secrets)
+        if: failure()
+        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml ps
+      - name: Discard only CI's disposable local database
+        if: always()
+        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml down -v --remove-orphans || true

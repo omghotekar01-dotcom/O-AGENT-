@@ -1,0 +1,131 @@
+# PRIVATE PERSONAL PILOT ONLY. All host services are loopback-only.
+name: oagent-free-pilot
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${OAGENT_PG_ADMIN_PASSWORD:?Run setup first}
+      OAGENT_RUNTIME_PASSWORD: ${OAGENT_RUNTIME_PASSWORD:?Missing runtime secret}
+      OAGENT_MIGRATION_PASSWORD: ${OAGENT_MIGRATION_PASSWORD:?Missing migration secret}
+      OAGENT_KEYCLOAK_DB_PASSWORD: ${OAGENT_KEYCLOAK_DB_PASSWORD:?Missing identity secret}
+    volumes:
+      - pilot_pg:/var/lib/postgresql/data
+      - ./init-postgres.sh:/docker-entrypoint-initdb.d/10-oagent-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [private]
+  # One-shot no-network copy into a private volume readable by Keycloak uid
+  # 1000. Host-generated owner password stays 0600 outside Docker build context.
+  realm-init:
+    image: busybox:1.37
+    restart: "no"
+    read_only: true
+    network_mode: none
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN","DAC_OVERRIDE"]
+    command: ["sh","-ec","cp /incoming/realm.json /out/oagent-realm.json && chmod 0400 /out/oagent-realm.json && chown 1000:0 /out/oagent-realm.json"]
+    volumes:
+      - ./.private/oagent-realm.json:/incoming/realm.json:ro
+      - pilot_realm:/out
+  identity:
+    image: quay.io/keycloak/keycloak:26.4.0
+    restart: unless-stopped
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: oagent_keycloak
+      KC_DB_PASSWORD: ${OAGENT_KEYCLOAK_DB_PASSWORD:?Missing identity secret}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${OAGENT_KEYCLOAK_ADMIN_PASSWORD:?Missing admin password}
+      KC_HOSTNAME: ${OAGENT_ORIGIN:?Missing Tailnet origin}/auth
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "true"
+      KC_PROXY_HEADERS: xforwarded
+      OAGENT_ORIGIN: ${OAGENT_ORIGIN:?Missing Tailnet origin}
+      OAGENT_OWNER_PASSWORD: ${OAGENT_OWNER_PASSWORD:?Missing initial owner password}
+    volumes:
+      - pilot_realm:/opt/keycloak/data/import:ro
+    depends_on:
+      db: {condition: service_healthy}
+      realm-init: {condition: service_completed_successfully}
+    networks: [private]
+  migrate:
+    build:
+      context: ../../..
+      dockerfile: deploy/saas/Dockerfile.api
+    restart: "no"
+    command: ["node", "apps/saas/src/migrate.mjs"]
+    environment:
+      NODE_ENV: production
+      OAGENT_LOCAL_PILOT: "1"
+      OAGENT_SAAS_ORIGIN: ${OAGENT_ORIGIN:?Missing origin}
+      OAGENT_OIDC_ISSUER: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent
+      OAGENT_OIDC_JWKS_URL: http://identity:8080/auth/realms/oagent/protocol/openid-connect/certs
+      OAGENT_OIDC_AUDIENCE: oagent-api
+      OAGENT_OIDC_CLIENT_IDS: oagent-web
+      DATABASE_URL: postgresql://oagent_runtime:${OAGENT_RUNTIME_PASSWORD:?Missing runtime secret}@db:5432/oagent?sslmode=disable
+      OAGENT_MIGRATION_DATABASE_URL: postgresql://oagent_migrator:${OAGENT_MIGRATION_PASSWORD:?Missing migration secret}@db:5432/oagent?sslmode=disable
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [private]
+  api:
+    build:
+      context: ../../..
+      dockerfile: deploy/saas/Dockerfile.api
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    pids_limit: 180
+    mem_limit: 768m
+    environment:
+      NODE_ENV: production
+      OAGENT_LOCAL_PILOT: "1"
+      HOST: 0.0.0.0
+      PORT: "8790"
+      OAGENT_SAAS_ORIGIN: ${OAGENT_ORIGIN:?Missing origin}
+      OAGENT_OIDC_ISSUER: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent
+      OAGENT_OIDC_JWKS_URL: http://identity:8080/auth/realms/oagent/protocol/openid-connect/certs
+      OAGENT_OIDC_AUDIENCE: oagent-api
+      OAGENT_OIDC_CLIENT_IDS: oagent-web
+      OAGENT_VAPID_PUBLIC_KEY: ${OAGENT_VAPID_PUBLIC_KEY:?Missing browser push key}
+      OAGENT_VAPID_PRIVATE_KEY: ${OAGENT_VAPID_PRIVATE_KEY:?Missing browser push key}
+      OAGENT_OIDC_WEB_CLIENT_ID: oagent-web
+      OAGENT_OIDC_AUTHORIZE_URL: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent/protocol/openid-connect/auth
+      OAGENT_OIDC_TOKEN_URL: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent/protocol/openid-connect/token
+      OAGENT_OIDC_LOGOUT_URL: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent/protocol/openid-connect/logout
+      DATABASE_URL: postgresql://oagent_runtime:${OAGENT_RUNTIME_PASSWORD:?Missing runtime secret}@db:5432/oagent?sslmode=disable
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    networks: [private]
+  gateway:
+    build:
+      context: ../../..
+      dockerfile: deploy/saas/free-pilot/Dockerfile.gateway
+    image: oagent/free-pilot-gateway:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8791:8081"
+    read_only: true
+    tmpfs: [/tmp, /config, /data]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on: [api, identity]
+    networks: [private]
+networks:
+  private: {driver: bridge}
+volumes:
+  pilot_pg:
+  pilot_realm:

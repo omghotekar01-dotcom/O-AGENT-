@@ -1,0 +1,150 @@
+import {randomUUID,createHash} from "node:crypto";
+import pg from "pg";
+import {readFile} from "node:fs/promises";
+import {fileURLToPath} from "node:url";
+const {Pool}=pg;
+export const createPool=config=>new Pool({
+  connectionString:config.databaseUrl,max:10,
+  connectionTimeoutMillis:5000,idleTimeoutMillis:30000,
+  application_name:"oagent_saas",
+});
+const migrationFiles=["001_init.sql","002_legacy_upgrade.sql","003_team_workspaces.sql"];
+export async function migrate(pool) {
+  const migrations=await Promise.all(migrationFiles.map(async name=>{
+    const sql=await readFile(fileURLToPath(new URL("../sql/"+name,import.meta.url)),"utf8");
+    return {name,sql,checksum:createHash("sha256").update(sql).digest("hex")};
+  }));
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    // Multiple API rollout jobs cannot apply half a migration concurrently.
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended('oagent.schema.v2',0))");
+    await client.query(
+      "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())");
+    for(const {name,sql,checksum} of migrations){
+      const {rows}=await client.query(
+        "SELECT checksum FROM schema_migrations WHERE name=$1 FOR UPDATE",[name]);
+      if(rows[0]){
+        if(rows[0].checksum!==checksum)
+          throw Error("Applied schema migration has changed: "+name);
+        continue;
+      }
+      await client.query(sql);
+      await client.query(
+        "INSERT INTO schema_migrations(name,checksum) VALUES($1,$2)",
+        [name,checksum]);
+    }
+    await client.query("COMMIT");
+  }catch(error){
+    try{await client.query("ROLLBACK");}catch{}
+    throw error;
+  }finally{client.release();}
+}
+/** All tenant queries use a single client with transaction-scoped RLS context. */
+export async function withTenant(pool,tenantId,fn) {
+  const client=await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('oagent.tenant_id',$1,true)",[tenantId]);
+    const value=await fn(client,tenantId);
+    await client.query("COMMIT");
+    return value;
+  }catch(error){
+    try{await client.query("ROLLBACK");}catch{}
+    throw error;
+  }finally{client.release();}
+}
+/**
+ * Separate verified identities cannot choose a tenant ID. Initial v1 uses
+ * one private workspace per OIDC identity; org membership must be implemented
+ * before advertising shared-enterprise workspaces.
+ */
+export async function withIdentity(pool,identity,fn,{workspaceId=null,requiredRole="viewer"}={}) {
+  if(!identity || typeof identity.issuer!=="string" || !identity.issuer ||
+     typeof identity.subject!=="string" || !identity.subject)
+    throw Object.assign(Error("Verified identity required"),{status:401});
+  const levels={viewer:1,operator:2,owner:3};
+  if(!Object.hasOwn(levels,requiredRole))
+    throw Error("Invalid team permission requirement");
+  if(workspaceId!=null && !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(workspaceId))
+    throw Object.assign(Error("Invalid workspace selection"),{status:400});
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('oagent.identity_issuer',$1,true)",[identity.issuer]);
+    await client.query("SELECT set_config('oagent.identity_subject',$1,true)",[identity.subject]);
+    // Serialize same-subject first login; target membership is separately
+    // enforced for every request, not inferred from a tenant header.
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[
+      identity.issuer+"\\n"+identity.subject]);
+    const found=await client.query(
+      "SELECT tenant_id FROM identities WHERE issuer=$1 AND subject=$2",
+      [identity.issuer,identity.subject]);
+    let homeTenant=found.rows[0]?.tenant_id;
+    if(!homeTenant){
+      homeTenant=randomUUID();
+      await client.query("INSERT INTO tenants(id) VALUES($1)",[homeTenant]);
+      await client.query(
+        "INSERT INTO identities(issuer,subject,tenant_id) VALUES($1,$2,$3)",
+        [identity.issuer,identity.subject,homeTenant]);
+      await client.query("SELECT set_config('oagent.tenant_id',$1,true)",[homeTenant]);
+      await client.query(
+        "INSERT INTO tenant_members(tenant_id,issuer,subject,role) VALUES($1,$2,$3,'owner')",
+        [homeTenant,identity.issuer,identity.subject]);
+    }
+    const tenantId=workspaceId||homeTenant;
+    await client.query("SELECT set_config('oagent.tenant_id',$1,true)",[tenantId]);
+    const member=await client.query(
+      "SELECT role FROM tenant_members WHERE tenant_id=$1 AND issuer=$2 AND subject=$3",
+      [tenantId,identity.issuer,identity.subject]);
+    const role=member.rows[0]?.role;
+    if(!role || levels[role]<levels[requiredRole])
+      throw Object.assign(Error("Workspace membership or permission required"),{status:403});
+    const value=await fn(client,tenantId,role);
+    await client.query("COMMIT");
+    return value;
+  }catch(error){
+    try{await client.query("ROLLBACK");}catch{}
+    throw error;
+  }finally{client.release();}
+}
+
+export async function audit(client,tenantId,actor,action,targetId,detail={}) {
+  await client.query("INSERT INTO audit_events(tenant_id,actor,action,target_id,detail) VALUES($1,$2,$3,$4,$5::jsonb)",
+    [tenantId,String(actor).slice(0,160),action,targetId,
+      JSON.stringify(detail)]);
+}
+
+/** Launch gate: never serve tenants from a superuser/BYPASSRLS pool. */
+export async function assertTenantDatabaseSecurity(pool) {
+  const role=await pool.query(
+    "SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user");
+  if(role.rowCount!==1||role.rows[0].rolsuper||role.rows[0].rolbypassrls)
+    throw Error("Unsafe PostgreSQL runtime role: superuser/BYPASSRLS forbidden");
+  // Table owners can change RLS policy, even with FORCE RLS.
+  const owners=await pool.query(
+    "SELECT relname FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r' AND pg_has_role(current_user,relowner,'MEMBER')",
+    [["devices","runs","approvals","run_events","audit_events","push_subscriptions","tenant_members"]]);
+  if(owners.rowCount)throw Error("Unsafe runtime role: owner of tenant tables");
+  const guard=await pool.query(
+    "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r'",
+    [["devices","runs","approvals","run_events","audit_events","push_subscriptions","tenant_members"]]);
+  if(guard.rowCount!==7||guard.rows.some(x=>!x.relrowsecurity||
+      !x.relforcerowsecurity))
+    throw Error("Tenant isolation tables have missing or disabled FORCE RLS");
+  return {ok:true};
+}
+
+/** Reclaim only expired unscoped ephemeral authentication data. Never delete
+ * run history, provider session IDs, audit records or active approvals.
+ * These two tables intentionally have no tenant RLS because device signatures
+ * must be verified before their tenant identity can be established.
+ */
+export async function pruneEphemeralAuthenticationData(pool){
+  const nonce=await pool.query(
+    "DELETE FROM device_replay_nonces WHERE expires_at<now()");
+  const enrollments=await pool.query(
+    "DELETE FROM pending_devices WHERE expires_at<now()");
+  return {expiredNonces:nonce.rowCount,expiredEnrollmentRequests:enrollments.rowCount};
+}

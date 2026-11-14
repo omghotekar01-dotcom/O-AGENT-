@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">O-AGENT</title>
+  <rect width="512" height="512" rx="110" fill="#112935"/>
+  <rect x="80" y="80" width="352" height="352" rx="94" fill="#d7ebe9"/>
+  <circle cx="256" cy="256" r="112" fill="#1b5968"/>
+  <circle cx="256" cy="256" r="54" fill="#d7ebe9"/>
+  <path d="M343 349l56 56" stroke="#1b5968" stroke-width="28" stroke-linecap="round"/>
+</svg>

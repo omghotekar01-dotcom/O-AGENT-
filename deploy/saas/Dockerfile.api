@@ -1,0 +1,14 @@
+# SaaS control plane - staging candidate, not a production certification.
+FROM node:22-alpine
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=8790
+WORKDIR /srv/oagent
+COPY apps/saas/package.json ./apps/saas/package.json
+RUN cd apps/saas && npm install --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force
+COPY apps/saas/src ./apps/saas/src
+COPY apps/saas/public ./apps/saas/public
+COPY apps/saas/sql ./apps/saas/sql
+RUN addgroup -S oagent && adduser -S -G oagent oagent && chown -R oagent:oagent /srv/oagent
+USER oagent
+EXPOSE 8790
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD node -e "fetch('http://127.0.0.1:8790/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node","apps/saas/src/server.mjs"]

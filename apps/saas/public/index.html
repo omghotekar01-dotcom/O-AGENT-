@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101f2c">
+  <meta name="description" content="O-AGENT — secure native AI agent mission control">
+  <title>O-AGENT · Command Center</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div id="auth" class="auth-shell">
+    <div class="auth-brand"><span class="brand-icon">O</span><span>O-AGENT <small>COMMAND CENTER</small></span></div>
+    <div class="auth-grid">
+      <section class="auth-intro">
+        <p class="eyebrow">YOUR AGENTS. ONE COMMAND CENTER.</p>
+        <h1>Stay in control, wherever your work takes you.</h1>
+        <p class="intro-desc">Follow genuine AI coding tasks, continue connected sessions, and review exact permissions from one secure place.</p>
+        <div class="benefits">
+          <div><span class="benefit-icon">01</span><p><strong>One approval inbox</strong><small>Review real requests and choose what runs.</small></p></div>
+          <div><span class="benefit-icon">02</span><p><strong>Trusted devices</strong><small>Each machine has a distinct cryptographic identity.</small></p></div>
+          <div><span class="benefit-icon">03</span><p><strong>Provider-native work</strong><small>Connect only features a provider actually supports.</small></p></div>
+        </div>
+      </section>
+      <section class="login-card" aria-labelledby="loginTitle">
+        <p class="eyebrow">SECURE WORKSPACE ACCESS</p>
+        <h2 id="loginTitle">Welcome to O-AGENT</h2>
+        <p>Use your organization’s trusted identity provider. Your AI-provider credentials never belong in this login form.</p>
+        <button class="button primary wide" type="button" id="signIn">Sign in securely <span aria-hidden="true">→</span></button>
+        <p id="authHint" class="helper" role="status">Checking identity configuration…</p>
+        <div class="trust-foot"><span class="dot"></span> HTTPS and OAuth 2.0 authorization code with PKCE</div>
+      </section>
+    </div>
+    <footer class="auth-footer">O-AGENT · Genuine provider activity only · No automatic approvals</footer>
+  </div>
+
+  <div id="app" class="app-shell" hidden>
+    <aside id="sidebar" class="sidebar">
+      <div class="brand"><span class="brand-icon">O</span><span><strong>O-AGENT</strong><small>Command Center</small></span></div>
+      <p class="nav-section">YOUR WORKSPACE</p>
+      <nav class="navigation" aria-label="Primary navigation">
+        <button type="button" class="nav active" data-view="overview" aria-current="page"><span>◫</span> Overview</button>
+        <button type="button" class="nav" data-view="approvals"><span>◇</span> Action inbox <b id="sidePending" class="nav-count">0</b></button>
+        <button type="button" class="nav" data-view="runs"><span>▤</span> Agent runs</button>
+        <button type="button" class="nav" data-view="devices"><span>▣</span> Connected devices</button>
+        <button type="button" class="nav" data-view="audit"><span>◷</span> Security activity</button>
+        <button type="button" class="nav" data-view="team"><span>♧</span> Team & workspaces</button>
+      </nav>
+      <div class="side-foot"><span id="sideDot" class="status-dot"></span><span id="sideConnect">Checking backend</span><p>Provider connections are never displayed as live without real verification.</p></div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar">
+        <div class="breadcrumb"><button id="menuButton" class="mobile-menu" type="button" aria-label="Open menu">☰</button><span>WORKSPACE</span><span class="slash">/</span><strong id="viewName">Overview</strong></div>
+        <div class="top-actions"><label class="switch-label" for="workspaceSwitch">Workspace</label><select id="workspaceSwitch" aria-label="Active authorized workspace" class="workspace-switch"></select><span id="connectionPill" class="top-status">Checking</span><button id="refresh" class="button secondary" type="button">Refresh</button><button id="signOut" class="button ghost" type="button">Sign out</button></div>
+      </header>
+      <main>
+        <section id="pairPanel" class="pair-card" hidden aria-labelledby="pairTitle">
+          <div class="pair-mark">✦</div><div class="pair-copy"><p class="eyebrow">TRUSTED DEVICE ENROLLMENT</p><h2 id="pairTitle">Approve a new device</h2><p id="pairDescription">Inspect the device and verify its fingerprint before connecting it.</p><p class="fingerprint" id="pairFingerprint"></p></div>
+          <div class="pair-actions"><button type="button" id="pairCancel" class="button secondary">Not my device</button><button type="button" id="pairApprove" class="button primary">Approve this device</button></div>
+        </section>
+        <section class="page" data-panel="overview">
+          <div class="page-header"><div><p class="eyebrow">MISSION CONTROL</p><h1>Workspace overview</h1><p>Real status across your enrolled, provider-native AI work.</p></div><button type="button" class="button primary" data-go="runs">New supervised task <span aria-hidden="true">→</span></button></div>
+          <section class="panel notification-panel" aria-labelledby="alertsTitle">
+            <div><p class="eyebrow">FREE MOBILE NOTIFICATIONS</p>
+              <h2 id="alertsTitle">Agent approvals, even when you step away</h2>
+              <p class="entry-detail">Get a private alert when an enrolled agent asks for permission. Review and approve only after signing in. On iPhone, add this web app to your Home Screen first.</p>
+            </div>
+            <div class="alert-actions">
+              <button id="enableAlerts" class="button secondary" type="button">Enable approval alerts</button>
+              <button id="disableAlerts" class="button ghost" type="button">Disable alerts on this phone</button>
+            </div>
+          </section>
+          <div class="stats">
+            <article class="stat"><p>Connected devices</p><strong id="statDevices">—</strong><small>Recent verified heartbeats</small></article>
+            <article class="stat"><p>Active runs</p><strong id="statRunning">—</strong><small>Server-confirmed tasks</small></article>
+            <article class="stat emphasis"><p>Awaiting your approval</p><strong id="statApprovals">—</strong><small>Explicit decisions required</small></article>
+            <article class="stat"><p>Completed runs</p><strong id="statCompleted">—</strong><small>Confirmed execution results</small></article>
+          </div>
+          <div class="split">
+            <section class="panel"><div class="panel-head"><div><p class="eyebrow">ATTENTION NEEDED</p><h2>Recent approvals</h2></div><button class="text-link" type="button" data-go="approvals">Open inbox</button></div><div id="overviewApprovals" class="stack"></div></section>
+            <section class="panel"><div class="panel-head"><div><p class="eyebrow">ACTIVE DEVICES</p><h2>Verified connections</h2></div><button class="text-link" type="button" data-go="devices">Manage</button></div><div id="overviewDevices" class="stack"></div></section>
+          </div>
+          <section class="panel"><div class="panel-head"><div><p class="eyebrow">LATEST EXECUTION</p><h2>Recent agent activity</h2></div><button class="text-link" type="button" data-go="runs">View all</button></div><div id="overviewRuns" class="stack"></div></section>
+        </section>
+        <section class="page" data-panel="approvals" hidden>
+          <div class="page-header"><div><p class="eyebrow">YOUR DECISIONS</p><h1>Action inbox</h1><p>Every permission is bound to its actual device, task and approved arguments.</p></div><button type="button" class="button secondary" id="refreshApprovals">Refresh requests</button></div>
+          <div class="info-line"><span>ⓘ</span> Requests expire. O-AGENT never silently approves agent tools or changes requested destinations.</div>
+          <div id="approvalList" class="card-list"></div>
+        </section>
+        <section class="page" data-panel="runs" hidden>
+          <div class="page-header"><div><p class="eyebrow">AGENT OPERATIONS</p><h1>Agent runs</h1><p>Launch supervised tasks only on online, compatible enrolled workers.</p></div></div>
+          <div class="run-grid">
+            <section class="panel"><div class="panel-head"><div><p class="eyebrow">NEW REQUEST</p><h2>Start a supervised turn</h2></div></div>
+              <form id="runForm" class="form-grid">
+                <label for="deviceSelect">Enrolled device</label><select id="deviceSelect" required></select>
+                <label for="providerSelect">Provider operation</label><select id="providerSelect" required></select>
+                <label for="modeSelect">Permission mode</label><select id="modeSelect"><option value="read_only">Read only (recommended)</option><option value="workspace_write">Workspace editing (separate tool approvals)</option></select>
+                <label for="cwd">Exact enrolled workspace folder</label><input id="cwd" autocomplete="off" placeholder="/workspace/my-project">
+                <label for="sessionId">Existing native session ID <span class="optional">optional except for Codex</span></label><input id="sessionId" autocomplete="off" placeholder="Leave blank for a new supported SDK session">
+                <label for="prompt">Your instructions</label><textarea id="prompt" rows="5" maxlength="4000" placeholder="Describe the next step the agent should perform." required></textarea>
+                <p class="helper">Submitting creates an approval request first. Provider usage may incur charges. No background execution is started by this form alone.</p>
+                <button class="button primary wide" type="submit" id="submitRun">Review and request approval</button>
+              </form>
+            </section>
+            <section class="panel"><div class="panel-head"><div><p class="eyebrow">REAL RUN HISTORY</p><h2>Latest runs</h2></div></div><div id="runList" class="stack"></div></section>
+          </div>
+        </section>
+        <section class="page" data-panel="devices" hidden>
+          <div class="page-header"><div><p class="eyebrow">SECURITY & ACCESS</p><h1>Connected devices</h1><p>Explicitly enrolled laptop and cloud workers; each device can be revoked independently.</p></div></div>
+          <div class="info-line"><span>ⓘ</span> Devices use per-request Ed25519 signatures with timestamp and replay checks, not shared account-level worker tokens.</div>
+          <div id="deviceList" class="card-list"></div>
+          <div class="panel setup-panel"><p class="eyebrow">CONNECT A NEW WORKER</p><h2>Private, owner-approved enrollment</h2><p>Run the O-AGENT enrollment helper on the computer you trust. Open its pairing link on your signed-in phone, inspect the device fingerprint, and approve once. The helper receives its device identity automatically.</p></div>
+        </section>
+        <section class="page" data-panel="team" hidden>
+          <div class="page-header"><div><p class="eyebrow">CONTROLLED TEAM COLLABORATION</p><h1>Team workspaces</h1><p>Keep your private workspace and choose a shared team explicitly. Server permissions apply to every request.</p></div></div>
+          <section class="panel">
+            <p class="eyebrow">CURRENT AUTHORIZATION</p><h2 id="teamRole">Checking workspace role…</h2>
+            <p class="entry-detail">Owners manage devices, invitations and workspace data. Operators can request and review supervised work. Viewers can read activity, but cannot approve or execute actions.</p>
+            <p class="helper">Organization invitations authorize only OIDC identities already signed in. Sharing a tenant never shares provider passwords or device private signing keys.</p>
+          </section>
+          <section class="panel">
+            <p class="eyebrow">JOIN A TRUSTED TEAM</p><h2>Redeem a one-time invitation</h2>
+            <form class="form-grid" id="joinTeamForm">
+              <label for="joinToken">Invitation token from the workspace owner</label>
+              <input id="joinToken" type="password" autocomplete="off" required placeholder="oti_…" spellcheck="false">
+              <p class="helper">Tokens expire after 15 minutes and work only once. Do not paste them into public chats.</p>
+              <button type="submit" class="button secondary">Join this team</button>
+            </form>
+          </section>
+          <div id="teamAdmin" hidden>
+            <section class="panel">
+              <p class="eyebrow">OWNER CONTROLS</p><h2>Manage workspace name</h2>
+              <form class="form-grid" id="workspaceNameForm">
+                <label for="workspaceName">Workspace display name</label>
+                <input id="workspaceName" maxlength="80" minlength="2" required placeholder="My development team">
+                <button type="submit" class="button secondary">Save workspace name</button>
+              </form>
+            </section>
+            <section class="panel">
+              <p class="eyebrow">TIME-LIMITED ACCESS</p><h2>Invite a teammate</h2>
+              <form class="form-grid" id="inviteTeamForm">
+                <label for="teamInviteRole">Permission level</label>
+                <select id="teamInviteRole"><option value="viewer">Viewer — read only</option><option value="operator">Operator — request and approve supervised work</option></select>
+                <button class="button primary" type="submit">Create 15-minute invite</button>
+              </form>
+              <div id="inviteResult" class="form-grid" hidden>
+                <label for="generatedInvite">One-time invitation — copy privately, then discard</label>
+                <input id="generatedInvite" readonly autocomplete="off" spellcheck="false">
+                <button type="button" id="copyTeamInvite" class="button secondary">Copy invitation</button>
+              </div>
+              <p class="helper">Invitations do not add accounts automatically. Every invitee must sign in with their own identity provider.</p>
+            </section>
+            <section class="panel">
+              <div class="panel-head"><div><p class="eyebrow">ACCESS REVIEW</p><h2>Workspace members</h2></div></div>
+              <div id="teamMemberList" class="stack"></div>
+            </section>
+            <section class="panel">
+              <p class="eyebrow">ACTUAL WORKSPACE USAGE</p><h2>Plan and usage</h2>
+              <p id="billingUsage" class="entry-detail">Checking factual tenant usage…</p>
+              <p class="helper">O-AGENT does not currently process subscription payments. Model provider charges, if any, are separate and cannot be estimated from run counts alone. No card will be charged by this pilot.</p>
+            </section>
+          </div>
+        </section>
+        <section class="page" data-panel="audit" hidden>
+          <div class="page-header"><div><p class="eyebrow">ACCOUNT SECURITY</p><h1>Security activity and data</h1><p>Verified account, approval, enrollment, and run decisions from this private workspace.</p></div></div>
+          <section class="panel"><div class="panel-head"><div><p class="eyebrow">AUDIT HISTORY</p><h2>Recent server-recorded actions</h2></div><button class="text-link" type="button" id="refreshAudit">Refresh history</button></div>
+            <p class="helper">Up to 75 recent events. Provider prompts, tokens, and signing keys are deliberately omitted from this history.</p>
+            <div id="auditList" class="stack"></div>
+          </section>
+          <section class="panel">
+            <p class="eyebrow">YOUR DATA BELONGS TO YOU</p>
+            <h2>Export this O-AGENT workspace</h2>
+            <p class="entry-detail">Download your verified account's devices, runs, prompts, decisions, activity and audit history in JSON. Signing keys, passwords and notification secrets are never included. Your download may contain private project content; protect it.</p>
+            <button type="button" id="exportAccount" class="button secondary">Export my workspace data</button>
+          </section>
+          <section class="panel account-danger">
+            <p class="eyebrow">ACCOUNT AND DATA CONTROL</p>
+            <h2>Delete this O-AGENT workspace</h2>
+            <p class="entry-detail">Erases the connected devices, jobs, approvals, activity, audit records, and notification subscriptions held by this server. It does not delete provider accounts, files on enrolled computers, or copies in encrypted backups.</p>
+            <button type="button" id="deleteAccount" class="button danger">Review permanent account deletion</button>
+          </section>
+        </section>
+        <p id="notice" class="notice" role="status" aria-live="polite"></p>
+      </main>
+    </div>
+  </div>
+
+  <dialog id="reviewDialog" aria-labelledby="reviewTitle">
+    <div class="modal-head"><p class="eyebrow">EXACT REQUEST REVIEW</p><h2 id="reviewTitle">Approve action?</h2></div>
+    <p id="reviewDescription" class="modal-description"></p>
+    <pre id="reviewDetails" class="review-details"></pre>
+    <p class="helper">Review the destination and scope. Decisions are recorded by the server. A successful approval does not mean the provider has completed the task.</p>
+    <div class="modal-actions"><button type="button" id="reviewCancel" class="button secondary">Cancel</button><button type="button" id="reviewDeny" class="button danger">Deny</button><button type="button" id="reviewApprove" class="button primary">Approve once</button></div>
+  </dialog>
+<dialog id="deleteDialog" aria-labelledby="deleteTitle">
+  <div class="modal-head"><p class="eyebrow">PERMANENT ACCOUNT DELETION</p><h2 id="deleteTitle">Delete server-side O-AGENT data?</h2></div>
+  <p class="modal-description">This permanently revokes every enrolled device and removes this workspace's server records. O-AGENT cannot remove files on your computer, connected provider accounts or encrypted backup copies.</p>
+  <label for="deletePhrase" class="field-label">Type <strong>DELETE_MY_OAGENT_WORKSPACE</strong> to confirm</label>
+  <input type="text" id="deletePhrase" autocomplete="off" spellcheck="false" class="danger-confirm">
+  <label class="checkbox-line"><input type="checkbox" id="ackLocalData"> I understand that local files, provider accounts and backups remain and must be handled separately.</label>
+  <div class="modal-actions"><button id="deleteCancel" class="button secondary" type="button">Keep my account</button><button id="deleteConfirm" class="button danger" type="button" disabled>Delete server data permanently</button></div>
+</dialog>
+</body>
+</html>

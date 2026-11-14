@@ -7,3 +7,14 @@ node_modules/
 dist/
 coverage/
 .DS_Store
+
+# Free personal pilot secrets; never commit
+**/.env.local
+**/*.backup.age
+**/*.backup.enc
+
+# Private pilot backup folders
+**/free-pilot/backups/
+
+# Local first-login Keycloak realm contains a generated password
+**/free-pilot/.private/

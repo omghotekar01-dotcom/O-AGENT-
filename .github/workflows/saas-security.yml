@@ -1,0 +1,65 @@
+name: SaaS Tenant Security and MCP Tests
+on:
+  pull_request:
+    paths:
+      - "apps/saas/**"
+      - "apps/saas-worker/**"
+      - "apps/gateway/src/provider-turn.mjs"
+      - "apps/gateway/src/codex-turn.mjs"
+      - ".github/workflows/saas-security.yml"
+      - "deploy/saas/**"
+  push:
+    branches: [main]
+    paths:
+      - "apps/saas/**"
+      - "apps/saas-worker/**"
+      - "apps/gateway/src/provider-turn.mjs"
+      - "apps/gateway/src/codex-turn.mjs"
+      - ".github/workflows/saas-security.yml"
+      - "deploy/saas/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: oagent_ci
+          POSTGRES_PASSWORD: testing-only-password
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d oagent_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      OAGENT_TEST_DATABASE_URL: postgres://postgres:testing-only-password@127.0.0.1:5432/oagent_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned SaaS dependencies
+        run: npm --prefix apps/saas install --no-audit --no-fund
+      - name: Audit known high/critical production dependency vulnerabilities
+        run: npm --prefix apps/saas audit --omit=dev --audit-level=high
+      - name: Check new service syntax
+        run: npm --prefix apps/saas run check
+      - name: Check isolated worker syntax
+        run: node --check apps/saas-worker/src/worker.mjs
+      - name: Validate private-pilot Compose (no image pulls)
+        run: |
+          OAGENT_TAILNET_HOST=ci-runner.example.ts.net node deploy/saas/free-pilot/setup.mjs
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml config --quiet
+      - name: Run PostgreSQL RLS, OIDC, Ed25519 and MCP tests
+        run: npm --prefix apps/saas test
