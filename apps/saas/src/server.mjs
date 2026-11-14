@@ -15,7 +15,8 @@ import {
   httpError,startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,
   updateCapabilities,heartbeat,createRun,listRuns,runDetail,
   listApprovals,decideApproval,claimRun,renewLease,finishRun,
-  requestToolApproval,toolApprovalStatus,appendRunEvent,listRunEvents,isUUID,
+  requestToolApproval,toolApprovalStatus,appendRunEvent,listRunEvents,
+  cancelRun,resolveInterruptedRun,isUUID,
 } from "./operations.mjs";
 
 const reply=(res,status,value)=>{
@@ -276,6 +277,16 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
       const run=capturePath(path,/^\/v1\/runs\/([0-9a-f-]{36})$/i);
       if(method==="GET"&&run)return reply(res,200,
         await asTenant(c=>runDetail(c,run[1])));
+      const ownedRunAction=capturePath(path,
+        /^\/v1\/runs\/([0-9a-f-]{36})\/(cancel|resolve-interrupted)$/i);
+      if(method==="POST"&&ownedRunAction){
+        assertJson(req);
+        const body=objectJson(await bytes(req,1200));
+        const runId=ownedRunAction[1],operation=ownedRunAction[2];
+        return reply(res,200,await asTenant((c,t)=>operation==="cancel"
+          ?cancelRun(c,t,identity.subject,runId)
+          :resolveInterruptedRun(c,t,identity.subject,runId,body)));
+      }
       const eventRoute=capturePath(path,/^\/v1\/runs\/([0-9a-f-]{36})\/events$/i);
       if(method==="GET"&&eventRoute){
         const cursor=parsed.searchParams.get("after");

@@ -86,3 +86,10 @@ test("opt-in privacy-safe phone alerts never send or display prompt content",()=
   assert.match(script,/subscription\.toJSON\(\)/);
   assert.match(ui,/id="enableAlerts"/);
 });
+
+test("interrupted provider runs cannot be auto-replayed and owners can cancel queued tasks",()=>{
+  assert.match(script,/MARK_INTERRUPTED_RUN_FAILED/);
+  assert.match(script,/resolve-interrupted/);
+  assert.match(script,/Cancel pending run/);
+  assert.match(script,/No replay was performed/);
+});

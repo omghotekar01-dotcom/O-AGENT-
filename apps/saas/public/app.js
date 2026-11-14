@@ -218,6 +218,40 @@ function renderRun(node,run){
       buttons:"close",
     });
   });
+  if(["waiting_for_approval","queued"].includes(run.status)){
+    action(actions,"Cancel pending run",async()=>{
+      const decision=await reviewExact({
+        title:"Cancel the pending task?",
+        description:"A queued task can be cancelled before its worker claims it.",
+        detail:"Run: "+run.id+"\nStatus: "+statusText(run.status),
+        buttons:"revoke",
+      });
+      if(!decision)return;
+      await api("/v1/runs/"+encodeURIComponent(run.id)+"/cancel",{
+        method:"POST",body:{},
+      });
+      notice("Pending run cancelled.");await refresh();
+    },"danger");
+  }
+  if(run.status==="needs_recovery"){
+    action(actions,"Resolve interrupted run",async()=>{
+      const exact=await api("/v1/runs/"+encodeURIComponent(run.id));
+      const confirmed=await reviewExact({
+        title:"A provider run was interrupted",
+        description:"Inspect your provider and project state before proceeding. O-AGENT never silently retries a potentially side-effecting command.",
+        detail:"Run: "+exact.id+"\nProvider: "+exact.kind+
+          "\nWorkspace: "+exact.cwd+"\nLast status: "+exact.status+
+          "\n\nMark this interrupted run failed WITHOUT replaying it?",
+        buttons:"revoke",
+      });
+      if(!confirmed)return;
+      await api("/v1/runs/"+encodeURIComponent(run.id)+"/resolve-interrupted",{
+        method:"POST",body:{confirm:"MARK_INTERRUPTED_RUN_FAILED"},
+      });
+      notice("Interrupted run marked failed. No replay was performed.");
+      await refresh();
+    },"danger");
+  }
   el.append(actions);node.append(el);
 }
 function renderApproval(node,approval){

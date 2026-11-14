@@ -162,6 +162,14 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
       throw httpError(403,"Requested project lies outside the enrolled workspace");
   }
   const digest=actionDigest({deviceId:body.deviceId,kind,mode,prompt,cwd,sessionId});
+  // Expired owner approvals must not permanently exhaust a tenant's quota.
+  await client.query(
+    "UPDATE runs r SET status='cancelled',error='Approval expired',updated_at=now() WHERE r.status='waiting_for_approval' AND EXISTS (SELECT 1 FROM approvals a WHERE a.run_id=r.id AND a.kind='run' AND a.status='pending' AND a.expires_at<=now())");
+  const blocked=await client.query(
+    "SELECT id FROM runs WHERE device_id=$1 AND status='needs_recovery' LIMIT 1",
+    [body.deviceId]);
+  if(blocked.rowCount)
+    throw httpError(409,"An interrupted run requires owner review before new work");
   const prior=await client.query("SELECT id,action_hash,status FROM runs WHERE request_key=$1",
     [requestKey]);
   if(prior.rows[0]) {
@@ -266,6 +274,9 @@ export async function claimRun(client,tenantId,deviceId) {
   await client.query(
     "UPDATE runs SET status='needs_recovery',updated_at=now() WHERE device_id=$1 AND status IN ('running','waiting_for_tool') AND lease_expires_at<now()",
     [deviceId]);
+  const recovery=await client.query(
+    "SELECT id FROM runs WHERE device_id=$1 AND status='needs_recovery' LIMIT 1",[deviceId]);
+  if(recovery.rowCount)return {run:null,reason:"needs_recovery"};
   const active=await client.query(
     "SELECT id FROM runs WHERE device_id=$1 AND status IN ('running','waiting_for_tool') LIMIT 1",[deviceId]);
   if(active.rowCount)return {run:null,reason:"active_run"};
@@ -369,4 +380,35 @@ export async function listRunEvents(client,runId,after=0) {
     "SELECT id,kind,text,created_at FROM run_events WHERE run_id=$1 AND id>$2 ORDER BY id LIMIT 100",
     [runId,after]);
   return {events:rows,nextCursor:rows.length?rows.at(-1).id:after};
+}
+
+/** A queued/waiting run can be cancelled without asking a worker to execute. */
+export async function cancelRun(client,tenantId,subject,id){
+  if(!isUUID(id))throw httpError(400,"Invalid run ID");
+  const {rows}=await client.query(
+    "UPDATE runs SET status='cancelled',updated_at=now(),error='Cancelled by owner' WHERE id=$1 AND status IN ('waiting_for_approval','queued') RETURNING id",
+    [id]);
+  if(!rows[0])throw httpError(409,"Run cannot be cancelled in its current state");
+  await client.query(
+    "UPDATE approvals SET status='denied',decided_at=now(),decided_by=$1 WHERE run_id=$2 AND status='pending'",
+    [subject,id]);
+  await audit(client,tenantId,subject,"run.cancelled",id);
+  return {runId:id,status:"cancelled"};
+}
+/** Recover without replay: manually acknowledge an expired potentially
+ * side-effecting turn, mark it failed, and only then unblock future work.
+ */
+export async function resolveInterruptedRun(client,tenantId,subject,id,body){
+  if(!isUUID(id)||body?.confirm!=="MARK_INTERRUPTED_RUN_FAILED")
+    throw httpError(400,"Explicit interrupted-run confirmation required");
+  const {rows}=await client.query(
+    "UPDATE runs SET status='failed',lease_token=NULL,lease_expires_at=NULL,updated_at=now(),error='Interrupted execution acknowledged by owner; no automatic replay' WHERE id=$1 AND status='needs_recovery' RETURNING id",
+    [id]);
+  if(!rows[0])throw httpError(409,"Run is not awaiting manual recovery");
+  await client.query(
+    "UPDATE approvals SET status='denied',decided_at=now(),decided_by=$1 WHERE run_id=$2 AND status='pending'",
+    [subject,id]);
+  await audit(client,tenantId,subject,"run.recovery.acknowledged",id,
+    {replayed:false});
+  return {runId:id,status:"failed",replayed:false};
 }

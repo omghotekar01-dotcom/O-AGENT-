@@ -5,7 +5,8 @@ import {Pool} from "pg";
 import {migrate,withIdentity,withTenant,audit,assertTenantDatabaseSecurity} from "../src/store.mjs";
 import {startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,updateCapabilities,
   heartbeat,createRun,listRuns,runDetail,listApprovals,decideApproval,claimRun,
-  finishRun,requestToolApproval,toolApprovalStatus} from "../src/operations.mjs";
+  finishRun,requestToolApproval,toolApprovalStatus,cancelRun,
+  resolveInterruptedRun} from "../src/operations.mjs";
 import {generateDeviceKeys,sha256,deviceHeaders,verifyDeviceHeaders} from "../src/device-crypto.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "../src/push.mjs";
 
@@ -157,6 +158,33 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
           /Invalid push subscription|Unsupported browser push service/);
         await withIdentity(pool,owner,c=>unregisterPush(c,subscription.endpoint));
         assert.equal((await withIdentity(pool,owner,pushStatus)).subscribedDevices,0);
+        const pending=await withIdentity(pool,owner,(c,t)=>
+          createRun(c,t,owner.subject,payload,randomUUID()+"_pending"));
+        assert.equal((await withIdentity(pool,owner,(c,t)=>
+          cancelRun(c,t,owner.subject,pending.runId))).status,"cancelled");
+        const interrupted=await withIdentity(pool,owner,(c,t)=>
+          createRun(c,t,owner.subject,payload,randomUUID()+"_recover"));
+        await withIdentity(pool,owner,(c,t)=>decideApproval(c,t,owner.subject,
+          interrupted.approvalId,{approve:true,
+            expectedActionHash:interrupted.actionHash}));
+        const claimedInterrupted=await withTenant(pool,tenantA,(c,t)=>
+          claimRun(c,t,device.deviceId));
+        assert.equal(claimedInterrupted.run.id,interrupted.runId);
+        await withTenant(pool,tenantA,c=>c.query(
+          "UPDATE runs SET lease_expires_at=now()-interval '1 minute' WHERE id=$1",
+          [interrupted.runId]));
+        const halted=await withTenant(pool,tenantA,(c,t)=>
+          claimRun(c,t,device.deviceId));
+        assert.equal(halted.reason,"needs_recovery");
+        assert.equal(halted.run,null);
+        await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>
+          resolveInterruptedRun(c,t,owner.subject,interrupted.runId,
+            {confirm:"REPLAY_AUTOMATICALLY"})),/confirmation required/);
+        const recovered=await withIdentity(pool,owner,(c,t)=>
+          resolveInterruptedRun(c,t,owner.subject,interrupted.runId,
+            {confirm:"MARK_INTERRUPTED_RUN_FAILED"}));
+        assert.deepEqual(recovered,{runId:interrupted.runId,
+          status:"failed",replayed:false});
         const direct=await pool.query("SELECT count(*)::int AS count FROM runs");
         assert.equal(direct.rows[0].count,0,
           "FORCE RLS without a scoped transaction denies all tenant runs");
