@@ -62,7 +62,7 @@ test("real PostgreSQL: OIDC team roles, one-time invites, selected workspaces an
       method:"POST",body:{role:"viewer"}});
     assert.equal(invite.status,201,JSON.stringify(invite.data));
     assert.match(invite.data.inviteToken,/^oti_[A-Za-z0-9_-]{43}$/);
-    assert.equal((await call("/v1/team/members",{actor:"viewer"})).status,403);
+    assert.equal((await call("/v1/team/members",{actor:"viewer",workspace:home})).status,403);
     const join=await call("/v1/team/join",{
       actor:"viewer",method:"POST",body:{inviteToken:invite.data.inviteToken}});
     assert.equal(join.status,200,JSON.stringify(join.data));
