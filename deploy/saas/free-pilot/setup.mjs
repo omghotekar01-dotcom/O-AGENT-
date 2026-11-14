@@ -33,7 +33,7 @@ export async function setupPilot({env=process.env,notify=console.log,execute=exe
   }catch(error){if(error.code!=="ENOENT")throw error;}
   const names=["OAGENT_PG_ADMIN_PASSWORD","OAGENT_RUNTIME_PASSWORD",
     "OAGENT_MIGRATION_PASSWORD","OAGENT_KEYCLOAK_DB_PASSWORD",
-    "OAGENT_KEYCLOAK_ADMIN_PASSWORD"];
+    "OAGENT_KEYCLOAK_ADMIN_PASSWORD","OAGENT_OWNER_PASSWORD"];
   const data=["# Generated locally; never share or commit.","OAGENT_ORIGIN="+origin,
     ...names.map(n=>n+"="+randomBytes(24).toString("hex"))].join("\n")+"\n";
   await writeFile(file,data,{flag:"wx",mode:0o600});

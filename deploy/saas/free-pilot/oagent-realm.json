@@ -70,5 +70,19 @@
         }
       ]
     }
+  ],
+  "users": [
+    {
+      "username": "pilot-owner",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${OAGENT_OWNER_PASSWORD}",
+          "temporary": true
+        }
+      ]
+    }
   ]
 }

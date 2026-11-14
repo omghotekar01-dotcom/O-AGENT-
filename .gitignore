@@ -12,3 +12,6 @@ coverage/
 **/.env.local
 **/*.backup.age
 **/*.backup.enc
+
+# Private pilot backup folders
+**/free-pilot/backups/

@@ -12,7 +12,7 @@ tailscale serve --bg 8791
 
 Run `tailscale serve status` and open the printed HTTPS URL on your phone. **Do not use Tailscale Funnel**, router port forwarding, or a public domain for this personal pilot.
 
-At `https://YOUR-TAILNET-HOST/auth/admin/` sign in to Keycloak's master realm with username `admin` and the generated admin password from your local `.env.local`. Create a user in the `oagent` realm using Keycloak Users → Add user → Credentials. Enable MFA for the account. Registration is disabled; no test password is embedded in this repository.
+The first import creates a private `pilot-owner` login with a randomly generated temporary password in your local `.env.local` (`OAGENT_OWNER_PASSWORD`). Sign in as `pilot-owner` using the dashboard and change the password when prompted. Enable MFA from Keycloak's account console. If needed, administer additional users at `https://YOUR-TAILNET-HOST/auth/admin/` with the separate `admin` and `OAGENT_KEYCLOAK_ADMIN_PASSWORD` credentials. No fixed/default password is embedded in GitHub.
 
 Then open the O-AGENT home dashboard and choose **Sign in securely**. To connect a dedicated worker, run the enrollment command on the computer and approve the displayed pairing link with its fingerprint in the authenticated dashboard. Provider logins remain separate and require real supported SDK accounts.
 
@@ -27,3 +27,8 @@ All state is stored in the local Docker volume. **Never** run `docker compose do
 - Database, Keycloak and reverse-proxy images still require Docker image pulls and physical acceptance checks. No cloud account is created automatically.
 
 Official docs: https://tailscale.com/docs/reference/tailscale-cli/serve and https://www.keycloak.org/server/importExport
+
+### Encrypted backups (free, no cloud account)
+Run `OAGENT_BACKUP_PASSPHRASE=<long-private-value> node backup.mjs` with a unique 20+ character passphrase stored safely outside this PC. The script streams both databases through authenticated AES-256-GCM encryption without writing plaintext dumps to disk. Keep the generated folder and passphrase separately; a backup stored only on the same disk is not disaster recovery.
+
+For a **destructive** restore to your private pilot, stop all active tasks, set the same passphrase and `OAGENT_RESTORE_CONFIRM=I_ACCEPT_DESTRUCTIVE_PILOT_RESTORE`, and run `node restore.mjs /path/to/backup-folder`. Both encrypted files are authenticated before any SQL restore. The script stops web/API/identity services and leaves them stopped if restoration fails. Do not restore a live production tenant this way; test this on an expendable pilot before trusting backups.
