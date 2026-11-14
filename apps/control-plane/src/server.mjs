@@ -443,7 +443,7 @@ const server = createServer(async (req, res) => {
       if (req.method === "POST" && path === "/api/workers/remote-input/prepare")
         return send(res, 200, remoteInput.prepare(id));
       if (req.method === "POST" && path === "/api/workers/remote-input/next")
-        return send(res, 200, remoteInput.next(id));
+        return send(res, 200, remoteInput.next(id, body.lastAck));
       if (req.method === "POST" && path === "/api/workers/remote-input/stop")
         return send(res, 200, remoteInput.stop(id));
       throw new DomainError(404, "Unknown Windows input-helper endpoint");
