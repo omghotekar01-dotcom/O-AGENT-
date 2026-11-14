@@ -9,6 +9,19 @@ import {readIdentity} from "./enroll.mjs";
 
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const fail=message=>Object.assign(Error(message),{safe:true});
+const EVENT_KINDS=new Set(["agent_delta","status","turn_completed","warning"]);
+export function boundedProviderResult(result){
+  const payload=JSON.stringify(result??{});
+  if(Buffer.byteLength(payload,"utf8")<=14000)return result;
+  // Provider has completed, but returning an oversized result must not
+  // turn its successful native session into a false failure.
+  const response=typeof result?.response==="string"
+    ?result.response.slice(0,7000):"Provider result exceeded the mobile preview limit";
+  return {providerStatus:result?.providerStatus==="completed"?"completed":"unknown",
+    sessionId:typeof result?.sessionId==="string"?result.sessionId:null,
+    response,truncated:true,
+    notice:"Open the native provider session for the complete output"};
+}
 function safeUrl(origin) {
   const url=new URL(origin);
   if(url.protocol!=="https:" || url.pathname!=="/" || url.username || url.password)
@@ -64,10 +77,12 @@ export class SignedCloudWorker {
     });
     const result=await response.json().catch(()=>({}));
     if(!response.ok){
-      if(response.status===401||response.status===403){
+      if(response.status===401){
         this.revoked=true;
-        throw fail("Device authorization revoked. Re-enroll from the owner account.");
+        throw fail("Device authentication failed or was revoked. Re-enroll only if this device was explicitly revoked.");
       }
+      if(response.status===403)
+        throw fail("Worker operation was forbidden for this action; device identity remains enrolled.");
       throw fail("O-AGENT signed worker request failed (HTTP "+response.status+")");
     }
     return result;
@@ -111,12 +126,30 @@ export class SignedCloudWorker {
         const task={id:run.id,kind:run.kind,
           parameters:{cwd:actual,mode:run.mode,
             prompt:run.prompt,sessionId:run.session_id??null}};
+        let eventCount=0,previewLimited=false;
         const callbacks={
           env:this.env,signal:abort.signal,
           sendUpdate:async event=>{
-            if(lost)throw fail("Run lease lost");
-            await this.api("/v1/device/runs/"+run.id+"/events",
-              {body:{leaseToken:lease,kind:event.type,text:event.text||""}});
+            if(lost||abort.signal.aborted)throw fail("Run lease lost");
+            const kind=EVENT_KINDS.has(event?.type)?event.type:"status";
+            const raw=typeof event?.text==="string"?event.text:"";
+            const cleaned=raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,"");
+            if(eventCount>=490)return; // leave space for terminal status
+            const chunks=cleaned.match(/[\s\S]{1,1700}/g)||[""];
+            for(const text of chunks.slice(0,8)){
+              if(eventCount>=490)break;
+              await this.api("/v1/device/runs/"+run.id+"/events",
+                {body:{leaseToken:lease,kind,text}});
+              eventCount++;
+            }
+            if(chunks.length>8&&!previewLimited&&eventCount<490){
+              previewLimited=true;
+              await this.api("/v1/device/runs/"+run.id+"/events",{
+                body:{leaseToken:lease,kind:"warning",
+                  text:"An oversized provider progress message was shortened; the native session remains available"},
+              });
+              eventCount++;
+            }
           },
           askPermission:async request=>{
             if(lost || abort.signal.aborted)return false;
@@ -146,7 +179,7 @@ export class SignedCloudWorker {
       }
       if(lost || abort.signal.aborted)throw fail("Run authorization expired");
       await this.api("/v1/device/runs/"+run.id+"/complete",
-        {body:{leaseToken:lease,ok:true,result}});
+        {body:{leaseToken:lease,ok:true,result:boundedProviderResult(result)}});
       completed=true;
       return {completed:true};
     }catch(error){
