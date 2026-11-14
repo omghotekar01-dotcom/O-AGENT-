@@ -4,6 +4,7 @@ import {readFileSync} from "node:fs";
 const ui=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
 const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
 const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
+const server=readFileSync(new URL("../src/server.mjs",import.meta.url),"utf8");
 
 test("SaaS command center has unique ids and no broken control references",()=>{
   const ids=[...ui.matchAll(/id="([^"]+)"/g)].map(x=>x[1]);
@@ -53,4 +54,12 @@ test("pairing never grants access without verified fingerprint and owner consent
   assert.match(script,/expectedFingerprint:verified\.fingerprint/);
   assert.match(script,/sessionStorage\.removeItem\("oagent_pending_pair"\)/);
   assert.match(ui,/id="pairPanel"/);
+});
+
+test("MCP internal handler receives verified identity, not end-user authorization header",()=>{
+  assert.match(server,/const protocolHeaders=/);
+  assert.match(server,/headers:protocolHeaders/);
+  assert.doesNotMatch(server,/headers:req\.headers,body/);
+  assert.match(server,/authInfo:\{/);
+  assert.match(server,/clientId:identity\.subject/);
 });
