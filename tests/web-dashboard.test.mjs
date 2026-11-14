@@ -12,7 +12,7 @@ test("web workspace has no broken ID references or inert section links",()=>{
     assert.ok(ids.includes(match[1]),"JS references missing element #"+match[1]);
   }
   const views=[...html.matchAll(/data-panel="([^"]+)"/g)].map(m=>m[1]);
-  assert.deepEqual(views,["overview","files","activity","integrations","setup"]);
+  assert.deepEqual(views,["overview","files","desktop","activity","integrations","setup"]);
   for(const view of views)
     assert.match(html,new RegExp('data-view="'+view+'"'),"Missing navigation for "+view);
 });
