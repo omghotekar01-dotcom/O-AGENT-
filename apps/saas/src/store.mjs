@@ -69,3 +69,18 @@ export async function audit(client,tenantId,actor,action,targetId,detail={}) {
     [tenantId,String(actor).slice(0,160),action,targetId,
       JSON.stringify(detail)]);
 }
+
+/** Launch gate: never serve tenants from a superuser/BYPASSRLS pool. */
+export async function assertTenantDatabaseSecurity(pool) {
+  const role=await pool.query(
+    "SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user");
+  if(role.rowCount!==1||role.rows[0].rolsuper||role.rows[0].rolbypassrls)
+    throw Error("Unsafe PostgreSQL runtime role: superuser/BYPASSRLS forbidden");
+  const guard=await pool.query(
+    "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r'",
+    [["devices","runs","approvals","run_events","audit_events"]]);
+  if(guard.rowCount!==5||guard.rows.some(x=>!x.relrowsecurity||
+      !x.relforcerowsecurity))
+    throw Error("Tenant isolation tables have missing or disabled FORCE RLS");
+  return {ok:true};
+}
