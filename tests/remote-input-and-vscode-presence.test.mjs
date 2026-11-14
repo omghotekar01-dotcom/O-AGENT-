@@ -177,10 +177,10 @@ test("a trustworthy live helper resets the expired control lease to view-only",(
   broker.prepare("my-laptop",{trusted:true});
   broker.activateTrusted();
   // Repeated local helper polls keep it online but must not extend consent.
-  for(let i=0;i<21;i++){
-    now+=60000;
+  for(let i=0;i<241;i++){
+    now+=5000;
     const result=broker.next("my-laptop");
-    if(i<19)assert.equal(result.paired,true);
+    if(i<239)assert.equal(result.paired,true);
   }
   assert.equal(broker.status().paired,false);
   assert.equal(broker.status().trustedReady,true);
