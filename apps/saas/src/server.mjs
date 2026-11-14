@@ -10,6 +10,7 @@ import {createOidcVerifier} from "./oidc.mjs";
 import {createPool,withIdentity,withTenant,assertTenantDatabaseSecurity} from "./store.mjs";
 import {verifyDeviceHeaders} from "./device-crypto.mjs";
 import {createMcp} from "./mcp.mjs";
+import {registerPush,unregisterPush,pushStatus,notifyTenant} from "./push.mjs";
 import {
   httpError,startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,
   updateCapabilities,heartbeat,createRun,listRuns,runDetail,
@@ -202,8 +203,12 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
             await call(c=>renewLease(c,device.deviceId,id,data.leaseToken)));
           if(op==="complete")return reply(res,200,
             await call((c,t)=>finishRun(c,t,device.deviceId,id,data)));
-          if(op==="approvals")return reply(res,201,
-            await call((c,t)=>requestToolApproval(c,t,device.deviceId,id,data)));
+          if(op==="approvals"){
+            const item=await call((c,t)=>requestToolApproval(c,t,device.deviceId,id,data));
+            reply(res,201,item);
+            void notifyTenant(pool,device.tenantId,config).catch(()=>{});
+            return;
+          }
           if(op==="events")return reply(res,201,
             await call((c,t)=>appendRunEvent(c,t,device.deviceId,id,data)));
         }
@@ -227,6 +232,20 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           ]})));
       if(method==="GET"&&path==="/v1/devices")
         return reply(res,200,{devices:await asTenant(c=>listDevices(c))});
+      if(method==="GET"&&path==="/v1/push/config")
+        return reply(res,200,{enabled:!!config.push,
+          vapidPublicKey:config.push?.publicKey??null});
+      if(method==="GET"&&path==="/v1/push/status")
+        return reply(res,200,await asTenant(c=>pushStatus(c)));
+      if(method==="POST"&&path==="/v1/push/subscriptions"){
+        if(!config.push)throw httpError(503,"Browser alerts are not configured");
+        assertJson(req);const data=objectJson(await bytes(req,4000));
+        return reply(res,201,await asTenant((c,t)=>registerPush(c,t,data)));
+      }
+      if(method==="DELETE"&&path==="/v1/push/subscriptions"){
+        assertJson(req);const data=objectJson(await bytes(req,4000));
+        return reply(res,200,await asTenant(c=>unregisterPush(c,data.endpoint)));
+      }
       if(method==="POST"&&path==="/v1/devices/enrollments/inspect"){
         assertJson(req);const data=objectJson(await bytes(req,1000));
         return reply(res,200,await asTenant(c=>
@@ -245,8 +264,14 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         return reply(res,200,{runs:await asTenant(c=>listRuns(c))});
       if(method==="POST"&&path==="/v1/runs"){
         assertJson(req);const data=objectJson(await bytes(req,10000));
-        return reply(res,201,await asTenant((c,t)=>createRun(c,t,
-          identity.subject,data,req.headers["idempotency-key"])));
+        let notificationTenant;
+        const created=await asTenant((c,t)=>{
+          notificationTenant=t;
+          return createRun(c,t,identity.subject,data,req.headers["idempotency-key"]);
+        });
+        reply(res,201,created);
+        if(!created.reused)void notifyTenant(pool,notificationTenant,config).catch(()=>{});
+        return;
       }
       const run=capturePath(path,/^\/v1\/runs\/([0-9a-f-]{36})$/i);
       if(method==="GET"&&run)return reply(res,200,
