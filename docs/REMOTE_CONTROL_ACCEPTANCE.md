@@ -58,7 +58,12 @@ Wi-Fi/cellular conditions, timestamps and any error descriptions.
 5. **Keyboard:** enter test-only text into Notepad, test Backspace, Tab,
    arrows, Ctrl+A, Copy/Paste, Undo and Save in a harmless file. Never use
    credentials, personal data, payments or real tokens during testing.
-6. **Ordering and acknowledgments:** drag then click then paste,
+6. **Phone image paste:** choose a harmless PNG/JPEG under 1.5 MB,
+   focus a known ChatGPT/VS Code test composer, explicitly confirm Paste
+   image on the phone, then verify that it appears on the laptop. Test image
+   rejection, network interruption, 20-minute control expiry, clipboard
+   cleanup, and a clipboard changed by the laptop user during paste.
+7. **Ordering and acknowledgments:** drag then click then paste,
    20 consecutive times. No clicks, keys or paste requests should be
    lost or reordered. Confirm the input action receipt moves from queued
    to Windows-executed, or shows a clear rejected result. Repeat in web
@@ -136,6 +141,11 @@ remote input pauses; network improvements are not a bypass of consent.
 laptop UI* through the explicitly shared desktop and human-driven input.
 O-AGENT does not automatically retrieve existing private ChatGPT/Grok/
 Claude/Copilot consumer chat histories or internal approvals unless
-authorized provider APIs and adapters support them. Attaching photos/files
-from the phone to an unrelated provider website has not been implemented
-by this control-only change.
+authorized provider APIs and adapters support them. Phone-selected PNG/JPEG images up to 1.5 MB can now be pasted into
+the focused, visible Windows app using an owner-authenticated, ephemeral
+transfer and the locally enrolled helper. Windows places the image briefly
+on its clipboard, invokes Paste, then clears it if unchanged. This
+does not guarantee every provider website accepts image paste, nor does
+it submit the image automatically. PDF/docx upload to third-party sites is
+not part of this functionality; test the image paste on real Chrome/Edge
+and VS Code before claiming compatibility.
