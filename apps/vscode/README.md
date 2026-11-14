@@ -54,6 +54,13 @@ edits. This permission expires after 30 minutes or when the companion
 stops. Source reads are capped at 48,000 characters and protected /
 hidden, binary and linked files cannot be edited.
 
+The new mobile and web file browser can also **create** an empty text file,
+**rename** an existing text file inside its current folder (without
+overwriting an existing destination), and request **Move to Trash** after
+both phone/web and local VS Code confirmation. The file has to match its
+original hash; hidden files, credential paths and symlinks are rejected.
+The separate 30-minute local permission covers these operations too.
+
 The legacy **Remote file navigation** form only requests opening a
 specific file in the local VS Code window. It still requires owner
 approval and a second local confirmation; it is not the file editor.
