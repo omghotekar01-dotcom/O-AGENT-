@@ -24,7 +24,7 @@ export function readSaasConfig(env = process.env) {
   absolute(issuerValue,"OAGENT_OIDC_ISSUER");
   // Explicit personal Tailnet-only mode; NEVER selected in commercial deployments.
   const localPilot=env.OAGENT_LOCAL_PILOT==="1";
-  if(localPilot && (!/\\.ts\\.net$/i.test(publicUrl.hostname) || env.NODE_ENV==="test"))
+  if(localPilot && (!/\.ts\.net$/i.test(publicUrl.hostname) || env.NODE_ENV==="test"))
     throw Error("Private pilot requires a non-test HTTPS Tailscale .ts.net origin");
   const requestedJwks=required(env,"OAGENT_OIDC_JWKS_URL");
   const internalKeycloak="http://identity:8080/auth/realms/oagent/protocol/openid-connect/certs";
