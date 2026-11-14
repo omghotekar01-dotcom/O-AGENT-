@@ -178,8 +178,19 @@ export async function runDetail(client,id) {
 }
 export async function listApprovals(client) {
   const {rows}=await client.query(
-    "SELECT id,run_id,device_id,kind,description,action_hash,requested_at,expires_at FROM approvals WHERE status='pending' AND expires_at>now() ORDER BY requested_at DESC LIMIT 100");
-  return rows;
+    "SELECT a.id,a.run_id,a.device_id,a.kind,a.description,a.action_hash,a.requested_at,a.expires_at,d.last_seen_at,d.revoked_at,r.status AS run_status,r.lease_expires_at FROM approvals a JOIN runs r ON r.id=a.run_id JOIN devices d ON d.id=a.device_id WHERE a.status='pending' AND a.expires_at>now() ORDER BY a.requested_at DESC LIMIT 100");
+  return rows.map(row=>{
+    const online=!row.revoked_at&&row.last_seen_at&&
+      new Date(row.last_seen_at).getTime()>Date.now()-120000;
+    const runReady=row.kind==="run"
+      ? row.run_status==="waiting_for_approval"
+      : row.run_status==="waiting_for_tool"&&row.lease_expires_at&&
+        new Date(row.lease_expires_at).getTime()>Date.now();
+    const {last_seen_at,revoked_at,run_status,lease_expires_at,...safe}=row;
+    return {...safe,actionable:!!(online&&runReady),
+      unavailableReason:!online?"Worker offline or revoked":
+        !runReady?"Agent state changed":null};
+  });
 }
 export async function decideApproval(client,tenantId,subject,id,body) {
   if(!isUUID(id)||typeof body?.approve!=="boolean"||
@@ -260,7 +271,9 @@ export async function renewLease(client,deviceId,runId,leaseToken) {
 }
 export async function finishRun(client,tenantId,deviceId,runId,body) {
   if(typeof body?.ok!=="boolean")throw httpError(400,"Result status required");
-  return leaseRun(client,tenantId,deviceId,runId,body.leaseToken,async()=>{
+  return leaseRun(client,tenantId,deviceId,runId,body.leaseToken,async row=>{
+    if(row.status==="waiting_for_tool"&&body.ok)
+      throw httpError(409,"Cannot report success while a tool permission is unresolved");
     if(body.result!=null&&JSON.stringify(body.result).length>16000)
       throw httpError(413,"Run result too large");
     const result=body.ok?body.result??{}:null;
