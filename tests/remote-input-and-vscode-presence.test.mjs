@@ -20,7 +20,7 @@ test("remote input requires live screen, visible local pairing code and worker h
   broker.pair({ code: pair.pairingCode });
   assert.equal(broker.status().paired, true);
   now += 40;
-  assert.deepEqual(broker.action({type:"move",dx:3,dy:-4}),{accepted:true});
+  assert.equal(broker.action({type:"move",dx:3,dy:-4}).accepted,true);
   assert.deepEqual(broker.next("my-laptop").action,{type:"move",dx:3,dy:-4});
   now += 40;
   broker.action({type:"click",button:"left"});
@@ -86,4 +86,27 @@ test("editor source control snapshots are ephemeral and contain only bounded fil
     {workspace:"C:\\tmp",changed:Array.from({length:101},()=>({path:"foo",status:"modified"}))}),/Invalid/);
   now+=21000;
   assert.deepEqual(feed.list().items,[]);
+});
+
+test("rapid pointer deltas coalesce without skipping click or keyboard order",()=>{
+  let now=800000;
+  const input=new RemoteInput({now:()=>now,captureFresh:()=>true});
+  const {pairingCode}=input.prepare("my-laptop");
+  input.pair({code:pairingCode});
+  assert.equal(input.action({type:"move",dx:25,dy:5}).accepted,true);
+  assert.equal(input.action({type:"move",dx:15,dy:-2}).coalesced,true);
+  assert.equal(input.status().queueDepth,1);
+  now+=20;
+  input.action({type:"click",button:"left"});
+  now+=20;
+  input.action({type:"shortcut",name:"save"});
+  input.action({type:"move",dx:10,dy:11});
+  input.action({type:"move",dx:9,dy:4});
+  assert.equal(input.status().queueDepth,4);
+  assert.deepEqual(input.next("my-laptop").action,{type:"move",dx:40,dy:3});
+  assert.deepEqual(input.next("my-laptop").action,{type:"click",button:"left"});
+  assert.deepEqual(input.next("my-laptop").action,{type:"shortcut",name:"save"});
+  assert.deepEqual(input.next("my-laptop").action,{type:"move",dx:19,dy:15});
+  assert.equal(input.next("my-laptop").action,null);
+  assert.throws(()=>input.action({type:"shortcut",name:"powershell"}),/Unsupported/);
 });
