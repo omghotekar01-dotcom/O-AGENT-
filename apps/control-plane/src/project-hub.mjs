@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
+import { buildOwnerApprovalInbox } from "./unified-inbox.mjs";
 import { DomainError } from "./core.mjs";
 
 const REPO_NAME = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
@@ -222,16 +223,23 @@ export class ProjectHub {
           typeof p.projectId === "string" && typeof p.sessionId === "string",
       };
     });
+    const approvalInbox = buildOwnerApprovalInbox(snapshot, now);
     return {
       generatedAt: new Date(now).toISOString(),
+      schemaVersion: 1,
       machines, sessions, nativeSessions, runs,
+      approvalInbox: approvalInbox.items,
+      approvalInboxSummary: {
+        total: approvalInbox.total,
+        hasMore: approvalInbox.hasMore,
+        expiredHidden: approvalInbox.expired,
+      },
       sources: this.sources().map(s => ({
         id: s.id, label: s.label, status: s.status,
         capabilities: s.capabilities, limitation: s.limitation,
       })),
       activeRuns: runs.filter(r => ["waiting_for_approval", "queued", "running"].includes(r.status)).length,
-      pendingApprovals: runs.filter(r => r.status === "waiting_for_approval").length +
-        runs.reduce((n, r) => n + r.pendingApprovals.length, 0),
+      pendingApprovals: approvalInbox.total,
       screenStreaming: { supported: false, reason:
         "No explicitly consented Windows capture/streaming agent has been enrolled." },
     };

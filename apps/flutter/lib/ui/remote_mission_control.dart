@@ -37,6 +37,7 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   String? error;
   bool loading = false;
   String filter = 'all';
+  String? reviewingApproval;
 
   @override
   void initState() {
@@ -70,7 +71,7 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
       if (!mounted || api != widget.controller.client) return;
       final type = event['type']?.toString() ?? '';
       if (type.startsWith('codex.') || type.startsWith('task.') ||
-          type.startsWith('provider.codex_local.') ||
+          type.startsWith('provider.') ||
           type == 'machine.online') _refresh();
     }, onError: (Object _) {
       liveEvents = null;
@@ -101,6 +102,89 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
           : e.toString());
       }
     } finally { loading = false; }
+  }
+  /// A fresh task read is required before any approval decision. This inbox
+  /// is a native adapter read-model, never an approval authority by itself.
+  Future<void> _reviewInboxItem(Map<String, dynamic> entry) async {
+    if (reviewingApproval != null || entry['actionable'] != true) return;
+    final api = widget.controller.client;
+    if (api == null) return;
+    final id = entry['taskId']?.toString() ?? '';
+    final approvalId = entry['approvalId']?.toString();
+    if (id.isEmpty) return;
+    setState(() => reviewingApproval = id);
+    try {
+      final task = await api.taskDetail(id);
+      if (!mounted || api != widget.controller.client) return;
+      if (task['workerId'] != entry['workerId'] ||
+          task['kind'] != entry['taskKind']) {
+        throw StateError('The approval changed. Refresh and review again.');
+      }
+      final params = remoteMap(task['parameters']);
+      String details;
+      if (approvalId == null) {
+        if (task['status'] != 'waiting_for_approval') {
+          throw StateError('This task no longer needs approval.');
+        }
+        details = params['prompt']?.toString() ??
+          params['relativePath']?.toString() ??
+          params['environmentId']?.toString() ??
+          'Inspect enrolled workspace filenames';
+      } else {
+        if (task['status'] != 'running') {
+          throw StateError('The requested tool action is no longer running.');
+        }
+        final approval = remoteMap(remoteMap(task['approvals'])[approvalId]);
+        final expiresAt = approval['expiresAt'];
+        if (approval['state'] != 'pending' ||
+            expiresAt is! num ||
+            expiresAt <= DateTime.now().millisecondsSinceEpoch) {
+          throw StateError('The tool permission expired or was resolved.');
+        }
+        details = approval['description']?.toString() ?? '';
+      }
+      final text = 'Provider: ${entry['provider']}\n'
+        'Worker: ${task['workerId']}\n'
+        'Workspace / target: ${entry['target']}\n'
+        'Mode: ${params['mode'] ?? 'scoped operation'}\n'
+        'Request type: ${approvalId == null ? 'Agent task' : 'Tool permission'}\n\n'
+        'Exact request:\n$details\n\n'
+        'Only approve actions you understand and trust.';
+      final decision = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Review exact agent request'),
+          content: SizedBox(width: 480,
+            child: SingleChildScrollView(child: SelectableText(text))),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx),
+              child: const Text('Not now')),
+            OutlinedButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Deny')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Approve once')),
+          ],
+        ),
+      );
+      if (decision == null || !mounted || api != widget.controller.client) return;
+      if (approvalId == null) {
+        await api.decide(id, approve: decision);
+      } else {
+        await api.decideCodexAction(taskId: id,
+          approvalId: approvalId, approve: decision);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(decision
+            ? 'Approval decision received by O-AGENT.'
+            : 'Request denied.')));
+      }
+      await _refresh();
+    } catch (e) {
+      if (mounted) setState(() => error = e.toString());
+    } finally {
+      if (mounted) setState(() => reviewingApproval = null);
+    }
   }
   void _openCodex(Map<String, dynamic> session, {String? taskId}) {
     final project = session['projectId']?.toString() ?? '';
@@ -288,6 +372,8 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   Widget build(BuildContext context) {
     final sessions = remoteList(data?['sessions']);
     final nativeSessions = remoteList(data?['nativeSessions']);
+    final inbox = remoteList(data?['approvalInbox']);
+    final inboxSummary = remoteMap(data?['approvalInboxSummary']);
     final runs = remoteList(data?['runs']);
     final active = runs.where((r) => const {
       'waiting_for_approval','queued','running'
@@ -350,6 +436,57 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                         color: Color(0xFFB34E52), fontSize: 12)),
                       TextButton(onPressed: _refresh, child: const Text('Retry')),
                     ]))),
+              OSectionTitle('Action inbox',
+                action: 'Refresh', onAction: _refresh),
+              if (inbox.isEmpty && data != null)
+                const OEmptyState(icon: CupertinoIcons.checkmark_shield,
+                  title: 'All caught up',
+                  message: 'Genuine agent approvals appear here when '
+                    'connected providers request an owner decision.'),
+              for (final item in inbox.take(8))
+                Padding(padding: const EdgeInsets.only(bottom: 10),
+                  child: OSurface(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        const Icon(CupertinoIcons.checkmark_shield,
+                          color: OVisual.primary),
+                        const SizedBox(width: 9),
+                        Expanded(child: Text(item['provider']?.toString() ??
+                          'Agent request', style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: OVisual.label(context)))),
+                        OStatePill(item['actionable'] == true
+                          ? 'waiting_for_approval' : 'offline',
+                          label: item['actionable'] == true
+                            ? 'Needs your decision' : 'Worker offline'),
+                      ]),
+                      const SizedBox(height: 7),
+                      Text(item['description']?.toString() ?? '',
+                        maxLines: 3, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13,
+                          color: OVisual.muted(context))),
+                      const SizedBox(height: 8),
+                      Text('Worker: ${item['workerId']}'
+                        '${item['expiresAt'] == null ? '' : ' · Time-limited permission'}',
+                        style: TextStyle(fontSize: 11,
+                          color: OVisual.muted(context))),
+                      const SizedBox(height: 10),
+                      SizedBox(width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: item['actionable'] == true &&
+                              reviewingApproval == null
+                            ? () => _reviewInboxItem(item) : null,
+                          icon: const Icon(CupertinoIcons.shield_lefthalf_fill),
+                          label: const Text('Review exact action')),
+                      ),
+                    ]))),
+              if (inboxSummary['hasMore'] == true)
+                Padding(padding: const EdgeInsets.only(bottom: 12),
+                  child: Text('More requests awaiting review: '
+                    '${inboxSummary['total']} total. Refresh to view current '
+                    'priorities.', style: TextStyle(fontSize: 12,
+                      color: OVisual.muted(context)))),
               OSectionTitle('Live desktop connection',
                 action: 'View screen', onAction: _openScreen),
               OSurface(child: Row(children: [
