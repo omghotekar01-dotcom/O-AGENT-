@@ -9,7 +9,7 @@ on:
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
   push:
-    branches: [main, "feat/saas-secure-control-plane-*"]
+    branches: [main]
     paths:
       - "apps/saas/**"
       - "apps/saas-worker/**"
@@ -17,6 +17,11 @@ on:
       - "apps/gateway/src/codex-turn.mjs"
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
