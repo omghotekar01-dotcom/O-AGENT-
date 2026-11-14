@@ -136,7 +136,7 @@ export class RemoteInput {
       expiresAt: now + (trusted ? TRUSTED_IDLE_TTL : PAIR_TTL),
       lastPoll: now, lastAction: 0,
       failedPairAttempts: 0, queue: [], nextId: 0,
-      dispatched: null, lastResult: null };
+      lastImageAt: 0, dispatched: null, lastResult: null };
     // This code goes ONLY to the worker-token-authenticated LOCAL helper.
     return trusted
       ? { ready: true, trustedMode: true, requiresOwnerActivation: true }
@@ -247,11 +247,20 @@ export class RemoteInput {
           actionId:previous.id };
       }
     }
+    if (value.type === "paste_image") {
+      // A phone image can be ~2 MB after base64 encoding. Never allow many
+      // concurrent clipboard uploads to accumulate in server memory.
+      if (s.queue.some(a => a.type === "paste_image") ||
+          s.dispatched?.type === "paste_image" ||
+          (s.lastImageAt && now - s.lastImageAt < 5000))
+        throw new DomainError(429, "Image paste already queued or being processed");
+    }
     if (now - s.lastAction < MIN_GAP && value.type !== "move")
       throw new DomainError(429, "Remote input rate limit");
     if (s.queue.length >= MAX_QUEUE)
       throw new DomainError(429, "Windows input queue full");
     value.id = ++s.nextId;
+    if (value.type === "paste_image") s.lastImageAt = now;
     s.queue.push(value);
     s.lastAction = now;
     return { accepted: true, queueDepth:s.queue.length, actionId:value.id };
