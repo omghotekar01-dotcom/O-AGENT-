@@ -8,6 +8,7 @@ const { realpath, stat, readdir } = require("node:fs/promises");
 const { resolve, basename } = require("node:path");
 const { safeRelativePath, withinWorkspace } = require("./path-policy.cjs");
 const { parseBackendOrigin, explainHttpFailure, explainFetchFailure } = require("./connection.cjs");
+const { readLocalEnrollment, verifyLocalBackend } = require("./local-enrollment.cjs");
 const { listWorkspaceFolder, readWorkspaceText, writeWorkspaceText,
   createWorkspaceText,renameWorkspaceFile,deleteWorkspaceFile } = require("./file-access.cjs");
 
@@ -17,6 +18,8 @@ let running = false, timer = null, pending = false, statusBar = null;
 let mobileEditsUntil = 0;
 let enrolledRoot = null;
 let contextRef = null;
+let treeViewEmitter = null; 
+const updateTree = () => { if (treeViewEmitter) treeViewEmitter.fire(); };
 const workerId = "vscode-" + hostname().replace(/[^a-zA-Z0-9_-]/g,"").slice(0,32) + "-companion";
 const caps = ["workspace_inventory","vscode_open_file","vscode_workspace_files"];
 async function settings() {
@@ -213,10 +216,12 @@ async function poll() {
       }
     }
     statusBar.text = "$(shield) O-AGENT: connected";
-    statusBar.tooltip = "Explicitly enrolled VS Code companion; no background screen capture.";
+    statusBar.tooltip = "Connected: " + enrolledRoot + ". Open the O-AGENT sidebar to manage permissions.";
+    updateTree();
   } catch (error) {
     statusBar.text = "$(warning) O-AGENT: disconnected";
     statusBar.tooltip = error.message;
+    updateTree();
   } finally { pending = false; }
 }
 async function stop() {
@@ -232,6 +237,7 @@ async function stop() {
   if (timer) clearInterval(timer);
   timer = null;
   if (statusBar) {statusBar.text="$(circle-slash) O-AGENT: stopped";statusBar.tooltip="No VS Code workspace polling"; }
+  updateTree();
 }
 async function start() {
   if (running) return;
@@ -256,6 +262,7 @@ async function start() {
     enrolledRoot = root;
     running = true;
     statusBar.show();
+    updateTree();
     await poll();
     timer = setInterval(() => { void poll(); }, 5000);
   } catch (error) {
@@ -263,6 +270,7 @@ async function start() {
     statusBar.text = "$(warning) O-AGENT: disconnected";
     statusBar.tooltip = detail;
     vscode.window.showErrorMessage("O-AGENT connection failed: " + detail);
+    updateTree();
   }
 }
 async function enableMobileEdits() {
@@ -279,6 +287,7 @@ async function enableMobileEdits() {
     {modal:true},"Enable for 30 minutes","Cancel");
   if (decision !== "Enable for 30 minutes") return;
   mobileEditsUntil = Date.now()+30*60*1000;
+  updateTree();
   vscode.window.showInformationMessage(
     "O-AGENT mobile file editing enabled for 30 minutes in this VS Code workspace.");
 }
@@ -303,14 +312,83 @@ async function configure() {
   await contextRef.secrets.store(STORAGE_TOKEN,secret);
   vscode.window.showInformationMessage("O-AGENT credentials stored in VS Code SecretStorage. Choose Start to opt in.");
 }
+async function connectFromLaptop() {
+  if (!vscode.workspace.isTrusted) {
+    vscode.window.showWarningMessage("Open and trust the project folder in VS Code first.");
+    return;
+  }
+  if (running) {
+    vscode.window.showInformationMessage("O-AGENT is already connected to this workspace.");
+    return;
+  }
+  const decision=await vscode.window.showInformationMessage(
+    "Connect this VS Code window to the O-AGENT backend running on the same Windows laptop? "
+    + "O-AGENT will read the WORKER token encrypted for your signed-in Windows account and "
+    + "save it in VS Code SecretStorage. It will never display the secret or send it to "
+    + "any third-party service. You must separately approve sharing this project folder.",
+    {modal:true},"Connect this laptop","Cancel");
+  if (decision!=="Connect this laptop") return;
+  try {
+    const {url,token}=await readLocalEnrollment({
+      platform:process.platform,remoteName:vscode.env.remoteName,
+    });
+    // Check that the local socket is a real O-AGENT instance before storing
+    // any token. Local credential import never sends it to remote URLs.
+    await verifyLocalBackend(url);
+    await contextRef.secrets.store(STORAGE_URL,url);
+    await contextRef.secrets.store(STORAGE_TOKEN,token);
+    vscode.window.showInformationMessage(
+      "Local O-AGENT detected. Choose Enable to share this exact project folder.");
+    await start();
+  } catch(error) {
+    vscode.window.showErrorMessage(
+      "O-AGENT automatic connection failed: " + error.message +
+      " You can still use Configure Secure Companion for a manual connection.");
+  } finally { updateTree(); }
+}
+function treeItem(label,icon,command,description) {
+  const item=new vscode.TreeItem(label,vscode.TreeItemCollapsibleState.None);
+  item.iconPath=new vscode.ThemeIcon(icon);
+  item.tooltip=description||label;
+  if(command)item.command={command,title:label};
+  return item;
+}
+const setupTree = {
+  get onDidChangeTreeData() { return treeViewEmitter.event; },
+  getTreeItem(element) { return element; },
+  getChildren() {
+    if (!running) return [
+      treeItem("1 · Connect using Windows setup","plug","oagent.connectLocal",
+        "Reads your current Windows-user O-AGENT worker credential once, with permission"),
+      treeItem("Or connect manually","key","oagent.configure",
+        "For a separate machine or trusted HTTPS backend"),
+      treeItem("2 · Share current project","folder-opened","oagent.start",
+        "Requires separate consent for the exact trusted workspace folder"),
+    ];
+    const editActive=Date.now()<mobileEditsUntil;
+    return [
+      treeItem("Connected · "+(enrolledRoot?basename(enrolledRoot):"Workspace"),"check",
+        null,"Only this explicitly enrolled folder is visible"),
+      treeItem(editActive ? "Editing enabled (temporary)" : "Allow edits for 30 minutes",
+        editActive?"shield":"edit","oagent.enableMobileEdits",
+        "Separate local permission for source editing; phone confirms each change"),
+      treeItem("Stop sharing now","stop-circle","oagent.stop",
+        "Immediately revokes the active workspace feed and editing window"),
+    ];
+  },
+};
 function activate(context) {
   contextRef = context;
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right,90);
   statusBar.text="$(circle-slash) O-AGENT: stopped";
-  statusBar.command="oagent.start";
+  treeViewEmitter = new vscode.EventEmitter();
+  statusBar.command="workbench.view.extension.oagentWorkspace";
+  context.subscriptions.push(treeViewEmitter,
+    vscode.window.registerTreeDataProvider("oagent.workspace",setupTree));
   statusBar.show();
   context.subscriptions.push(statusBar,
     vscode.commands.registerCommand("oagent.configure",configure),
+    vscode.commands.registerCommand("oagent.connectLocal",connectFromLaptop),
     vscode.commands.registerCommand("oagent.start",start),
     vscode.commands.registerCommand("oagent.stop",stop),
     vscode.commands.registerCommand("oagent.enableMobileEdits",enableMobileEdits));
