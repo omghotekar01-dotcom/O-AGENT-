@@ -5,7 +5,7 @@ import {Pool} from "pg";
 import {migrate,withIdentity,withTenant,audit,assertTenantDatabaseSecurity} from "../src/store.mjs";
 import {startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,updateCapabilities,
   heartbeat,createRun,listRuns,runDetail,listApprovals,decideApproval,claimRun,
-  finishRun} from "../src/operations.mjs";
+  finishRun,requestToolApproval,toolApprovalStatus} from "../src/operations.mjs";
 import {generateDeviceKeys,sha256,deviceHeaders,verifyDeviceHeaders} from "../src/device-crypto.mjs";
 
 test("PostgreSQL enforces tenant isolation, signed device enrollment and one-time approvals",
@@ -102,6 +102,22 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
           finishRun(c,t,device.deviceId,run.runId,{
             leaseToken:randomUUID(),ok:true,result:{message:"bad"},
           })),/lease expired/);
+        const tool=await withTenant(pool,tenantA,(c,t)=>
+          requestToolApproval(c,t,device.deviceId,run.runId,{
+            leaseToken:claimed.run.leaseToken,requestId:"native-permission-123",
+            description:"Edit test file inside enrolled project",
+          }));
+        const actionable=await withIdentity(pool,owner,c=>listApprovals(c));
+        assert.equal(actionable.length,1);
+        assert.equal(actionable[0].actionable,true);
+        await assert.rejects(()=>withTenant(pool,tenantA,(c,t)=>
+          finishRun(c,t,device.deviceId,run.runId,{
+            leaseToken:claimed.run.leaseToken,ok:true,result:{message:"should refuse"},
+          })),/tool permission is unresolved/);
+        await withIdentity(pool,owner,(c,t)=>decideApproval(c,t,owner.subject,
+          tool.approvalId,{approve:true,expectedActionHash:tool.actionHash}));
+        assert.equal((await withTenant(pool,tenantA,c=>
+          toolApprovalStatus(c,device.deviceId,tool.approvalId))).state,"approved");
         const finished=await withTenant(pool,tenantA,(c,t)=>
           finishRun(c,t,device.deviceId,run.runId,{
             leaseToken:claimed.run.leaseToken,ok:true,result:{message:"real"},
