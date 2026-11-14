@@ -50,5 +50,9 @@ jobs:
         run: npm --prefix apps/saas run check
       - name: Check isolated worker syntax
         run: node --check apps/saas-worker/src/worker.mjs
+      - name: Validate private-pilot Compose (no image pulls)
+        run: |
+          OAGENT_TAILNET_HOST=ci-runner.example.ts.net node deploy/saas/free-pilot/setup.mjs
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml config --quiet
       - name: Run PostgreSQL RLS, OIDC, Ed25519 and MCP tests
         run: npm --prefix apps/saas test

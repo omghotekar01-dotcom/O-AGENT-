@@ -5,6 +5,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {randomUUID,createPublicKey,verify} from "node:crypto";
 import {SignedCloudWorker} from "../../saas-worker/src/worker.mjs";
+import {enrollCloudWorker,readIdentity} from "../../saas-worker/src/enroll.mjs";
 import {generateDeviceKeys,canonicalRequest} from "../src/device-crypto.mjs";
 
 test("isolated cloud worker executes a single approved inventory with signed leases",
@@ -119,4 +120,36 @@ test("a server-issued workspace outside the enrolled container is rejected",asyn
     await rm(folder,{recursive:true,force:true});
     await rm(outside,{recursive:true,force:true});
   }
+});
+
+test("owner-approved free worker enrolls automatically and securely reuses its local key",async()=>{
+  const folder=await mkdtemp(join(tmpdir(),"oagent-free-enroll-"));
+  try{
+    const path=join(folder,"identity.json");
+    const assigned=randomUUID();
+    const requests=[];
+    const fetchImpl=async(url,opts)=>{
+      requests.push(new URL(url).pathname);
+      if(url.endsWith("/enrollments"))
+        return Response.json({pairingToken:"oen_"+"A".repeat(43),expiresInSeconds:600});
+      if(url.endsWith("/status"))
+        return Response.json({approved:true,deviceId:assigned});
+      throw Error("Unexpected enrollment API");
+    };
+    const messages=[];
+    const result=await enrollCloudWorker({
+      origin:"https://laptop.example.ts.net",name:"Private laptop",
+      path,now:()=>1700000000000,wait:async()=>{},fetchImpl,
+      notify:value=>messages.push(String(value)),
+    });
+    assert.equal(result.deviceId,assigned);
+    assert.equal((await readIdentity(path)).deviceId,assigned);
+    assert.ok((await readIdentity(path)).privateKeyPem.includes("PRIVATE KEY"));
+    assert.ok(messages.some(x=>x.includes("#pair=oen_")));
+    const repeated=await enrollCloudWorker({
+      origin:"https://laptop.example.ts.net",path,fetchImpl,
+    });
+    assert.equal(repeated.alreadyEnrolled,true);
+    assert.equal(requests.length,2);
+  }finally{await rm(folder,{recursive:true,force:true});}
 });

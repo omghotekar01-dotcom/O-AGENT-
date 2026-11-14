@@ -1,5 +1,6 @@
-import {mkdir,readFile,writeFile,rename,stat} from "node:fs/promises";
+import {mkdir,readFile,writeFile,rename,stat,lstat,rm,chmod} from "node:fs/promises";
 import {join,dirname,resolve} from "node:path";
+import {randomBytes} from "node:crypto";
 import {homedir} from "node:os";
 import {pathToFileURL} from "node:url";
 import {generateDeviceKeys,parseEd25519PublicKey,hexSha256} from "../../saas/src/device-crypto.mjs";
@@ -15,6 +16,10 @@ function publicOrigin(value) {
 }
 export async function readIdentity(path=defaultDeviceStore()) {
   try{
+    const info=await lstat(path);
+    if(!info.isFile()||info.isSymbolicLink()||
+        (process.platform!=="win32"&&(info.mode&0o077)!==0))
+      throw Error("Insecure local device identity permissions");
     const identity=JSON.parse(await readFile(path,"utf8"));
     if(typeof identity.privateKeyPem!=="string"||
        typeof identity.publicKeyPem!=="string")
@@ -27,9 +32,14 @@ export async function readIdentity(path=defaultDeviceStore()) {
 }
 async function writeIdentity(path,record) {
   await mkdir(dirname(path),{recursive:true,mode:0o700});
-  const temp=path+".new";
-  await writeFile(temp,JSON.stringify(record),{mode:0o600,flag:"wx"});
-  await rename(temp,path);
+  // A random temporary file avoids a stale .new artifact blocking enrollment
+  // after an interrupted previous write. No plaintext copy is made off-host.
+  const temp=path+".new-"+randomBytes(10).toString("hex");
+  try{
+    await writeFile(temp,JSON.stringify(record),{mode:0o600,flag:"wx"});
+    await rename(temp,path);
+    if(process.platform!=="win32")await chmod(path,0o600);
+  }finally{await rm(temp,{force:true});}
 }
 export async function enrollCloudWorker({
   origin,name="My O-AGENT worker",
