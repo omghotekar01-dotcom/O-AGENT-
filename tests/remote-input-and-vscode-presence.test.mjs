@@ -202,6 +202,7 @@ test("image paste remains ephemeral, bounded and requires active owner control",
   now+=25;
   const queued=broker.image(png,"image/png");
   assert.equal(queued.accepted,true);
+  assert.throws(()=>broker.image(png,"image/png"),/Image paste already/);
   assert.equal(JSON.stringify(broker.status()).includes("base64"),false);
   const event=broker.next("my-laptop").action;
   assert.equal(event.type,"paste_image");
