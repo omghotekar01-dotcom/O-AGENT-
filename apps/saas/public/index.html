@@ -50,13 +50,14 @@
         <button type="button" class="nav" data-view="runs"><span>▤</span> Agent runs</button>
         <button type="button" class="nav" data-view="devices"><span>▣</span> Connected devices</button>
         <button type="button" class="nav" data-view="audit"><span>◷</span> Security activity</button>
+        <button type="button" class="nav" data-view="team"><span>♧</span> Team & workspaces</button>
       </nav>
       <div class="side-foot"><span id="sideDot" class="status-dot"></span><span id="sideConnect">Checking backend</span><p>Provider connections are never displayed as live without real verification.</p></div>
     </aside>
     <div class="main-shell">
       <header class="topbar">
         <div class="breadcrumb"><button id="menuButton" class="mobile-menu" type="button" aria-label="Open menu">☰</button><span>WORKSPACE</span><span class="slash">/</span><strong id="viewName">Overview</strong></div>
-        <div class="top-actions"><span id="connectionPill" class="top-status">Checking</span><button id="refresh" class="button secondary" type="button">Refresh</button><button id="signOut" class="button ghost" type="button">Sign out</button></div>
+        <div class="top-actions"><label class="switch-label" for="workspaceSwitch">Workspace</label><select id="workspaceSwitch" aria-label="Active authorized workspace" class="workspace-switch"></select><span id="connectionPill" class="top-status">Checking</span><button id="refresh" class="button secondary" type="button">Refresh</button><button id="signOut" class="button ghost" type="button">Sign out</button></div>
       </header>
       <main>
         <section id="pairPanel" class="pair-card" hidden aria-labelledby="pairTitle">
@@ -115,6 +116,51 @@
           <div class="info-line"><span>ⓘ</span> Devices use per-request Ed25519 signatures with timestamp and replay checks, not shared account-level worker tokens.</div>
           <div id="deviceList" class="card-list"></div>
           <div class="panel setup-panel"><p class="eyebrow">CONNECT A NEW WORKER</p><h2>Private, owner-approved enrollment</h2><p>Run the O-AGENT enrollment helper on the computer you trust. Open its pairing link on your signed-in phone, inspect the device fingerprint, and approve once. The helper receives its device identity automatically.</p></div>
+        </section>
+        <section class="page" data-panel="team" hidden>
+          <div class="page-header"><div><p class="eyebrow">CONTROLLED TEAM COLLABORATION</p><h1>Team workspaces</h1><p>Keep your private workspace and choose a shared team explicitly. Server permissions apply to every request.</p></div></div>
+          <section class="panel">
+            <p class="eyebrow">CURRENT AUTHORIZATION</p><h2 id="teamRole">Checking workspace role…</h2>
+            <p class="entry-detail">Owners manage devices, invitations and workspace data. Operators can request and review supervised work. Viewers can read activity, but cannot approve or execute actions.</p>
+            <p class="helper">Organization invitations authorize only OIDC identities already signed in. Sharing a tenant never shares provider passwords or device private signing keys.</p>
+          </section>
+          <section class="panel">
+            <p class="eyebrow">JOIN A TRUSTED TEAM</p><h2>Redeem a one-time invitation</h2>
+            <form class="form-grid" id="joinTeamForm">
+              <label for="joinToken">Invitation token from the workspace owner</label>
+              <input id="joinToken" type="password" autocomplete="off" required placeholder="oti_…" spellcheck="false">
+              <p class="helper">Tokens expire after 15 minutes and work only once. Do not paste them into public chats.</p>
+              <button type="submit" class="button secondary">Join this team</button>
+            </form>
+          </section>
+          <div id="teamAdmin" hidden>
+            <section class="panel">
+              <p class="eyebrow">OWNER CONTROLS</p><h2>Manage workspace name</h2>
+              <form class="form-grid" id="workspaceNameForm">
+                <label for="workspaceName">Workspace display name</label>
+                <input id="workspaceName" maxlength="80" minlength="2" required placeholder="My development team">
+                <button type="submit" class="button secondary">Save workspace name</button>
+              </form>
+            </section>
+            <section class="panel">
+              <p class="eyebrow">TIME-LIMITED ACCESS</p><h2>Invite a teammate</h2>
+              <form class="form-grid" id="inviteTeamForm">
+                <label for="teamInviteRole">Permission level</label>
+                <select id="teamInviteRole"><option value="viewer">Viewer — read only</option><option value="operator">Operator — request and approve supervised work</option></select>
+                <button class="button primary" type="submit">Create 15-minute invite</button>
+              </form>
+              <div id="inviteResult" class="form-grid" hidden>
+                <label for="generatedInvite">One-time invitation — copy privately, then discard</label>
+                <input id="generatedInvite" readonly autocomplete="off" spellcheck="false">
+                <button type="button" id="copyTeamInvite" class="button secondary">Copy invitation</button>
+              </div>
+              <p class="helper">Invitations do not add accounts automatically. Every invitee must sign in with their own identity provider.</p>
+            </section>
+            <section class="panel">
+              <div class="panel-head"><div><p class="eyebrow">ACCESS REVIEW</p><h2>Workspace members</h2></div></div>
+              <div id="teamMemberList" class="stack"></div>
+            </section>
+          </div>
         </section>
         <section class="page" data-panel="audit" hidden>
           <div class="page-header"><div><p class="eyebrow">ACCOUNT SECURITY</p><h1>Security activity and data</h1><p>Verified account, approval, enrollment, and run decisions from this private workspace.</p></div></div>
