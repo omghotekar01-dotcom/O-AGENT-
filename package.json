@@ -6,7 +6,7 @@
     "start": "node apps/control-plane/src/server.mjs",
     "worker": "node apps/gateway/src/worker.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node --check apps/control-plane/src/core.mjs && node --check apps/control-plane/src/agent-runtime.mjs && node --check apps/control-plane/src/public-auth.mjs && node --check apps/control-plane/src/server.mjs && node --check apps/gateway/src/worker.mjs && node --check apps/control-plane/src/project-hub.mjs && node --check apps/gateway/src/codex-cloud.mjs && node --check apps/gateway/src/codex-local.mjs && node --check apps/gateway/src/codex-turn.mjs && node --check apps/gateway/src/provider-turn.mjs && node --check apps/control-plane/src/push-hub.mjs && node --check apps/control-plane/src/screen-share.mjs && node --check apps/vscode/src/extension.cjs && node --check apps/vscode/src/path-policy.cjs"
+    "check": "node --check apps/control-plane/src/core.mjs && node --check apps/control-plane/src/agent-runtime.mjs && node --check apps/control-plane/src/public-auth.mjs && node --check apps/control-plane/src/server.mjs && node --check apps/control-plane/src/vscode-file-relay.mjs && node --check apps/vscode/src/file-access.cjs && node --check apps/gateway/src/worker.mjs && node --check apps/control-plane/src/project-hub.mjs && node --check apps/gateway/src/codex-cloud.mjs && node --check apps/gateway/src/codex-local.mjs && node --check apps/gateway/src/codex-turn.mjs && node --check apps/gateway/src/provider-turn.mjs && node --check apps/control-plane/src/push-hub.mjs && node --check apps/control-plane/src/screen-share.mjs && node --check apps/vscode/src/extension.cjs && node --check apps/vscode/src/path-policy.cjs"
   },
   "engines": {
     "node": ">=20.19.0"
