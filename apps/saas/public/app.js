@@ -172,6 +172,8 @@ function renderDevice(node,device){
   el.append(create("p",caps.length?
     caps.map(x=>TOOL_NAMES[x]||x).join(" · "):
     "No provider execution capability advertised","entry-detail"));
+  if(device.workspace_root)el.append(create("p",
+    "Enrolled workspace: "+device.workspace_root,"entry-detail"));
   if(!device.revoked_at){
     const buttons=create("div",undefined,"entry-actions");
     action(buttons,"Revoke device",async()=>{
@@ -372,6 +374,9 @@ function render(){
   }
   if([...select.options].some(x=>x.value===previous))select.value=previous;
   updateProviderOptions();
+  const selected=state.devices.find(x=>x.id===select.value);
+  if(!$("cwd").value.trim()&&selected?.workspace_root)
+    $("cwd").value=selected.workspace_root;
 }
 async function inspectPairing(){
   if(!pendingPair)return;
@@ -464,7 +469,11 @@ $("signOut").addEventListener("click",()=>{disconnect();notice("Signed out of th
 $("menuButton").addEventListener("click",()=>$("sidebar").classList.toggle("open"));
 $("refresh").addEventListener("click",refresh);
 $("refreshApprovals").addEventListener("click",refresh);
-$("deviceSelect").addEventListener("change",updateProviderOptions);
+$("deviceSelect").addEventListener("change",()=>{
+  const selected=state.devices.find(x=>x.id===$("deviceSelect").value);
+  $("cwd").value=selected?.workspace_root||"";
+  updateProviderOptions();
+});
 $("runForm").addEventListener("submit",event=>
   void startSupervisedRun(event).catch(e=>notice(e.message,true)));
 $("pairCancel").addEventListener("click",()=>{
