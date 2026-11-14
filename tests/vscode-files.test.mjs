@@ -63,3 +63,43 @@ test("workspace files are scoped, skip secrets, reject symlinks and respect edit
     ).filter(x=>x!=="linked-key"));
   } finally { await rm(root,{recursive:true,force:true}); }
 });
+
+test("source viewer and editor save only the expected unchanged file",async()=>{
+  const root=await mkdtemp(join(tmpdir(),"oagent-edit-"));
+  const filename=join(root,"README.md");
+  try {
+    await writeFile(filename,"hello\n");
+    let value="hello\n";
+    let dirty=false;
+    const uri={fsPath:filename};
+    const doc={
+      uri,languageId:"markdown",
+      getText:()=>value, get isDirty(){return dirty;},
+      positionAt:() => ({line:1,character:0}),
+      save:async()=>{await writeFile(filename,value);dirty=false;return true;},
+    };
+    class WorkspaceEdit {
+      replace(_uri,_range,text) {this.next=text;}
+    }
+    class Range {constructor(_from,_to) {}}
+    class Position {constructor(line,character) {this.line=line;this.character=character;}}
+    const vscode={
+      Uri:{file:()=>uri},WorkspaceEdit,Range,Position,
+      workspace:{
+        openTextDocument:async()=>doc,
+        applyEdit:async(edit)=>{value=edit.next;dirty=true;return true;},
+      }
+    };
+    const opened=await readWorkspaceText(root,"README.md",vscode);
+    assert.equal(opened.content,"hello\n");
+    assert.equal(opened.readOnly,false);
+    await assert.rejects(()=>writeWorkspaceText(root,"README.md","changed","0".repeat(64),vscode),/changed/);
+    const saved=await writeWorkspaceText(root,"README.md","changed\n",hash("hello\n"),vscode);
+    assert.equal(saved.saved,true);
+    assert.equal(await readFile(filename,"utf8"),"changed\n");
+    dirty=true;
+    await assert.rejects(()=>writeWorkspaceText(root,"README.md","again",hash("changed\n"),vscode),/unsaved/);
+    await assert.rejects(()=>readWorkspaceText(root,".env",vscode),/Protected/);
+    await assert.rejects(()=>readWorkspaceText(root,"missing.txt",vscode),/ENOENT/);
+  } finally { await rm(root,{recursive:true,force:true}); }
+});
