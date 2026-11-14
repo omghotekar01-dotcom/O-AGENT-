@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, readFile, symlink, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, symlink, rm, stat, rename as renameOnDisk } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import { VscodeFileRelay } from "../apps/control-plane/src/vscode-file-relay.mjs";
 const require = createRequire(import.meta.url);
-const {allowedPath,listWorkspaceFolder,readWorkspaceText,writeWorkspaceText,hash} =
+const {allowedPath,listWorkspaceFolder,readWorkspaceText,writeWorkspaceText,
+  createWorkspaceText,renameWorkspaceFile,deleteWorkspaceFile,hash} =
   require("../apps/vscode/src/file-access.cjs");
 
 test("temporary VS Code file relay rejects unpaired and malformed requests", () => {
@@ -102,4 +103,75 @@ test("source viewer and editor save only the expected unchanged file",async()=>{
     await assert.rejects(()=>readWorkspaceText(root,".env",vscode),/Protected/);
     await assert.rejects(()=>readWorkspaceText(root,"missing.txt",vscode),/ENOENT/);
   } finally { await rm(root,{recursive:true,force:true}); }
+});
+
+test("file relay requires version hash and refuses protected destinations", () => {
+  const relay=new VscodeFileRelay({now:()=>100000});
+  relay.heartbeat("vscode-test");
+  assert.throws(()=>relay.request({workerId:"vscode-test",op:"rename",
+    path:"readme.md",newPath:"../secrets.txt",expectedHash:"0".repeat(64)}),/Invalid/);
+  assert.throws(()=>relay.request({workerId:"vscode-test",op:"delete",
+    path:"readme.md"}),/hash/);
+  assert.throws(()=>relay.request({workerId:"vscode-test",op:"rename",
+    path:"readme.md",newPath:"readme.md",expectedHash:"0".repeat(64)}),/different/);
+  assert.throws(()=>relay.request({workerId:"vscode-test",op:"create",
+    path:"hello.txt",content:"".padEnd(48001,"a")}),/48,000/);
+  const newFile=relay.request({workerId:"vscode-test",op:"create",
+    path:"hello.txt",content:"private draft"});
+  assert.doesNotMatch(JSON.stringify(relay.status(newFile.id)),/private draft/);
+  const claimed=relay.claim("vscode-test");
+  assert.equal(claimed.request.content,"private draft");
+  relay.finish("vscode-test",{id:newFile.id,ok:true,result:{created:true}});
+  assert.equal(relay.requests.get(newFile.id).content,undefined);
+});
+
+test("file CRUD rejects symlink aliases, overwrites and stale edits",async()=>{
+  const root=await mkdtemp(join(tmpdir(),"oagent-crud-"));
+  try{
+    await mkdir(join(root,"src"));
+    await mkdir(join(root,".git"));
+    await writeFile(join(root,"src","old.ts"),"export const value = 1;\n");
+    await writeFile(join(root,".git","config"),"private git metadata");
+    await symlink(join(root,".git"),join(root,"linked"),"dir");
+    const workspace={
+      Uri:{file:fsPath=>({fsPath})},
+      WorkspaceEdit:class{
+        renameFile(from,to,options){this.from=from.fsPath;this.to=to.fsPath;this.options=options;}
+      },
+      workspace:{
+        openTextDocument:async(uri)=>{
+          const contents=await readFile(uri.fsPath,"utf8");
+          return {uri, getText:()=>contents,isDirty:false};
+        },
+        applyEdit:async(edit)=>{await renameOnDisk(edit.from,edit.to);return true;},
+        fs:{delete:async(uri,opts)=>{
+          assert.equal(opts.recursive,false);
+          assert.equal(opts.useTrash,true);
+          await rm(uri.fsPath);
+        }},
+      },
+      window:{showWarningMessage:async()=> "Move to Trash"},
+    };
+    await assert.rejects(()=>listWorkspaceFolder(root,"linked"),/Symbolic links/);
+    await assert.rejects(()=>readWorkspaceText(root,"linked/config",workspace),/Symbolic links/);
+    await assert.rejects(()=>createWorkspaceText(root,"linked/new.ts","bad",workspace),/Symbolic links/);
+    const added=await createWorkspaceText(root,"src/new.ts","// hello",workspace);
+    assert.equal(added.created,true);
+    assert.equal(await readFile(join(root,"src","new.ts"),"utf8"),"// hello");
+    await assert.rejects(()=>createWorkspaceText(root,"src/new.ts","overwrite",workspace),/EEXIST/);
+    await assert.rejects(()=>renameWorkspaceFile(root,"src/old.ts",
+      "src/new.ts",hash("export const value = 1;\n"),workspace),/already exists/);
+    await assert.rejects(()=>renameWorkspaceFile(root,"src/old.ts",
+      "src/change.ts","0".repeat(64),workspace),/changed/);
+    const renamed=await renameWorkspaceFile(root,"src/old.ts",
+      "src/change.ts",hash("export const value = 1;\n"),workspace);
+    assert.equal(renamed.renamed,true);
+    assert.equal((await stat(join(root,"src","change.ts"))).isFile(),true);
+    await assert.rejects(()=>deleteWorkspaceFile(root,"src/change.ts",
+      "0".repeat(64),workspace),/changed/);
+    const deleted=await deleteWorkspaceFile(root,"src/change.ts",
+      hash("export const value = 1;\n"),workspace);
+    assert.equal(deleted.requestedTrash,true);
+    await assert.rejects(()=>stat(join(root,"src","change.ts")) ,/ENOENT/);
+  }finally{await rm(root,{recursive:true,force:true});}
 });
