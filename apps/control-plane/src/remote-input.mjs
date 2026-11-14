@@ -5,7 +5,7 @@ const PAIR_TTL = 2 * 60 * 1000;
 const CONTROL_TTL = 20 * 60 * 1000;
 const HEARTBEAT_TTL = 6000;
 const MAX_QUEUE = 48;
-const MIN_GAP = 30;
+const MIN_GAP = 18;
 const CODE_PATTERN = /^[0-9]{8}$/;
 
 function validateAction(input) {
@@ -73,6 +73,7 @@ export class RemoteInput {
       captureFresh: this.captureFresh(),
       requiresLocalPairing: true,
       mode: "explicit_windows_remote_input",
+      queueDepth: s?.queue.length ?? 0,
     };
   }
   prepare(workerId) {
@@ -125,12 +126,25 @@ export class RemoteInput {
     const now = this.now();
     if (now - s.lastPoll >= HEARTBEAT_TTL)
       throw new DomainError(409, "Windows input helper disconnected");
-    if (now - s.lastAction < MIN_GAP) throw new DomainError(429, "Remote input rate limit");
-    if (s.queue.length >= MAX_QUEUE) throw new DomainError(429, "Windows input queue full");
     const value = validateAction(input);
+    // The phone may generate many small trackpad movements before the visible
+    // Windows helper polls. Merge ONLY adjacent movements: never skip a click,
+    // key or text action between moves, and never reorder inputs.
+    if (value.type === "move" && s.queue.at(-1)?.type === "move") {
+      const previous = s.queue.at(-1);
+      const x = previous.dx + value.dx, y = previous.dy + value.dy;
+      if (Math.abs(x) <= 150 && Math.abs(y) <= 150) {
+        previous.dx = x; previous.dy = y;
+        return { accepted: true, coalesced: true, queueDepth:s.queue.length };
+      }
+    }
+    if (now - s.lastAction < MIN_GAP && value.type !== "move")
+      throw new DomainError(429, "Remote input rate limit");
+    if (s.queue.length >= MAX_QUEUE)
+      throw new DomainError(429, "Windows input queue full");
     s.queue.push(value);
     s.lastAction = now;
-    return { accepted: true };
+    return { accepted: true, queueDepth:s.queue.length };
   }
   stop(workerId = null) {
     const s = this.current();
