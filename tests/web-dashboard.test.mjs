@@ -29,6 +29,13 @@ test("dashboard protects credentials and renders untrusted source as text",()=>{
   assert.match(css,/\[hidden\]\{display:none!important\}/);
   assert.match(html,/id="desktopTrackpad"/);
   assert.match(html,/id="desktopPairCode"/);
+  assert.match(html,/id="desktopActivate"/);
+  assert.match(html,/id="desktopChooseScreen"/);
+  assert.match(js,/api\("\/api\/input\/activate"/);
+  assert.match(js,/navigator\.mediaDevices\.getDisplayMedia/);
+  assert.match(js,/status===429/);
+  assert.match(js,/type:"tap"/);
+  assert.doesNotMatch(js,/innerHTML=/);
   assert.match(html,/id="desktopStopInput"/);
   assert.match(js,/api\("\/api\/input\/pair"/);
   assert.match(js,/api\("\/api\/input\/action"/);
