@@ -129,7 +129,8 @@
             </section>
           </div>
         </section>
-        <section class="view" data-panel="activity" hidden><div class="page-heading"><div><p class="eyebrow">EXECUTION</p><h1>Activity & approvals</h1><p class="muted">A trace of actual backend activity. Every approval is a decision, not a simulation.</p></div></div>
+        <section class="view" data-panel="activity" hidden><div class="page-heading"><div><p class="eyebrow">AGENT OPERATIONS</p><h1>Action inbox</h1><p class="muted">Review real provider requests from one place. Every decision is verified against the current backend state.</p></div><button class="button secondary" type="button" id="refreshApprovals">Refresh decisions</button></div>
+          <section class="panel approval-inbox" aria-labelledby="approvalInboxTitle"><div class="panel-heading"><div><p class="eyebrow">YOUR DECISIONS</p><h2 id="approvalInboxTitle">Needs your attention</h2></div><span class="pill" id="approvalInboxCount" aria-live="polite">Checking</span></div><p class="hint">Inspect the exact target, prompt or tool permission before approving. Missing and expired permissions never become automatic approvals.</p><div id="approvalInboxList" class="list-stack" aria-live="polite"></div></section>
           <div class="two-col"><section class="panel"><div class="panel-heading"><h2>Tasks</h2><span class="subtle">Most recent first</span></div><div id="taskList" class="list-stack"></div></section><section class="panel"><div class="panel-heading"><h2>Event history</h2><span class="subtle">Recent</span></div><div id="eventList" class="list-stack"></div></section></div>
         </section>
         <section class="view" data-panel="integrations" hidden><div class="page-heading"><div><p class="eyebrow">CONNECTORS</p><h1>Connected tools</h1><p class="muted">The actual capability and state of each provider. An AI website bookmark is not a live integration.</p></div></div>
