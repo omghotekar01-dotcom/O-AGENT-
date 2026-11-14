@@ -3,12 +3,16 @@ on:
   pull_request:
     paths:
       - "apps/saas/**"
+      - "apps/saas-worker/**"
+      - "apps/gateway/src/provider-turn.mjs"
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
   push:
     branches: [main, "feat/saas-secure-control-plane-*"]
     paths:
       - "apps/saas/**"
+      - "apps/saas-worker/**"
+      - "apps/gateway/src/provider-turn.mjs"
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
 permissions:
@@ -42,5 +46,7 @@ jobs:
         run: npm --prefix apps/saas install --no-audit --no-fund
       - name: Check new service syntax
         run: npm --prefix apps/saas run check
+      - name: Check isolated worker syntax
+        run: node --check apps/saas-worker/src/worker.mjs
       - name: Run PostgreSQL RLS, OIDC, Ed25519 and MCP tests
         run: npm --prefix apps/saas test
