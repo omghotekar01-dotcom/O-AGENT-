@@ -140,6 +140,25 @@ public static class OAgentUserInput {
     keybd_event(key, 0, 0, UIntPtr.Zero);
     keybd_event(key, 0, 2, UIntPtr.Zero);
   }
+  public static void Shortcut(string name) {
+    byte key=0;
+    switch(name) {
+      case "copy": key=0x43; break;
+      case "paste": key=0x56; break;
+      case "cut": key=0x58; break;
+      case "undo": key=0x5A; break;
+      case "redo": key=0x59; break;
+      case "select_all": key=0x41; break;
+      case "save": key=0x53; break;
+      case "find": key=0x46; break;
+      default: return;
+    }
+    keybd_event(0x11,0,0,UIntPtr.Zero);
+    try {
+      keybd_event(key,0,0,UIntPtr.Zero);
+      keybd_event(key,0,2,UIntPtr.Zero);
+    } finally {keybd_event(0x11,0,2,UIntPtr.Zero);}
+  }
   public static void TypeText(string value) {
     foreach (char ch in value) {
       Input[] events = new Input[2];
@@ -192,6 +211,7 @@ try {
                     'scroll' { [OAgentUserInput]::Scroll([int]$a.steps) }
                     'key' { [OAgentUserInput]::Key([string]$a.key) }
                     'text' { [OAgentUserInput]::TypeText([string]$a.text) }
+                    'shortcut' { [OAgentUserInput]::Shortcut([string]$a.name) }
                 }
             } catch {
                 Write-Host 'Windows did not accept an input action; check focus and permissions.' -ForegroundColor Yellow
