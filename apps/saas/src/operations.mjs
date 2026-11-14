@@ -87,7 +87,7 @@ export async function approveEnrollment(client,tenantId,subject,token,expectedFi
 }
 export async function listDevices(client) {
   const result=await client.query(
-    "SELECT id,name,capabilities,last_seen_at,created_at,revoked_at FROM devices ORDER BY created_at DESC LIMIT 100");
+    "SELECT id,name,capabilities,workspace_root,last_seen_at,created_at,revoked_at FROM devices ORDER BY created_at DESC LIMIT 100");
   return result.rows;
 }
 export async function revokeDevice(client,tenantId,subject,id) {
@@ -100,14 +100,19 @@ export async function revokeDevice(client,tenantId,subject,id) {
   await audit(client,tenantId,subject,"device.revoked",id);
   return {revoked:true};
 }
-export async function updateCapabilities(client,tenantId,deviceId,requested) {
+export async function updateCapabilities(client,tenantId,deviceId,requested,workspaceRoot=null) {
   if(!Array.isArray(requested)||requested.length>8||
       requested.some(x=>!RUN_KINDS.has(x)))
     throw httpError(400,"Invalid supported capabilities");
   const capabilities=[...new Set(requested)];
+  if(workspaceRoot!=null && (typeof workspaceRoot!=="string"||
+      workspaceRoot.length<3||workspaceRoot.length>600||
+      !/^(?:[A-Za-z]:[\\/]|\/)/.test(workspaceRoot)||
+      /[\x00-\x1f\x7f]/.test(workspaceRoot)))
+    throw httpError(400,"Invalid enrolled workspace root");
   const result=await client.query(
-    "UPDATE devices SET capabilities=$1::jsonb,last_seen_at=now() WHERE id=$2 AND revoked_at IS NULL RETURNING id",
-    [JSON.stringify(capabilities),deviceId]);
+    "UPDATE devices SET capabilities=$1::jsonb,workspace_root=$2,last_seen_at=now() WHERE id=$3 AND revoked_at IS NULL RETURNING id",
+    [JSON.stringify(capabilities),workspaceRoot,deviceId]);
   if(!result.rowCount)throw httpError(403,"Device revoked");
   await audit(client,tenantId,deviceId,"device.capabilities",deviceId,{capabilities});
   return {capabilities};
@@ -136,11 +141,26 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
   if(kind==="codex_cli_turn" && sessionId===null)
     throw httpError(400,"Codex CLI requires a verified saved session ID");
   const device=await client.query(
-    "SELECT capabilities FROM devices WHERE id=$1 AND revoked_at IS NULL AND last_seen_at>now()-interval '2 minutes'",
+    "SELECT capabilities,workspace_root FROM devices WHERE id=$1 AND revoked_at IS NULL AND last_seen_at>now()-interval '2 minutes'",
     [body.deviceId]);
   const caps=device.rows[0]?.capabilities;
   if(!Array.isArray(caps)||!caps.includes(kind))
     throw httpError(409,"The enrolled device is offline or does not support this provider");
+  // Filter obviously external paths before the worker resolves symlinks and
+  // checks the actual canonical directory. This prevents normal users from
+  // accidentally targeting an unrelated folder from the mobile UI.
+  if(kind!=="workspace_inventory"){
+    const root=device.rows[0]?.workspace_root;
+    if(typeof root!=="string")
+      throw httpError(409,"Worker has not verified its enrolled workspace root");
+    const normalized=value=>value.replace(/\\/g,"/").replace(/\/+$/,"");
+    let safeRoot=normalized(root),safeCwd=normalized(cwd);
+    if(/^[A-Za-z]:/.test(safeRoot)){
+      safeRoot=safeRoot.toLowerCase();safeCwd=safeCwd.toLowerCase();
+    }
+    if(safeCwd!==safeRoot&&!safeCwd.startsWith(safeRoot+"/"))
+      throw httpError(403,"Requested project lies outside the enrolled workspace");
+  }
   const digest=actionDigest({deviceId:body.deviceId,kind,mode,prompt,cwd,sessionId});
   const prior=await client.query("SELECT id,action_hash,status FROM runs WHERE request_key=$1",
     [requestKey]);
