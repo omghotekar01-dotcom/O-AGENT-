@@ -46,6 +46,9 @@ export class ProjectHub {
       core.commit("provider.codex_local.disabled");
     }
     this.repoCache = new Map();
+    // Ephemeral provider SDK metadata; never persists private session indices
+    // to the control plane JSON database.
+    this.nativeSdkSnapshots = new Map();
   }
   sources() {
     const repos = repoSpec(this.env);
@@ -194,6 +197,30 @@ export class ProjectHub {
       });
       if (nativeSessions.length >= 30) break;
     }
+    for (const [workerId, saved] of this.nativeSdkSnapshots) {
+      if (now - saved.syncedAt > 300000) {
+        this.nativeSdkSnapshots.delete(workerId);
+        continue;
+      }
+      const machine = machines.find(m => m.id === workerId);
+      if (machine?.status !== "online") continue;
+      for (const item of saved.sessions) {
+        if (!machine.capabilities.includes(item.kind)) continue;
+        const key = [workerId, item.kind, item.sessionId].join("|");
+        if (seenNative.has(key)) continue;
+        seenNative.add(key);
+        nativeSessions.push({
+          kind: item.kind,
+          label: item.kind === "claude_agent_turn" ? "Claude Agent SDK" : "GitHub Copilot SDK",
+          workerId, sessionId: item.sessionId, cwd: item.cwd,
+          title: item.title, lastUsedAt: item.modifiedAt,
+          lastPrompt: null, lastRunId: null,
+          provenance: "sdk_saved_session", resumeEligible: true,
+        });
+        if (nativeSessions.length >= 30) break;
+      }
+      if (nativeSessions.length >= 30) break;
+    }
     const runs = taskState.map(t => {
       const approvals = Object.values(t.approvals ?? {}).filter(a =>
         a.state === "pending" && a.expiresAt > now && t.status === "running")
@@ -224,10 +251,14 @@ export class ProjectHub {
       };
     });
     const approvalInbox = buildOwnerApprovalInbox(snapshot, now);
+    const sdkDiscovery = [...this.nativeSdkSnapshots].map(([workerId, saved]) => ({
+      workerId, syncedAt: saved.syncedAt, states: saved.states,
+      fresh: now - saved.syncedAt <= 300000,
+    })).filter(item => item.fresh);
     return {
       generatedAt: new Date(now).toISOString(),
       schemaVersion: 1,
-      machines, sessions, nativeSessions, runs,
+      machines, sessions, nativeSessions, sdkDiscovery, runs,
       approvalInbox: approvalInbox.items,
       approvalInboxSummary: {
         total: approvalInbox.total,
@@ -245,6 +276,53 @@ export class ProjectHub {
     };
   }
 
+  /** Called only through authenticated worker routes. SDK metadata, not transcripts. */
+  publishNativeSessions(workerId, payload) {
+    const worker = this.core.snapshot().workers.find(w => w.id === workerId);
+    if (!worker || worker.status !== "online")
+      throw new DomainError(409, "Enrolled SDK worker must be online");
+    if (!payload || !Array.isArray(payload.sessions) ||
+        payload.sessions.length > 40 || !payload.states ||
+        typeof payload.states !== "object" || Array.isArray(payload.states))
+      throw new DomainError(400, "Invalid SDK session payload");
+    const kinds = new Set(["claude_agent_turn", "copilot_sdk_turn"]);
+    const sessions = [], seen = new Set();
+    for (const row of payload.sessions) {
+      if (!kinds.has(row?.kind) || !worker.capabilities.includes(row.kind) ||
+          typeof row.sessionId !== "string" ||
+          !/^[A-Za-z0-9_-]{8,120}$/.test(row.sessionId) ||
+          typeof row.cwd !== "string" || row.cwd.length < 3 ||
+          row.cwd.length > 600 || !/^(?:[A-Za-z]:[\\/]|\/)/.test(row.cwd) ||
+          /[\x00-\x1f]/.test(row.cwd) ||
+          typeof row.title !== "string" || row.title.length > 160 ||
+          /[\x00-\x1f]/.test(row.title) ||
+          (row.modifiedAt != null &&
+            (typeof row.modifiedAt !== "string" || row.modifiedAt.length > 50 ||
+             !Number.isFinite(Date.parse(row.modifiedAt)))))
+        throw new DomainError(400, "Invalid SDK session metadata");
+      const key = row.kind + "|" + row.sessionId;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      sessions.push({
+        kind: row.kind, sessionId: row.sessionId,
+        cwd: row.cwd, title: row.title, modifiedAt: row.modifiedAt ?? null,
+      });
+    }
+    const states = {};
+    for (const kind of kinds) {
+      const state = payload.states[kind];
+      if (state == null) continue;
+      if (!worker.capabilities.includes(kind) ||
+          !["metadata_available", "sdk_unavailable"].includes(state))
+        throw new DomainError(400, "Invalid SDK discovery state");
+      states[kind] = state;
+    }
+    this.nativeSdkSnapshots.set(workerId, {sessions, states, syncedAt: this.now()});
+    if (this.nativeSdkSnapshots.size > 20)
+      this.nativeSdkSnapshots.delete(this.nativeSdkSnapshots.keys().next().value);
+    this.core.commit("provider.native_sessions.synced", {workerId, count: sessions.length});
+    return {accepted: sessions.length, ephemeral: true};
+  }
   async fetchGithub(path) {
     const headers = {
       "accept": "application/vnd.github+json",
