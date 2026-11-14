@@ -19,10 +19,12 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
   Uint8List? frame;
   String? error;
   bool loading = false, stopping = false;
+  int frameSequence = -1;
+  int refreshCount = 0;
   @override void initState() {
     super.initState();
     _refresh();
-    timer = Timer.periodic(const Duration(milliseconds: 1000), (_) => _refresh());
+    timer = Timer.periodic(const Duration(milliseconds: 600), (_) => _refresh());
   }
   @override void dispose() { timer?.cancel(); super.dispose(); }
   Future<void> _refresh() async {
@@ -31,12 +33,20 @@ class _ScreenPreviewState extends State<ScreenPreviewScreen> {
     if (api == null) return;
     loading = true;
     try {
-      final current = await api.screenStatus();
-      final jpeg = current['fresh'] == true ? await api.screenFrame() : null;
+      final checkStatus = status == null || (refreshCount++ % 4 == 0);
+      final current = checkStatus ? await api.screenStatus() : status!;
+      final jpeg = current['fresh'] == true
+        ? await api.screenFrameUpdate(after: frameSequence) : null;
       if (mounted && api == widget.controller.client) {
         setState(() {
           status = current;
-          frame = jpeg;
+          if (jpeg != null) {
+            frame = jpeg.bytes;
+            frameSequence = jpeg.sequence;
+          } else if (current['fresh'] != true) {
+            frame = null;
+            frameSequence = -1;
+          }
           error = null;
         });
       }
