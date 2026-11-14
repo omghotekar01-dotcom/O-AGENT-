@@ -502,7 +502,14 @@ function updateDesktopControls(){
   const paired=desktopInput?.paired===true && desktopInput?.helperOnline===true;
   $("desktopLiveStatus").textContent=fresh?"Receiving frames":
     desktopState?.capturing?"Waiting for fresh frame":"Not sharing";
-  $("desktopInputStatus").textContent=paired?"Pointer paired":"Not paired";
+  $("desktopInputStatus").textContent=paired?"Control active":
+    desktopInput?.trustedReady?"One-tap ready":"Not paired";
+  const trusted=desktopInput?.trustedMode===true;
+  const trustedReady=desktopInput?.trustedReady===true;
+  $("desktopActivate").disabled=!fresh||!trustedReady||!connected;
+  $("desktopActivate").hidden=!trusted;
+  $("desktopSetupHint").hidden=trusted;
+  $("desktopLegacyPair").hidden=trusted;
   $("desktopPair").disabled=!fresh||paired;
   $("desktopPairCode").disabled=!fresh||paired;
   const canControl=fresh&&paired&&connected;
@@ -521,7 +528,9 @@ function updateDesktopControls(){
       : "Windows rejected your last "+ack.type+" action. Check the focused window and permissions.")
     : canControl
       ? "Paired for this laptop. Use the touchpad below; never type secrets remotely."
-      : "Input unavailable until the laptop is sharing and its visible helper is paired.";
+      : desktopInput?.trustedReady
+      ? "Laptop ready. Press Control this laptop to enable a temporary session."
+      : "Set up this laptop once, then Control activates directly from your phone.";
 }
 async function desktopRefresh(){
   if(!connected||currentView!=="desktop"||document.hidden||desktopBusy)return;
@@ -636,6 +645,16 @@ trackpad.addEventListener("keydown",event=>{
     event.preventDefault();
     queueDesktopAction({type:"click",button:"left"});
   }
+});
+$("desktopActivate").addEventListener("click",async()=>{
+  try{
+    desktopInput=await api("/api/input/activate",{method:"POST"});
+    desktopTick=2;
+    updateDesktopControls();
+    notice(desktopInput.paired
+      ? "Remote control active for up to 20 minutes. Stop it anytime."
+      : "Windows helper did not confirm activation.");
+  }catch(error){notice(error.message);}
 });
 $("desktopPair").addEventListener("click",async()=>{
   const code=$("desktopPairCode").value.trim();
