@@ -12,6 +12,7 @@ import {verifyDeviceHeaders} from "./device-crypto.mjs";
 import {createMcp} from "./mcp.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "./push.mjs";
 import {exportOwnerData} from "./export.mjs";
+import {listWorkspaces,listTeamMembers,createTeamInvite,redeemTeamInvite,removeTeamMember,renameWorkspace} from "./team.mjs";
 import {
   httpError,startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,
   updateCapabilities,heartbeat,createRun,listRuns,runDetail,
@@ -227,12 +228,53 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
       const write=method!=="GET";
       const identity=await verifier(req.headers.authorization,
         write?"oagent-operate":"oagent-read");
-      const asTenant=fn=>withIdentity(pool,identity,fn);
+      // Explicit workspace selection is only honored after the verified
+      // identity's team membership and minimum role are checked in SQL.
+      const selectedWorkspace=req.headers["x-oagent-workspace"]||null;
+      const requiredRole=path.startsWith("/v1/team/")||
+        path.startsWith("/v1/account/")||
+        path.startsWith("/v1/devices/enrollments/")||
+        /^\\/v1\\/devices\\/[0-9a-f-]{36}\\/revoke$/i.test(path)
+          ?"owner":path==="/v1/audit"?"operator":
+          write?"operator":"viewer";
+      const asTenant=(fn,role=requiredRole)=>withIdentity(pool,identity,fn,{
+        workspaceId:selectedWorkspace,requiredRole:role,
+      });
+      // Redemption uses a one-time hash-verified invite and signed OIDC
+      // identity. It must not require pre-existing membership in that tenant.
+      if(method==="POST"&&path==="/v1/team/join"){
+        assertJson(req);
+        const body=objectJson(await bytes(req,1000));
+        return reply(res,200,await redeemTeamInvite(pool,identity,body.inviteToken));
+      }
+      if(method==="GET"&&path==="/v1/team/workspaces")
+        return reply(res,200,{workspaces:await asTenant(c=>listWorkspaces(c,identity),"viewer")});
+      if(method==="GET"&&path==="/v1/team/members")
+        return reply(res,200,{members:await asTenant(listTeamMembers)});
+      if(method==="POST"&&path==="/v1/team/invites"){
+        assertJson(req);
+        const body=objectJson(await bytes(req,1000));
+        return reply(res,201,await asTenant((c,t)=>createTeamInvite(
+          c,t,identity.subject,body.role)));
+      }
+      if(method==="POST"&&path==="/v1/team/members/remove"){
+        assertJson(req);
+        const body=objectJson(await bytes(req,1600));
+        return reply(res,200,await asTenant((c,t)=>removeTeamMember(
+          c,t,identity.subject,body)));
+      }
+      if(method==="POST"&&path==="/v1/team/settings"){
+        assertJson(req);
+        const body=objectJson(await bytes(req,500));
+        return reply(res,200,await asTenant((c,t)=>renameWorkspace(
+          c,t,identity.subject,body.name)));
+      }
       if(method==="GET"&&path==="/v1/me")
-        return reply(res,200,await asTenant(async(_c,tenant)=>({
-          tenantId:tenant,subject:identity.subject,capabilities:[
+        return reply(res,200,await asTenant(async(_c,tenant,role)=>({
+          tenantId:tenant,subject:identity.subject,role,capabilities:[
             "device_enrollment","native_run_approval","scoped_mcp",
-          ]})));
+            "team_workspaces",
+          ]}),"viewer"));
       if(method==="GET"&&path==="/v1/devices")
         return reply(res,200,{devices:await asTenant(c=>listDevices(c))});
       if(method==="GET"&&path==="/v1/audit")
