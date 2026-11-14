@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([switch]$Trusted)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\common.ps1"
 
@@ -7,6 +7,9 @@ $ErrorActionPreference = 'Stop'
 # It is never auto-started by O-AGENT.cmd, does not create a network listener,
 # and stops accepting input when its terminal closes or the short lease expires.
 $config = Read-OAgentConfig
+if ($Trusted -and -not (($config.PSObject.Properties.Name -contains 'RemoteControlTrusted') -and $config.RemoteControlTrusted -eq $true)) {
+    throw 'One-tap remote control was not enabled by the local Windows user.'
+}
 $workerId = [string]$config.WorkerId
 $secret = Unlock-OAgentSecret $config.WorkerTokenEncrypted
 # Follow the actual port saved by O-AGENT.cmd, even when this companion
@@ -77,8 +80,14 @@ Write-Host 'Never type passwords, payment details or private tokens using remote
 Write-Host 'Elevated apps, Windows sign-in and secure desktop cannot be controlled.'
 Write-Host 'Leave this window visibly open. Close it or press Ctrl+C to stop.'
 Write-Host ''
-$confirmation = Read-Host 'Type ENABLE to opt in (anything else cancels)'
-if ($confirmation -cne 'ENABLE') { Write-Host 'No remote control enabled.'; exit 0 }
+if ($Trusted) {
+    Write-Host 'One-tap control was explicitly enabled on this Windows account.' -ForegroundColor Green
+    Write-Host 'Your owner phone must still press Control, while the chosen screen is shared.'
+    Write-Host 'Close THIS VISIBLE window to revoke the local helper immediately.'
+} else {
+    $confirmation = Read-Host 'Type ENABLE to opt in (anything else cancels)'
+    if ($confirmation -cne 'ENABLE') { Write-Host 'No remote control enabled.'; exit 0 }
+}
 
 Add-Type -TypeDefinition @'
 using System;
@@ -188,13 +197,21 @@ $armed = $false
 $lastAck = $null
 try {
     Assert-OAgentBackendReady
-    $pair = Send-OAgentInputRequest 'prepare' @{}
+    # Trusted enrollment is explicit and stored only in the local Windows
+    # config. No reusable pairing code is sent to the phone.
+    $pair = Send-OAgentInputRequest 'prepare' @{ trusted = [bool]$Trusted }
     $armed = $true
     Write-Host ''
-    Write-Host "Pairing code: $($pair.pairingCode)" -ForegroundColor Yellow
-    Write-Host 'On your phone: Remote > See my laptop > Full screen > Pair Windows control.'
-    Write-Host 'Code expires after 2 minutes; once paired, remote control lasts 20 minutes.'
-    Write-Host 'Stop sharing your screen or close this window to revoke control.'
+    if ($Trusted) {
+        Write-Host 'Laptop READY. Press Control on your owner phone when needed.' -ForegroundColor Green
+        Write-Host 'Each mobile control window lasts up to 20 minutes and can be stopped instantly.'
+        Write-Host 'The selected screen must still be actively shared before any input is permitted.'
+    } else {
+        Write-Host "Pairing code: $($pair.pairingCode)" -ForegroundColor Yellow
+        Write-Host 'On your phone: Remote > See my laptop > Full screen > Pair Windows control.'
+        Write-Host 'Code expires after 2 minutes; once paired, remote control lasts 20 minutes.'
+    }
+    Write-Host 'Close this window or stop O-AGENT to revoke the local helper.'
     Write-Host ''
     while ($true) {
         try {
