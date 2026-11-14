@@ -7,6 +7,7 @@ import {startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,lis
   heartbeat,createRun,listRuns,runDetail,listApprovals,decideApproval,claimRun,
   finishRun,requestToolApproval,toolApprovalStatus} from "../src/operations.mjs";
 import {generateDeviceKeys,sha256,deviceHeaders,verifyDeviceHeaders} from "../src/device-crypto.mjs";
+import {registerPush,unregisterPush,pushStatus,notifyTenant} from "../src/push.mjs";
 
 test("PostgreSQL enforces tenant isolation, signed device enrollment and one-time approvals",
   {timeout:45000,skip:!process.env.OAGENT_TEST_DATABASE_URL},async()=>{
@@ -136,6 +137,26 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
         assert.equal(finished.status,"completed");
         assert.equal((await withIdentity(pool,owner,c=>
           runDetail(c,run.runId))).status,"completed");
+        const subscription={endpoint:"https://fcm.googleapis.com/fcm/send/"+
+          "a".repeat(60),keys:{auth:"A".repeat(22),p256dh:"B".repeat(87)}};
+        await withIdentity(pool,owner,(c,t)=>registerPush(c,t,subscription));
+        assert.equal((await withIdentity(pool,owner,pushStatus)).subscribedDevices,1);
+        assert.equal((await withIdentity(pool,stranger,pushStatus)).subscribedDevices,0);
+        let sentTo=[];
+        const notify=await notifyTenant(pool,tenantA,{
+          publicOrigin:"https://laptop.tail.ts.net",
+          push:{publicKey:"P".repeat(87),privateKey:"S".repeat(43)},
+        },{send:async(sub,payload)=>{
+          sentTo.push({sub,payload});return {statusCode:201};
+        }});
+        assert.equal(notify.sent,1);
+        assert.equal(sentTo[0].sub.endpoint,subscription.endpoint);
+        assert.doesNotMatch(sentTo[0].payload,/test file|Explain this test/);
+        await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>registerPush(
+          c,t,{...subscription,endpoint:"https://127.0.0.1/internal"})),
+          /Invalid push subscription|Unsupported browser push service/);
+        await withIdentity(pool,owner,c=>unregisterPush(c,subscription.endpoint));
+        assert.equal((await withIdentity(pool,owner,pushStatus)).subscribedDevices,0);
         const direct=await pool.query("SELECT count(*)::int AS count FROM runs");
         assert.equal(direct.rows[0].count,0,
           "FORCE RLS without a scoped transaction denies all tenant runs");

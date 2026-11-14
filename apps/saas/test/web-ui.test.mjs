@@ -75,3 +75,14 @@ test("home-screen PWA contains real network-only security behavior",()=>{
   assert.doesNotMatch(worker,/addEventListener\("fetch"/);
   assert.doesNotMatch(worker,/caches\.open/);
 });
+
+test("opt-in privacy-safe phone alerts never send or display prompt content",()=>{
+  const sw=readFileSync(new URL("../public/sw.js",import.meta.url),"utf8");
+  assert.match(sw,/addEventListener\("push"/);
+  assert.match(sw,/addEventListener\("notificationclick"/);
+  assert.doesNotMatch(sw,/addEventListener\("fetch"/);
+  assert.match(script,/Notification\.requestPermission\(\)/);
+  assert.match(script,/pushManager\.subscribe/);
+  assert.match(script,/subscription\.toJSON\(\)/);
+  assert.match(ui,/id="enableAlerts"/);
+});

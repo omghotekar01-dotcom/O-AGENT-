@@ -418,6 +418,9 @@ async function refresh(){
       approvals:Array.isArray(approvalData.approvals)?approvalData.approvals:NONE,
     };
     render();pillConnection(true);showAuth(true);
+    if(navigator.setAppBadge){
+      void navigator.setAppBadge(approvals.length).catch(()=>{});
+    }
   }catch(error){
     pillConnection(false);
     // An unavailable provider must never be displayed as zero approved tasks.
@@ -432,6 +435,36 @@ function disconnect(){
   state={devices:[],runs:[],approvals:[]};
   showAuth(false);pillConnection(false);
 }
+function b64ToBytes(value){
+  const raw=value.replace(/-/g,"+").replace(/_/g,"/");
+  const padded=raw.padEnd(Math.ceil(raw.length/4)*4,"=");
+  return Uint8Array.from(atob(padded),char=>char.charCodeAt(0));
+}
+async function enableAlerts(){
+  if(!loggedIn())throw Error("Sign in first to enable your private alerts.");
+  if(!("Notification" in window)||!("serviceWorker" in navigator)||
+      !("PushManager" in window))
+    throw Error("This browser does not support standard web push. On iPhone, install the app to your Home Screen.");
+  const permission=await Notification.requestPermission();
+  if(permission!=="granted")throw Error("Browser notification permission was not granted.");
+  const push=await api("/v1/push/config");
+  if(!push.enabled||!push.vapidPublicKey)
+    throw Error("Approval alerts are not configured on this O-AGENT server.");
+  const service=await navigator.serviceWorker.ready;
+  let subscription=await service.pushManager.getSubscription();
+  if(!subscription){
+    subscription=await service.pushManager.subscribe({
+      userVisibleOnly:true,applicationServerKey:b64ToBytes(push.vapidPublicKey),
+    });
+  }
+  const saved=await api("/v1/push/subscriptions",{
+    method:"POST",body:subscription.toJSON(),
+  });
+  if(saved.subscribed){
+    $("enableAlerts").textContent="Alerts enabled for this device";
+    notice("Private approval alerts enabled. Delivery depends on the browser and network.");
+  }
+}
 async function bootstrap(){
   const hash=location.hash.startsWith("#pair=")?
     location.hash.slice("#pair=".length):null;
@@ -439,6 +472,10 @@ async function bootstrap(){
     pendingPair=decodeURIComponent(hash);
     sessionStorage.setItem("oagent_pending_pair",pendingPair);
     history.replaceState(null,"",location.pathname+location.search);
+  }
+  const requestedView=new URL(location.href).searchParams.get("view");
+  if(["overview","approvals","runs","devices"].includes(requestedView)){
+    navigate(requestedView);
   }
   try{
     const response=await fetch("/v1/public-config",{cache:"no-store"});
@@ -465,6 +502,19 @@ for(const btn of document.querySelectorAll("[data-view]"))
 for(const btn of document.querySelectorAll("[data-go]"))
   btn.addEventListener("click",()=>navigate(btn.dataset.go));
 $("signIn").addEventListener("click",()=>void authorize().catch(e=>notice(e.message,true)));
+$("enableAlerts").addEventListener("click",()=>{
+  const btn=$("enableAlerts");btn.disabled=true;
+  void enableAlerts().catch(error=>notice(error.message,true)).finally(()=>{
+    btn.disabled=false;
+  });
+});
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.addEventListener("message",event=>{
+    if(event.data?.type==="oagent-review-approvals"){
+      navigate("approvals");void refresh();
+    }
+  });
+}
 $("signOut").addEventListener("click",()=>{disconnect();notice("Signed out of this browser.");});
 $("menuButton").addEventListener("click",()=>$("sidebar").classList.toggle("open"));
 $("refresh").addEventListener("click",refresh);
