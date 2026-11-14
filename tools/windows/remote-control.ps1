@@ -185,6 +185,7 @@ function Send-OAgentInputRequest([string]$action, [hashtable]$data) {
 }
 
 $armed = $false
+$lastAck = $null
 try {
     Assert-OAgentBackendReady
     $pair = Send-OAgentInputRequest 'prepare' @{}
