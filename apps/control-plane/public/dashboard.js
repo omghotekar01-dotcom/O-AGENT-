@@ -248,6 +248,8 @@ async function refresh(){
   }finally{refreshing=false;}
 }
 function dialogResult(dialog){
+  // Reset the previous decision: pressing Escape must never reuse an earlier approval.
+  dialog.returnValue="cancel";
   return new Promise(resolve=>{
     const onClose=()=>{dialog.removeEventListener("close",onClose);resolve(dialog.returnValue);};
     dialog.addEventListener("close",onClose,{once:true});
