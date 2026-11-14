@@ -1,5 +1,6 @@
 import {createServer} from "node:http";
 import {Readable} from "node:stream";
+import {readFile} from "node:fs/promises";
 import {pipeline} from "node:stream/promises";
 import {createHmac,randomBytes} from "node:crypto";
 import {resolve} from "node:path";
@@ -69,6 +70,35 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         return reply(res,200,{status:"ready",database:"connected"});
       }
       expectedHost(config,req);
+      const assets={"/":"../public/index.html",
+        "/app.js":"../public/app.js","/style.css":"../public/style.css"};
+      if(method==="GET"&&Object.hasOwn(assets,path)){
+        const content=await readFile(new URL(assets[path],import.meta.url));
+        const tokenOrigin=config.webAuth?
+          new URL(config.webAuth.tokenEndpoint).origin:"'self'";
+        res.writeHead(200,{
+          "content-type":path==="/"
+            ?"text/html; charset=utf-8":path.endsWith(".js")
+              ?"text/javascript; charset=utf-8":"text/css; charset=utf-8",
+          "cache-control":"no-store",
+          "content-security-policy":"default-src 'none'; script-src 'self'; "+
+            "style-src 'self'; connect-src 'self' "+tokenOrigin+"; "+
+            "img-src 'self' data:; base-uri 'none'; form-action 'none'; "+
+            "frame-ancestors 'none'",
+          "x-content-type-options":"nosniff","referrer-policy":"no-referrer",
+        });
+        res.end(content);return;
+      }
+      if(method==="GET"&&path==="/v1/public-config")
+        return reply(res,200,{
+          authEnabled:!!config.webAuth,
+          clientId:config.webAuth?.clientId??null,
+          authorizationEndpoint:config.webAuth?.authorizationEndpoint??null,
+          tokenEndpoint:config.webAuth?.tokenEndpoint??null,
+          redirectUri:config.webAuth?.redirectUri??null,
+          audience:config.audience,
+          scope:"openid profile oagent:read oagent:operate",
+        });
       if(method==="GET"&&path==="/.well-known/oauth-protected-resource")
         return reply(res,200,{
           resource:config.publicOrigin+"/mcp",
