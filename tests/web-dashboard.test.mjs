@@ -27,6 +27,16 @@ test("dashboard protects credentials and renders untrusted source as text",()=>{
   assert.match(html,/id="confirmDialog"/);
   assert.match(html,/id="inputDialog"/);
   assert.match(css,/\[hidden\]\{display:none!important\}/);
+  assert.match(html,/id="desktopTrackpad"/);
+  assert.match(html,/id="desktopPairCode"/);
+  assert.match(html,/id="desktopStopInput"/);
+  assert.match(js,/api\("\/api\/input\/pair"/);
+  assert.match(js,/api\("\/api\/input\/action"/);
+  assert.match(js,/api\("\/api\/screen\/stop"/);
+  assert.match(js,/\/api\/screen\/frame\?after=/);
+  assert.match(js,/desktopQueue\.length=0/);
+  assert.doesNotMatch(js,/new WebSocket\(/);
+  assert.match(css,/touch-action:none/);
 });
 
 test("connected tool statuses remain backend-derived, not fabricated",()=>{
