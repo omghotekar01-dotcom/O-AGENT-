@@ -239,6 +239,39 @@ class AgentApi {
     _request('/api/input/activate', method: 'POST');
   Future<Map<String, dynamic>> sendRemoteInput(Map<String, dynamic> action) =>
     _request('/api/input/action', method: 'POST', body: action);
+
+  /// Sends a user-selected image to the visible Windows helper to paste into
+  /// the currently focused app. Ephemeral, max 1.5 MB, not stored as a task.
+  Future<Map<String, dynamic>> pasteImageOnLaptop(
+      Uint8List bytes, String mimeType) async {
+    if (bytes.isEmpty || bytes.length > 1500000 ||
+        !const ['image/png', 'image/jpeg'].contains(mimeType)) {
+      throw const ApiException('Choose a PNG/JPEG image under 1.5 MB');
+    }
+    try {
+      final request = await _http.postUrl(endpoint.resolve('/api/input/image'))
+        .timeout(const Duration(seconds: 15));
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
+      request.headers.set(HttpHeaders.contentTypeHeader, mimeType);
+      request.add(bytes);
+      final response = await request.close()
+        .timeout(const Duration(seconds: 30));
+      final text = await utf8.decoder.bind(response).join()
+        .timeout(const Duration(seconds: 30));
+      final payload = Map<String, dynamic>.from(jsonDecode(text) as Map);
+      if (response.statusCode != 200) {
+        throw ApiException(payload['error']?.toString() ??
+          'Image paste failed', response.statusCode);
+      }
+      return payload;
+    } on SocketException {
+      throw const ApiException('Laptop is offline. Check your private network.');
+    } on HandshakeException {
+      throw const ApiException('Secure connection verification failed.');
+    } on FormatException {
+      throw const ApiException('Unexpected image-paste response.');
+    }
+  }
   Future<Map<String, dynamic>> stopRemoteInput() =>
     _request('/api/input/stop', method: 'POST');
 
