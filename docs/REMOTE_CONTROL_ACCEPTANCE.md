@@ -21,6 +21,14 @@ same repository checkout. **Not** an unattended computer-control feature.
   deltas coalesce on the backend without moving clicks or keystrokes past each
   other. Touch gestures accumulate fractional movements, and the phone queues
   discrete actions rather than silently dropping a click during movement.
+- The Windows helper acknowledges its previous action (success/failure)
+  during the next poll, without an additional HTTP request or logging the
+  text typed. Owner UI distinguishes backend queue acceptance from Windows
+  input execution. It still cannot prove each target app processed input.
+- The owner-only website now has Live desktop, including incremental JPEG
+  preview, a paired virtual touchpad, allowlisted keyboard actions, and
+  immediate stop controls. Leaving this page or signing out discards pending
+  browser input. Authenticated blob images are revoked when replaced.
 - Keyboard supports text, arrows, Escape, Enter, Tab, Backspace, and a small
   audited shortcut list (Copy/Paste/Cut/Undo/Redo/Select all/Save/Find).
   There is no arbitrary hotkey/script execution, clipboard exfiltration,
@@ -50,8 +58,11 @@ Wi-Fi/cellular conditions, timestamps and any error descriptions.
 5. **Keyboard:** enter test-only text into Notepad, test Backspace, Tab,
    arrows, Ctrl+A, Copy/Paste, Undo and Save in a harmless file. Never use
    credentials, personal data, payments or real tokens during testing.
-6. **Ordering:** drag then click then paste, 20 consecutive times. No clicks,
-   keys or paste requests should be lost or reordered.
+6. **Ordering and acknowledgments:** drag then click then paste,
+   20 consecutive times. No clicks, keys or paste requests should be
+   lost or reordered. Confirm the input action receipt moves from queued
+   to Windows-executed, or shows a clear rejected result. Repeat in web
+   desktop touchpad as well as Android.
 7. **Access isolation:** wrong owner token, missing helper, expired pair code,
    stopped capture, offline helper, expired 20-minute window and member
    account must all fail to control the desktop.
