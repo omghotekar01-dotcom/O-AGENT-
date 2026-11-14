@@ -23,3 +23,12 @@ dialog{padding:0;border:1px solid #dce8eb;border-radius:17px;width:min(580px,cal
 .checkbox-line{display:flex;gap:10px;align-items:flex-start;margin:14px 0;line-height:1.45}
 .checkbox-line input{margin-top:5px;flex-shrink:0}
 @media(max-width:810px){.alert-actions{width:100%;justify-content:flex-start}.alert-actions .button{flex:1}}
+
+/* Shared workspace controls remain usable on phone screens. */
+.workspace-switch{max-width:210px;min-width:125px;padding:8px 10px;min-height:37px;border:1px solid #d5e3e7;border-radius:9px;background:white;color:#23414d;font-size:12px}
+.switch-label{font-size:11px;color:#607b86;font-weight:700}
+#inviteResult{margin-top:18px;max-width:650px}
+#generatedInvite{font:12px/1.4 Consolas,monospace;word-break:break-all}
+#joinTeamForm{margin-top:18px;max-width:650px}
+@media(max-width:810px){.switch-label{display:none}.workspace-switch{max-width:140px;min-width:100px}.top-actions{gap:6px}}
+@media(max-width:470px){.workspace-switch{max-width:105px;min-width:75px;font-size:10px}.top-actions #refresh{display:none}}
