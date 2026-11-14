@@ -156,6 +156,22 @@ export async function decideApproval(client,tenantId,subject,id,body) {
       typeof body?.expectedActionHash!=="string"||
       !/^[0-9a-f]{64}$/.test(body.expectedActionHash))
     throw httpError(400,"Invalid approval decision");
+  if(body.approve){
+    // Do not approve an action on a revoked/offline worker. Tool approvals
+    // also require a live lease for the exact original run.
+    const {rows:active}=await client.query(
+      "SELECT d.last_seen_at,d.revoked_at,a.kind,r.status,r.lease_expires_at FROM approvals a JOIN devices d ON d.id=a.device_id JOIN runs r ON r.id=a.run_id WHERE a.id=$1 AND a.status='pending' FOR UPDATE OF a",
+      [id]);
+    const state=active[0];
+    if(!state||state.revoked_at||
+        !state.last_seen_at||
+        new Date(state.last_seen_at).getTime()<Date.now()-120000)
+      throw httpError(409,"Original agent worker is offline or revoked");
+    if(state.kind==="tool"&&(state.status!=="waiting_for_tool"||
+        !state.lease_expires_at||
+        new Date(state.lease_expires_at).getTime()<=Date.now()))
+      throw httpError(409,"Tool approval requires a current worker lease");
+  }
   const desired=body.approve?"approved":"denied";
   const {rows}=await client.query(
     "UPDATE approvals SET status=$1,decided_at=now(),decided_by=$2 WHERE id=$3 AND status='pending' AND action_hash=$4 AND expires_at>now() RETURNING run_id,kind,action_hash",
