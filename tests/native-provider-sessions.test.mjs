@@ -74,3 +74,20 @@ test("resume eligibility is tied to the original online enrolled worker", () => 
   assert.equal(native[0].resumeEligible, false);
   assert.equal(f.hub.remoteOverview().machines[0].status, "offline");
 });
+
+test("known SDK sessions cannot be replayed on a different worker or workspace", () => {
+  const f = createFixture();
+  f.complete("claude_agent_turn");
+  f.core.registerWorker({id: "other-worker", name: "Another machine",
+    capabilities: ["claude_agent_turn"]});
+  const request = {workerId, kind: "claude_agent_turn",
+    cwd: "/workspace/example", prompt: "Continue safely", mode: "read_only",
+    sessionId};
+  assert.throws(() => f.core.createTask({...request, workerId: "other-worker"},
+    "wrong-worker-session-12345"), /different enrolled worker/);
+  assert.throws(() => f.core.createTask({...request, cwd: "/workspace/other"},
+    "wrong-directory-session-12345"), /different enrolled worker/);
+  f.advance(31000);
+  assert.throws(() => f.core.createTask(request,
+    "stale-worker-session-12345"), /worker is offline/);
+});
