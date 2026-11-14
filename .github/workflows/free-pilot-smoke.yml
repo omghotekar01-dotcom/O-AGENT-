@@ -23,6 +23,18 @@ jobs:
           node-version: "22"
       - name: Generate ephemeral local-only pilot secrets
         run: node deploy/saas/free-pilot/setup.mjs
+      - name: Enable synthetic password grant ONLY inside disposable CI realm
+        run: |
+          node --input-type=module <<'JS'
+          import {readFileSync,writeFileSync} from "node:fs";
+          const path="deploy/saas/free-pilot/oagent-realm.json";
+          const realm=JSON.parse(readFileSync(path,"utf8"));
+          const web=realm.clients.find(x=>x.clientId==="oagent-web");
+          web.directAccessGrantsEnabled=true;
+          const user=realm.users.find(x=>x.username==="pilot-owner");
+          user.credentials[0].temporary=false;
+          writeFileSync(path,JSON.stringify(realm));
+          JS
       - name: Validate Caddy gateway syntax before starting containers
         run: |
           docker run --rm -v "$PWD/deploy/saas/free-pilot/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.9-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null
@@ -92,6 +104,10 @@ jobs:
           }
           throw Error("Private pilot container startup failed checks: "+lastError?.message);
           JS
+      - name: Verify genuine CI Keycloak token and tenant-scoped APIs
+        env:
+          OAGENT_CI_ALLOW_PASSWORD_GRANT: "1"
+        run: node deploy/saas/free-pilot/ci-oidc-smoke.mjs
       - name: Show static gateway errors on failure (not account secrets)
         if: failure()
         run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=80 gateway

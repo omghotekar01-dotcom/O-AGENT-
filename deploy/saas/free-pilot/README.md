@@ -38,3 +38,6 @@ On the dashboard Overview screen, choose **Enable approval alerts** and explicit
 
 ### Easier desktop connection (one command)
 After the pilot has been initialized and both devices have Tailscale, from the repository root run `node apps/saas-worker/src/quickstart.mjs /absolute/path/to/your/project` (on Windows, supply the full drive path). The helper reads only the HTTPS origin from your local pilot configuration, generates its own per-device signing key, displays the owner pairing link once, automatically finishes enrollment when approved on your phone, and begins the free workspace-inventory worker. Keep the terminal and computer on. This does not install paid provider SDKs or enable shell/file editing silently.
+
+### Real OIDC CI verification
+The one-time GitHub Actions private-pilot smoke test uses an explicitly modified **disposable test realm** to exchange a synthetic account password for a JWT, then verifies the real audience/scope-protected `/v1/me`, `/v1/audit`, and approvals endpoints. This password grant is never enabled in the shipped Keycloak realm; real users sign in through OAuth authorization-code PKCE and must change the generated temporary password. No CI token or password is printed. Actual browser login/MFA and phone sign-in still require physical acceptance.
