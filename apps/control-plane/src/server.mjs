@@ -162,7 +162,7 @@ const server = createServer(async (req, res) => {
       }
       if (req.method === "GET" && path === "/api/screen/frame") {
         const afterRaw = url.searchParams.get("after");
-        const after = afterRaw != null && /^\\d{1,12}$/.test(afterRaw)
+        const after = afterRaw != null && /^\d{1,12}$/.test(afterRaw)
           ? Number(afterRaw) : -1;
         const image = screenShare.frameSince(after);
         if (image == null) {
