@@ -9,6 +9,7 @@ import {startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,lis
   resolveInterruptedRun,listAuditEvents,deleteOwnAccount} from "../src/operations.mjs";
 import {generateDeviceKeys,sha256,deviceHeaders,verifyDeviceHeaders} from "../src/device-crypto.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "../src/push.mjs";
+import {exportOwnerData} from "../src/export.mjs";
 
 test("PostgreSQL enforces tenant isolation, signed device enrollment and one-time approvals",
   {timeout:45000,skip:!process.env.OAGENT_TEST_DATABASE_URL},async()=>{
@@ -144,6 +145,15 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
         assert.equal(finished.status,"completed");
         assert.equal((await withIdentity(pool,owner,c=>
           runDetail(c,run.runId))).status,"completed");
+        const exported=await withIdentity(pool,owner,c=>exportOwnerData(c,owner));
+        assert.equal(exported.format,"oagent-tenant-export-v1");
+        assert.ok(exported.runs.some(x=>x.id===run.runId));
+        assert.ok(exported.audit.some(x=>x.action==="run.completed"));
+        assert.ok(!JSON.stringify(exported).includes("PRIVATE KEY"));
+        const strangerExport=await withIdentity(pool,stranger,c=>
+          exportOwnerData(c,stranger));
+        assert.equal(strangerExport.runs.length,0);
+        assert.equal(strangerExport.devices.length,0);
         const subscription={endpoint:"https://fcm.googleapis.com/fcm/send/"+
           "a".repeat(60),keys:{auth:"A".repeat(22),p256dh:"B".repeat(87)}};
         await withIdentity(pool,owner,(c,t)=>registerPush(c,t,subscription));

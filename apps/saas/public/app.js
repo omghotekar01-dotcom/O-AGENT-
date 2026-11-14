@@ -542,6 +542,26 @@ async function signOut(){
     location.assign(target.href);
   }else notice("Signed out locally; identity provider logout is not configured.");
 }
+async function exportMyAccount(){
+  if(!loggedIn())throw Error("Sign in securely to export your own workspace");
+  const data=await api("/v1/account/export");
+  if(data.format!=="oagent-tenant-export-v1")
+    throw Error("Unexpected data export format");
+  const blob=new Blob([JSON.stringify(data,null,2)],{
+    type:"application/json;charset=utf-8",
+  });
+  const target=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=target;
+  link.download="oagent-workspace-"+new Date().toISOString().slice(0,10)+".json";
+  document.body.append(link);
+  try{link.click();}
+  finally{
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(target),60000);
+  }
+  notice("Your private workspace export was prepared on this device.");
+}
 async function deleteMyAccount(){
   const phrase=$("deletePhrase").value;
   if(phrase!=="DELETE_MY_OAGENT_WORKSPACE"||!$("ackLocalData").checked)
@@ -609,6 +629,12 @@ if("serviceWorker" in navigator){
 $("signOut").addEventListener("click",()=>void signOut().catch(e=>notice(e.message,true)));
 $("disableAlerts").addEventListener("click",()=>void disableAlerts().catch(e=>notice(e.message,true)));
 $("refreshAudit").addEventListener("click",refresh);
+$("exportAccount").addEventListener("click",()=>{
+  const button=$("exportAccount");
+  button.disabled=true;
+  void exportMyAccount().catch(e=>notice(e.message,true))
+    .finally(()=>{button.disabled=false;});
+});
 $("deleteAccount").addEventListener("click",()=>{
   $("deletePhrase").value="";$("ackLocalData").checked=false;
   $("deleteConfirm").disabled=true;

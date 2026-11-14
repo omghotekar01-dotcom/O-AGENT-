@@ -107,3 +107,13 @@ test("security view uses RLS audit, typed deletion, safe logout and consent labe
   assert.match(script,/confirmLabel:"Request approval"/);
   assert.doesNotMatch(script,/setAppBadge\(approvals\.length\)/);
 });
+
+test("account data export uses owner-scoped JSON with no credentials",()=>{
+  const exportServer=readFileSync(new URL("../src/export.mjs",import.meta.url),"utf8");
+  assert.match(exportServer,/exportOwnerData/);
+  assert.match(exportServer,/LIMIT \$1/);
+  assert.doesNotMatch(exportServer,/SELECT \*/);
+  assert.match(ui,/id="exportAccount"/);
+  assert.match(script,/\/v1\/account\/export/);
+  assert.match(script,/URL\.revokeObjectURL/);
+});

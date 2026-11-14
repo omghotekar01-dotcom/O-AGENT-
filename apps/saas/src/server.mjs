@@ -11,6 +11,7 @@ import {createPool,withIdentity,withTenant,assertTenantDatabaseSecurity,pruneEph
 import {verifyDeviceHeaders} from "./device-crypto.mjs";
 import {createMcp} from "./mcp.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "./push.mjs";
+import {exportOwnerData} from "./export.mjs";
 import {
   httpError,startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,
   updateCapabilities,heartbeat,createRun,listRuns,runDetail,
@@ -236,6 +237,8 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         return reply(res,200,{devices:await asTenant(c=>listDevices(c))});
       if(method==="GET"&&path==="/v1/audit")
         return reply(res,200,{events:await asTenant(c=>listAuditEvents(c))});
+      if(method==="GET"&&path==="/v1/account/export")
+        return reply(res,200,await asTenant(c=>exportOwnerData(c,identity)));
       if(method==="POST"&&path==="/v1/account/delete"){
         assertJson(req);
         const body=objectJson(await bytes(req,1200));
