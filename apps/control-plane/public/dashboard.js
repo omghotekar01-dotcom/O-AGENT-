@@ -515,6 +515,7 @@ function updateDesktopControls(){
   const canControl=fresh&&paired&&connected;
   for(const btn of document.querySelectorAll("[data-desktop-action]"))btn.disabled=!canControl;
   $("desktopSendText").disabled=!canControl;
+  $("desktopPasteImage").disabled=!canControl;
   $("desktopStopInput").disabled=!paired;
   $("desktopStopSharing").disabled=!desktopState?.capturing;
   $("desktopTrackpad").style.opacity=canControl?"1":".45";
@@ -833,6 +834,36 @@ $("desktopCopyCapture").addEventListener("click",async()=>{
     notice("Laptop screen picker URL copied. Open on your trusted computer.");
   }catch{notice("Browser denied clipboard access. Open /screen-capture on your laptop.");}
 });
+$("desktopPasteImage").addEventListener("click",async()=>{
+  if(!desktopInput?.paired||!desktopState?.fresh)
+    return notice("Start a control session before pasting a screenshot.");
+  const file=$("desktopImageFile").files?.[0];
+  if(!file)return notice("Choose a PNG or JPEG screenshot first.");
+  if(!["image/png","image/jpeg"].includes(file.type)||
+      file.size<64||file.size>1500000)
+    return notice("The selected image must be PNG/JPEG, 1.5 MB or less.");
+  const agreed=await confirmAction("Paste image into focused laptop app?",
+    "Selected: "+file.name+"\n\nPlace the Windows cursor in the intended "
+    +"ChatGPT, VS Code or other image-capable composer before continuing. "
+    +"The temporary clipboard image is cleared after the paste event.",
+    "Paste image");
+  if(!agreed)return;
+  const button=$("desktopPasteImage");
+  button.disabled=true;
+  try{
+    const response=await fetch("/api/input/image",{
+      method:"POST",cache:"no-store",redirect:"error",credentials:"omit",
+      headers:{authorization:"Bearer "+token,"content-type":file.type},
+      body:file,
+    });
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw Error(result.error||("Image upload failed (HTTP "+response.status+")"));
+    notice("Screenshot queued for the focused laptop window. Verify the result on screen.");
+    $("desktopImageFile").value="";
+  }catch(error){notice(error.message,12)}
+  finally{button.disabled=false;}
+});
+
 $("desktopSendText").addEventListener("click",()=>{
   const content=$("desktopTypeText").value;
   if(!content||content.length>300)return notice("Enter up to 300 test-only characters.");
