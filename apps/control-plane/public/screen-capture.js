@@ -132,7 +132,14 @@
         void cleanup(); info("Sharing ended using the browser's controls.");
       });
       await video.play();
-      const entry = await request("/api/screen/start", "POST");
+      const selected = media.getVideoTracks()[0]?.getSettings?.() ?? {};
+      const entry = await request("/api/screen/start", "POST",
+        {"Content-Type":"application/json"}, JSON.stringify({
+          displaySurface: ["monitor","window","browser"].includes(selected.displaySurface)
+            ? selected.displaySurface : "unknown",
+          sourceWidth: video.videoWidth,
+          sourceHeight: video.videoHeight,
+        }));
       lease = entry.captureToken;
       nextPublishAt = 0;
       consecutiveThrottles = 0;
