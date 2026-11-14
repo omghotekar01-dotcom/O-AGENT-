@@ -25,7 +25,7 @@ jobs:
         run: node deploy/saas/free-pilot/setup.mjs
       - name: Validate Caddy gateway syntax before starting containers
         run: |
-          docker run --rm -v "$PWD/deploy/saas/free-pilot/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.9-alpine adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null
+          docker run --rm -v "$PWD/deploy/saas/free-pilot/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.9-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null
       - name: Validate private Compose and build all containers
         run: |
           docker compose --env-file deploy/saas/free-pilot/.env.local \
