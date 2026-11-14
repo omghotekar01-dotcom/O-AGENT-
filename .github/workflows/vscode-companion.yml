@@ -4,6 +4,7 @@ on:
     paths:
       - "apps/vscode/**"
       - "tests/vscode-companion.test.mjs"
+      - "tests/vscode-local-enrollment.test.mjs"
       - ".github/workflows/vscode-companion.yml"
   push:
     branches: [main]
@@ -25,9 +26,10 @@ jobs:
           node-version: "22"
       - run: node --check apps/vscode/src/extension.cjs
       - run: node --check apps/vscode/src/connection.cjs
+      - run: node --check apps/vscode/src/local-enrollment.cjs
       - run: node --check apps/vscode/src/path-policy.cjs
       - run: node --check apps/vscode/src/file-access.cjs
-      - run: node --test tests/vscode-companion.test.mjs tests/vscode-files.test.mjs
+      - run: node --test tests/vscode-companion.test.mjs tests/vscode-local-enrollment.test.mjs tests/vscode-files.test.mjs
   package-vsix:
     name: VSIX on batched release only
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, '[mobile-release]') || contains(github.event.head_commit.message, '[vscode-release]'))
