@@ -15,3 +15,11 @@ dialog{padding:0;border:1px solid #dce8eb;border-radius:17px;width:min(580px,cal
 @media(max-width:810px){.auth-shell{background:linear-gradient(180deg,#102c39 0%,#16404a 56%,#f5f7f9 56%)}.auth-grid{grid-template-columns:1fr;gap:25px;padding:15px 22px 55px}.auth-intro{max-width:750px}.auth-intro h1{font-size:37px}.auth-intro .intro-desc{margin:17px 0 22px}.benefits{gap:9px}.login-card{max-width:750px}.sidebar{position:fixed;transform:translateX(-110%);transition:transform .2s;box-shadow:12px 0 35px #0a202a20}.sidebar.open{transform:translateX(0)}.mobile-menu{display:block}.topbar{height:65px;padding:0 16px}.breadcrumb>span:not(.slash){display:none}.breadcrumb .slash{display:none}.top-actions .button{padding:8px 10px;min-height:37px;font-size:11px}main{padding:24px 16px 65px}.page-header{align-items:flex-start;flex-direction:column}.pair-card{flex-wrap:wrap}.pair-actions{width:100%}.pair-actions .button{flex:1}}
 @media(max-width:470px){.stats{gap:9px}.stat{padding:14px;min-height:115px}.stat strong{font-size:28px}.panel{padding:17px}.page-header .button{width:100%}.top-status{max-width:78px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.entry-actions .button{flex:1}.pair-card{padding:16px}.modal-actions{flex-direction:column}.modal-actions .button{width:100%}}
 @media(prefers-reduced-motion:reduce){.sidebar{transition:none}}
+
+.alert-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:9px}
+.account-danger{border:1px solid var(--danger-border, #a54d4d);margin-top:18px}
+.field-label{display:block;margin:12px 0 7px;font-weight:600}
+.danger-confirm{display:block;width:100%;padding:11px 12px;border:1px solid #85929a;border-radius:9px;background:transparent;color:inherit;font:inherit;box-sizing:border-box}
+.checkbox-line{display:flex;gap:10px;align-items:flex-start;margin:14px 0;line-height:1.45}
+.checkbox-line input{margin-top:5px;flex-shrink:0}
+@media(max-width:810px){.alert-actions{width:100%;justify-content:flex-start}.alert-actions .button{flex:1}}

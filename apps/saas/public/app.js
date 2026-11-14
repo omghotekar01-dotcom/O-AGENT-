@@ -8,7 +8,7 @@ const create = (tag,text,className) => {
 };
 const NONE = Object.freeze([]);
 let config=null, accessToken=null, expiresAt=0,refreshing=false;
-let state={devices:[],runs:[],approvals:[]};
+let state={devices:[],runs:[],approvals:[],audit:[]};
 let activeView="overview",pendingPair=sessionStorage.getItem("oagent_pending_pair")||null;
 let review=null, noticeTimeout=null;
 const ACTIVE=new Set(["queued","running","waiting_for_tool","needs_recovery"]);
@@ -60,7 +60,7 @@ function action(node,text,fn,style="secondary"){
   return b;
 }
 function navigate(view){
-  if(!["overview","approvals","runs","devices"].includes(view))return;
+  if(!["overview","approvals","runs","devices","audit"].includes(view))return;
   activeView=view;
   for(const panel of document.querySelectorAll("[data-panel]"))
     panel.hidden=panel.dataset.panel!==view;
@@ -73,6 +73,7 @@ function navigate(view){
   $("viewName").textContent=({
     overview:"Overview",approvals:"Action inbox",
     runs:"Agent runs",devices:"Connected devices",
+    audit:"Security activity",
   })[view];
   $("sidebar").classList.remove("open");
   window.scrollTo({top:0,behavior:"instant"});
@@ -224,7 +225,7 @@ function renderRun(node,run){
         title:"Cancel the pending task?",
         description:"A queued task can be cancelled before its worker claims it.",
         detail:"Run: "+run.id+"\nStatus: "+statusText(run.status),
-        buttons:"revoke",
+        buttons:"confirm",confirmLabel:"Cancel pending run",
       });
       if(!decision)return;
       await api("/v1/runs/"+encodeURIComponent(run.id)+"/cancel",{
@@ -242,7 +243,7 @@ function renderRun(node,run){
         detail:"Run: "+exact.id+"\nProvider: "+exact.kind+
           "\nWorkspace: "+exact.cwd+"\nLast status: "+exact.status+
           "\n\nMark this interrupted run failed WITHOUT replaying it?",
-        buttons:"revoke",
+        buttons:"confirm",confirmLabel:"Mark run failed",
       });
       if(!confirmed)return;
       await api("/v1/runs/"+encodeURIComponent(run.id)+"/resolve-interrupted",{
@@ -304,12 +305,13 @@ async function approveDialog(item){
     "Request denied.");
   await refresh();
 }
-function reviewExact({title,description,detail,buttons="close"}){
+function reviewExact({title,description,detail,buttons="close",confirmLabel="Confirm action"}){
   if(review)return Promise.resolve(null);
   $("reviewTitle").textContent=title;
   $("reviewDescription").textContent=description;
   $("reviewDetails").textContent=detail;
-  $("reviewApprove").textContent=buttons==="revoke"?"Revoke device":"Approve once";
+  $("reviewApprove").textContent=buttons==="revoke"?"Revoke device":
+    buttons==="confirm"?confirmLabel:"Approve once";
   $("reviewApprove").hidden=buttons==="close";
   $("reviewDeny").hidden=buttons!=="approve-deny";
   $("reviewCancel").textContent=buttons==="close"?"Close":"Cancel";
@@ -351,7 +353,7 @@ async function startSupervisedRun(event){
   const confirmed=await reviewExact({
     title:"Request a supervised agent run",
     description:"Review exact destination, provider and permission mode.",
-    detail:description,buttons:"revoke",
+    detail:description,buttons:"confirm",confirmLabel:"Request approval",
   });
   if(!confirmed)return;
   const created=await api("/v1/runs",{method:"POST",
@@ -375,8 +377,16 @@ function updateProviderOptions(){
     $("providerSelect").value=old;
   $("submitRun").disabled=!fresh(device)||!$("providerSelect").options.length;
 }
+function renderAudit(node,record){
+  const label=String(record.action||"security event").replaceAll("."," · ");
+  const el=entry(label,"Actor: "+(record.actor||"unknown")+
+    " · "+dateText(record.created_at));
+  if(record.target_id)el.append(create("p",
+    "Related request: "+record.target_id,"entry-detail"));
+  node.append(el);
+}
 function render(){
-  const {devices,runs,approvals}=state;
+  const {devices,runs,approvals,audit}=state;
   $("statDevices").textContent=String(devices.filter(fresh).length);
   $("statRunning").textContent=String(runs.filter(x=>ACTIVE.has(x.status)).length);
   $("statApprovals").textContent=String(approvals.length);
@@ -400,6 +410,9 @@ function render(){
   const allDevices=$("deviceList");allDevices.replaceChildren();
   if(devices.length)for(const d of devices)renderDevice(allDevices,d);
   else empty(allDevices,"Your account has no enrolled device.");
+  const auditList=$("auditList");auditList.replaceChildren();
+  if(audit.length)for(const event of audit)renderAudit(auditList,event);
+  else empty(auditList,"No server-recorded account actions yet.");
   const select=$("deviceSelect"),previous=select.value;
   select.replaceChildren();
   for(const device of devices.filter(fresh)){
@@ -442,14 +455,16 @@ async function refresh(){
   if(!loggedIn()||refreshing||document.hidden)return;
   refreshing=true;$("refresh").disabled=true;
   try{
-    const [me,deviceData,runData,approvalData]=await Promise.all([
+    const [me,deviceData,runData,approvalData,auditData]=await Promise.all([
       api("/v1/me"),api("/v1/devices"),api("/v1/runs"),api("/v1/approvals"),
+      api("/v1/audit"),
     ]);
     if(!me.tenantId)throw Error("Account identity was not verified.");
     state={
       devices:Array.isArray(deviceData.devices)?deviceData.devices:NONE,
       runs:Array.isArray(runData.runs)?runData.runs:NONE,
       approvals:Array.isArray(approvalData.approvals)?approvalData.approvals:NONE,
+      audit:Array.isArray(auditData.events)?auditData.events:NONE,
     };
     render();pillConnection(true);showAuth(true);
     if(navigator.setAppBadge){
@@ -466,7 +481,7 @@ async function refresh(){
 }
 function disconnect(){
   accessToken=null;expiresAt=0;
-  state={devices:[],runs:[],approvals:[]};
+  state={devices:[],runs:[],approvals:[],audit:[]};
   showAuth(false);pillConnection(false);
 }
 function b64ToBytes(value){
@@ -499,6 +514,48 @@ async function enableAlerts(){
     notice("Private approval alerts enabled. Delivery depends on the browser and network.");
   }
 }
+async function disableAlerts(){
+  if(!loggedIn())throw Error("Sign in to change browser notifications.");
+  if(!("serviceWorker" in navigator))return;
+  const service=await navigator.serviceWorker.ready;
+  const subscription=await service.pushManager?.getSubscription();
+  if(!subscription)return;
+  await api("/v1/push/subscriptions",{
+    method:"DELETE",body:{endpoint:subscription.endpoint},
+  });
+  await subscription.unsubscribe();
+  $("enableAlerts").textContent="Enable approval alerts";
+  notice("Approval alerts are disabled on this phone.");
+}
+async function signOut(){
+  // Do not leave another user's notifications on a shared browser.
+  try{await disableAlerts();}catch{
+    notice("Push service could not be unsubscribed. Review notification permissions.",true);
+  }
+  const endpoint=config?.logoutEndpoint;
+  disconnect();
+  sessionStorage.removeItem("oagent_pending_pair");
+  if(endpoint){
+    const target=new URL(endpoint);
+    target.searchParams.set("client_id",config.clientId);
+    target.searchParams.set("post_logout_redirect_uri",config.redirectUri);
+    location.assign(target.href);
+  }else notice("Signed out locally; identity provider logout is not configured.");
+}
+async function deleteMyAccount(){
+  const phrase=$("deletePhrase").value;
+  if(phrase!=="DELETE_MY_OAGENT_WORKSPACE"||!$("ackLocalData").checked)
+    throw Error("Type the exact confirmation and acknowledge remaining local data.");
+  await api("/v1/account/delete",{
+    method:"POST",body:{confirmation:phrase,acknowledgeLocalData:true},
+  });
+  $("deleteDialog").close();
+  $("deletePhrase").value="";
+  $("ackLocalData").checked=false;
+  disconnect();
+  $("authHint").textContent="Your server-side workspace data was deleted. Provider accounts, local files and backups are separate.";
+  $("signIn").disabled=false;
+}
 async function bootstrap(){
   const hash=location.hash.startsWith("#pair=")?
     location.hash.slice("#pair=".length):null;
@@ -508,7 +565,7 @@ async function bootstrap(){
     history.replaceState(null,"",location.pathname+location.search);
   }
   const requestedView=new URL(location.href).searchParams.get("view");
-  if(["overview","approvals","runs","devices"].includes(requestedView)){
+  if(["overview","approvals","runs","devices","audit"].includes(requestedView)){
     navigate(requestedView);
   }
   try{
@@ -549,7 +606,26 @@ if("serviceWorker" in navigator){
     }
   });
 }
-$("signOut").addEventListener("click",()=>{disconnect();notice("Signed out of this browser.");});
+$("signOut").addEventListener("click",()=>void signOut().catch(e=>notice(e.message,true)));
+$("disableAlerts").addEventListener("click",()=>void disableAlerts().catch(e=>notice(e.message,true)));
+$("refreshAudit").addEventListener("click",refresh);
+$("deleteAccount").addEventListener("click",()=>{
+  $("deletePhrase").value="";$("ackLocalData").checked=false;
+  $("deleteConfirm").disabled=true;
+  $("deleteDialog").showModal();
+});
+const checkDelete=()=>{
+  $("deleteConfirm").disabled=$("deletePhrase").value!=="DELETE_MY_OAGENT_WORKSPACE"||
+    !$("ackLocalData").checked;
+};
+$("deletePhrase").addEventListener("input",checkDelete);
+$("ackLocalData").addEventListener("change",checkDelete);
+$("deleteCancel").addEventListener("click",()=>$("deleteDialog").close());
+$("deleteConfirm").addEventListener("click",async()=>{
+  const btn=$("deleteConfirm");btn.disabled=true;
+  try{await deleteMyAccount();}
+  catch(e){notice(e.message,true);checkDelete();}
+});
 $("menuButton").addEventListener("click",()=>$("sidebar").classList.toggle("open"));
 $("refresh").addEventListener("click",refresh);
 $("refreshApprovals").addEventListener("click",refresh);
@@ -577,7 +653,7 @@ $("pairApprove").addEventListener("click",async()=>{
       description:"Only approve a device that you personally own or administer.",
       detail:"Device: "+verified.name+"\nFingerprint: "+verified.fingerprint+
         "\n\nThis authorizes one signing key; it does not automatically grant agent tool access.",
-      buttons:"revoke",
+      buttons:"confirm",confirmLabel:"Enroll this device",
     });
     if(!consent)return;
     await api("/v1/devices/enrollments/approve",{

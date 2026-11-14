@@ -49,6 +49,7 @@
         <button type="button" class="nav" data-view="approvals"><span>◇</span> Action inbox <b id="sidePending" class="nav-count">0</b></button>
         <button type="button" class="nav" data-view="runs"><span>▤</span> Agent runs</button>
         <button type="button" class="nav" data-view="devices"><span>▣</span> Connected devices</button>
+        <button type="button" class="nav" data-view="audit"><span>◷</span> Security activity</button>
       </nav>
       <div class="side-foot"><span id="sideDot" class="status-dot"></span><span id="sideConnect">Checking backend</span><p>Provider connections are never displayed as live without real verification.</p></div>
     </aside>
@@ -69,7 +70,10 @@
               <h2 id="alertsTitle">Agent approvals, even when you step away</h2>
               <p class="entry-detail">Get a private alert when an enrolled agent asks for permission. Review and approve only after signing in. On iPhone, add this web app to your Home Screen first.</p>
             </div>
-            <button id="enableAlerts" class="button secondary" type="button">Enable approval alerts</button>
+            <div class="alert-actions">
+              <button id="enableAlerts" class="button secondary" type="button">Enable approval alerts</button>
+              <button id="disableAlerts" class="button ghost" type="button">Disable alerts on this phone</button>
+            </div>
           </section>
           <div class="stats">
             <article class="stat"><p>Connected devices</p><strong id="statDevices">—</strong><small>Recent verified heartbeats</small></article>
@@ -112,6 +116,19 @@
           <div id="deviceList" class="card-list"></div>
           <div class="panel setup-panel"><p class="eyebrow">CONNECT A NEW WORKER</p><h2>Private, owner-approved enrollment</h2><p>Run the O-AGENT enrollment helper on the computer you trust. Open its pairing link on your signed-in phone, inspect the device fingerprint, and approve once. The helper receives its device identity automatically.</p></div>
         </section>
+        <section class="page" data-panel="audit" hidden>
+          <div class="page-header"><div><p class="eyebrow">ACCOUNT SECURITY</p><h1>Security activity and data</h1><p>Verified account, approval, enrollment, and run decisions from this private workspace.</p></div></div>
+          <section class="panel"><div class="panel-head"><div><p class="eyebrow">AUDIT HISTORY</p><h2>Recent server-recorded actions</h2></div><button class="text-link" type="button" id="refreshAudit">Refresh history</button></div>
+            <p class="helper">Up to 75 recent events. Provider prompts, tokens, and signing keys are deliberately omitted from this history.</p>
+            <div id="auditList" class="stack"></div>
+          </section>
+          <section class="panel account-danger">
+            <p class="eyebrow">ACCOUNT AND DATA CONTROL</p>
+            <h2>Delete this O-AGENT workspace</h2>
+            <p class="entry-detail">Erases the connected devices, jobs, approvals, activity, audit records, and notification subscriptions held by this server. It does not delete provider accounts, files on enrolled computers, or copies in encrypted backups.</p>
+            <button type="button" id="deleteAccount" class="button danger">Review permanent account deletion</button>
+          </section>
+        </section>
         <p id="notice" class="notice" role="status" aria-live="polite"></p>
       </main>
     </div>
@@ -124,5 +141,13 @@
     <p class="helper">Review the destination and scope. Decisions are recorded by the server. A successful approval does not mean the provider has completed the task.</p>
     <div class="modal-actions"><button type="button" id="reviewCancel" class="button secondary">Cancel</button><button type="button" id="reviewDeny" class="button danger">Deny</button><button type="button" id="reviewApprove" class="button primary">Approve once</button></div>
   </dialog>
+<dialog id="deleteDialog" aria-labelledby="deleteTitle">
+  <div class="modal-head"><p class="eyebrow">PERMANENT ACCOUNT DELETION</p><h2 id="deleteTitle">Delete server-side O-AGENT data?</h2></div>
+  <p class="modal-description">This permanently revokes every enrolled device and removes this workspace's server records. O-AGENT cannot remove files on your computer, connected provider accounts or encrypted backup copies.</p>
+  <label for="deletePhrase" class="field-label">Type <strong>DELETE_MY_OAGENT_WORKSPACE</strong> to confirm</label>
+  <input type="text" id="deletePhrase" autocomplete="off" spellcheck="false" class="danger-confirm">
+  <label class="checkbox-line"><input type="checkbox" id="ackLocalData"> I understand that local files, provider accounts and backups remain and must be handled separately.</label>
+  <div class="modal-actions"><button id="deleteCancel" class="button secondary" type="button">Keep my account</button><button id="deleteConfirm" class="button danger" type="button" disabled>Delete server data permanently</button></div>
+</dialog>
 </body>
 </html>
