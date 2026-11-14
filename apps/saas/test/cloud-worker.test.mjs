@@ -1,0 +1,122 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {mkdtemp,writeFile,rm} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {randomUUID,createPublicKey,verify} from "node:crypto";
+import {SignedCloudWorker} from "../../saas-worker/src/worker.mjs";
+import {generateDeviceKeys,canonicalRequest} from "../src/device-crypto.mjs";
+
+test("isolated cloud worker executes a single approved inventory with signed leases",
+  {timeout:10000},async()=>{
+  const directory=await mkdtemp(join(tmpdir(),"oagent-cloud-worker-"));
+  try{
+    await writeFile(join(directory,"README.md"),"testing only");
+    const keys=generateDeviceKeys(),deviceId=randomUUID(),runId=randomUUID(),
+      leaseToken=randomUUID();
+    const observed=[];let claimed=false;
+    const fakeFetch=async(url,opts)=>{
+      const path=new URL(url).pathname,headers=opts.headers;
+      const raw=opts.body||Buffer.alloc(0),timestamp=Number(headers["x-oagent-timestamp"]);
+      const canonical=canonicalRequest({method:opts.method,path,
+        timestamp,nonce:headers["x-oagent-nonce"],rawBody:raw});
+      assert.equal(headers["x-oagent-device-id"],deviceId);
+      assert.ok(verify(null,canonical,createPublicKey(keys.publicKeyPem),
+        Buffer.from(headers["x-oagent-signature"],"base64url")));
+      const data=opts.body?JSON.parse(raw.toString("utf8")):{};
+      observed.push({path,data});
+      if(path==="/v1/device/claim"){
+        if(claimed)return Response.json({run:null});
+        claimed=true;
+        return Response.json({run:{id:runId,leaseToken,kind:"workspace_inventory",
+          cwd:"",mode:"read_only",prompt:"",session_id:null}});
+      }
+      return Response.json(path.endsWith("/complete")?
+        {status:"completed"}:{ok:true});
+    };
+    const worker=new SignedCloudWorker({
+      origin:"https://agents.example",deviceId,privateKeyPem:keys.privateKeyPem,
+      root:directory,fetchImpl:fakeFetch,env:{},wait:async()=>{},
+    });
+    await worker.initialize();
+    const result=await worker.tick();
+    assert.deepEqual(result,{claimed:true,completed:true});
+    assert.ok(observed.some(x=>x.path==="/v1/device/capabilities" &&
+      x.data.capabilities.includes("workspace_inventory")));
+    assert.equal(observed.find(x=>x.path.endsWith("/complete")).data.result.entries[0].name,
+      "README.md");
+    assert.deepEqual(await worker.tick(),{claimed:false});
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+test("cloud SDK worker transfers exact permissions and progress through signed API",
+  {timeout:10000},async()=>{
+  const folder=await mkdtemp(join(tmpdir(),"oagent-cloud-agent-"));
+  try{
+    const key=generateDeviceKeys(),id=randomUUID(),runId=randomUUID(),
+      leaseToken=randomUUID(),approvalId=randomUUID();
+    const paths=[];let permissionRequests=0;
+    const worker=new SignedCloudWorker({
+      origin:"https://agents.example",deviceId:id,
+      privateKeyPem:key.privateKeyPem,root:folder,
+      env:{OAGENT_ENABLE_CLAUDE_AGENT_SDK:"1"},
+      fetchImpl:async(url,opts)=>{
+        const path=new URL(url).pathname;
+        paths.push(path);
+        if(path.endsWith("/approvals")&&opts.method==="POST"){
+          permissionRequests++;
+          const body=JSON.parse(opts.body.toString());
+          assert.equal(body.description,"Edit example.txt");
+          return Response.json({approvalId,actionHash:"a".repeat(64)});
+        }
+        if(path==="/v1/device/approvals/"+approvalId)
+          return Response.json({state:"approved"});
+        return Response.json({status:"completed"});
+      },
+      providerRunner:async(task,callbacks)=>{
+        assert.equal(task.parameters.cwd,folder);
+        await callbacks.sendUpdate({type:"status",text:"started"});
+        const approved=await callbacks.askPermission({
+          id:"permission-123456",description:"Edit example.txt"});
+        assert.equal(approved,true);
+        return {providerStatus:"completed",sessionId:"native-session-12345",
+          response:"finished"};
+      },
+      wait:async()=>{},
+    });
+    const result=await worker.execute({id:runId,leaseToken,
+      kind:"claude_agent_turn",mode:"workspace_write",cwd:folder,
+      prompt:"Edit a small test file",session_id:null});
+    assert.equal(result.completed,true);
+    assert.equal(permissionRequests,1);
+    assert.ok(paths.includes("/v1/device/runs/"+runId+"/events"));
+    assert.ok(paths.includes("/v1/device/runs/"+runId+"/complete"));
+  }finally{await rm(folder,{recursive:true,force:true});}
+});
+test("a server-issued workspace outside the enrolled container is rejected",async()=>{
+  const folder=await mkdtemp(join(tmpdir(),"oagent-root-"));
+  const outside=await mkdtemp(join(tmpdir(),"oagent-outside-"));
+  try{
+    const key=generateDeviceKeys(),events=[];
+    const worker=new SignedCloudWorker({
+      origin:"https://agents.example",deviceId:randomUUID(),
+      privateKeyPem:key.privateKeyPem,root:folder,
+      env:{OAGENT_ENABLE_CLAUDE_AGENT_SDK:"1"},
+      fetchImpl:async(url,opts)=>{
+        events.push({path:new URL(url).pathname,body:JSON.parse(opts.body.toString())});
+        return Response.json({status:"failed"});
+      },
+      providerRunner:async()=>{throw Error("Provider must not execute");},
+    });
+    const result=await worker.execute({
+      id:randomUUID(),leaseToken:randomUUID(),kind:"claude_agent_turn",
+      mode:"read_only",cwd:outside,prompt:"Read",session_id:null,
+    });
+    assert.equal(result.completed,false);
+    assert.match(result.error,/outside enrolled/);
+    assert.equal(events.length,1);
+    assert.equal(events[0].body.ok,false);
+  }finally{
+    await rm(folder,{recursive:true,force:true});
+    await rm(outside,{recursive:true,force:true});
+  }
+});
