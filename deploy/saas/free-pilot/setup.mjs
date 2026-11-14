@@ -1,5 +1,5 @@
 import {execFileSync} from "node:child_process";
-import {randomBytes} from "node:crypto";
+import {randomBytes,generateKeyPairSync} from "node:crypto";
 import {readFile,writeFile,chmod} from "node:fs/promises";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -34,8 +34,16 @@ export async function setupPilot({env=process.env,notify=console.log,execute=exe
   const names=["OAGENT_PG_ADMIN_PASSWORD","OAGENT_RUNTIME_PASSWORD",
     "OAGENT_MIGRATION_PASSWORD","OAGENT_KEYCLOAK_DB_PASSWORD",
     "OAGENT_KEYCLOAK_ADMIN_PASSWORD","OAGENT_OWNER_PASSWORD"];
+  const pair=generateKeyPairSync("ec",{namedCurve:"prime256v1"});
+  const pub=pair.publicKey.export({format:"jwk"});
+  const priv=pair.privateKey.export({format:"jwk"});
+  const vapidPub=Buffer.concat([Buffer.from([4]),
+    Buffer.from(pub.x,"base64url"),Buffer.from(pub.y,"base64url")])
+    .toString("base64url");
   const data=["# Generated locally; never share or commit.","OAGENT_ORIGIN="+origin,
-    ...names.map(n=>n+"="+randomBytes(24).toString("hex"))].join("\n")+"\n";
+    ...names.map(n=>n+"="+randomBytes(24).toString("hex")),
+    "OAGENT_VAPID_PUBLIC_KEY="+vapidPub,
+    "OAGENT_VAPID_PRIVATE_KEY="+priv.d].join("\n")+"\n";
   await writeFile(file,data,{flag:"wx",mode:0o600});
   if(process.platform!=="win32")await chmod(file,0o600);
   notify("Private pilot passwords generated at "+file+" (not displayed).");

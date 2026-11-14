@@ -48,3 +48,10 @@ test("self-host stack never publishes identity or postgres ports",()=>{
   assert.match(init,/NOBYPASSRLS/);
   assert.match(init,/ALTER DEFAULT PRIVILEGES/);
 });
+
+test("native Web Push VAPID keys are EC-P256, generated locally without a paid vendor",()=>{
+  const script=read("setup.mjs");
+  assert.match(script,/generateKeyPairSync\("ec"/);
+  assert.match(script,/OAGENT_VAPID_PUBLIC_KEY/);
+  assert.match(script,/OAGENT_VAPID_PRIVATE_KEY/);
+});

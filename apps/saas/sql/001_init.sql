@@ -85,6 +85,19 @@ CREATE INDEX IF NOT EXISTS run_events_read ON run_events(tenant_id,run_id,id);
 ALTER TABLE run_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE run_events FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  tenant_id uuid NOT NULL REFERENCES tenants(id),
+  endpoint_hash bytea NOT NULL UNIQUE,
+  endpoint text NOT NULL,
+  auth_key varchar(60) NOT NULL,
+  p256dh_key varchar(140) NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS push_tenant_idx ON push_subscriptions(tenant_id);
+ALTER TABLE push_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE push_subscriptions FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   tenant_id uuid NOT NULL REFERENCES tenants(id),
@@ -108,7 +121,7 @@ ALTER TABLE audit_events FORCE ROW LEVEL SECURITY;
 DO $$
 DECLARE tbl text;
 BEGIN
-  FOREACH tbl IN ARRAY ARRAY['devices','runs','approvals','run_events','audit_events'] LOOP
+  FOREACH tbl IN ARRAY ARRAY['devices','runs','approvals','run_events','audit_events','push_subscriptions'] LOOP
     IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE schemaname='public'
        AND tablename=tbl AND policyname='tenant_scope') THEN
       EXECUTE format(

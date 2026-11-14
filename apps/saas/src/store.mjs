@@ -79,12 +79,12 @@ export async function assertTenantDatabaseSecurity(pool) {
   // Table owners can change RLS policy, even with FORCE RLS.
   const owners=await pool.query(
     "SELECT relname FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r' AND pg_has_role(current_user,relowner,'MEMBER')",
-    [["devices","runs","approvals","run_events","audit_events"]]);
+    [["devices","runs","approvals","run_events","audit_events","push_subscriptions"]]);
   if(owners.rowCount)throw Error("Unsafe runtime role: owner of tenant tables");
   const guard=await pool.query(
     "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r'",
     [["devices","runs","approvals","run_events","audit_events"]]);
-  if(guard.rowCount!==5||guard.rows.some(x=>!x.relrowsecurity||
+  if(guard.rowCount!==6||guard.rows.some(x=>!x.relrowsecurity||
       !x.relforcerowsecurity))
     throw Error("Tenant isolation tables have missing or disabled FORCE RLS");
   return {ok:true};

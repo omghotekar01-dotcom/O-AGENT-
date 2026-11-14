@@ -59,11 +59,20 @@ export function readSaasConfig(env = process.env) {
   }
   const audience = required(env,"OAGENT_OIDC_AUDIENCE");
   if (audience.length > 500) throw Error("OIDC audience too long");
+  const vapidPublic=env.OAGENT_VAPID_PUBLIC_KEY?.trim();
+  const vapidPrivate=env.OAGENT_VAPID_PRIVATE_KEY?.trim();
+  if(Boolean(vapidPublic)!==Boolean(vapidPrivate))
+    throw Error("Configure both Web Push VAPID keys or neither");
+  if(vapidPublic&&(!/^[A-Za-z0-9_-]{85,100}$/.test(vapidPublic)||
+      !/^[A-Za-z0-9_-]{40,50}$/.test(vapidPrivate)))
+    throw Error("Invalid Web Push VAPID key encoding");
+  const push=vapidPublic?Object.freeze({
+    publicKey:vapidPublic,privateKey:vapidPrivate}):null;
   const port = Number(env.PORT || 8790);
   if (!Number.isSafeInteger(port) || port<1 || port>65535) throw Error("Invalid PORT");
   return Object.freeze({
     publicOrigin:publicUrl.origin, issuer:issuerValue, jwksUrl:jwksValue,
-    audience, clientIds, webAuth, databaseUrl:db.href, localPilot,
+    audience, clientIds, webAuth, databaseUrl:db.href, localPilot, push,
     host:env.HOST || "127.0.0.1", port,
     mode:env.NODE_ENV || "production",
   });
