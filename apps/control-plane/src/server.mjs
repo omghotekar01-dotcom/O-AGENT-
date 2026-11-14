@@ -429,6 +429,8 @@ const server = createServer(async (req, res) => {
         return send(res, 200, remoteInput.status());
       if (req.method === "POST" && path === "/api/input/pair")
         return send(res, 200, remoteInput.pair(await readJson(req, 256)));
+      if (req.method === "POST" && path === "/api/input/activate")
+        return send(res, 200, remoteInput.activateTrusted());
       if (req.method === "POST" && path === "/api/input/action")
         return send(res, 200, remoteInput.action(await readJson(req, 2048)));
       if (req.method === "POST" && path === "/api/input/stop")
@@ -441,7 +443,9 @@ const server = createServer(async (req, res) => {
       const known = core.snapshot().workers.some(w => w.id === id && w.status === "online");
       if (!known) throw new DomainError(409, "Enrolled Windows worker is not online");
       if (req.method === "POST" && path === "/api/workers/remote-input/prepare")
-        return send(res, 200, remoteInput.prepare(id));
+        return send(res, 200, remoteInput.prepare(id, {
+          trusted: body.trusted === true,
+        }));
       if (req.method === "POST" && path === "/api/workers/remote-input/next")
         return send(res, 200, remoteInput.next(id, body.lastAck));
       if (req.method === "POST" && path === "/api/workers/remote-input/stop")
