@@ -197,7 +197,7 @@ try {
                 Write-Host 'Windows did not accept an input action; check focus and permissions.' -ForegroundColor Yellow
             }
         }
-        Start-Sleep -Milliseconds 190
+        Start-Sleep -Milliseconds 70
     }
 } catch {
     Write-Host "Could not enable remote input: $($_.Exception.Message)" -ForegroundColor Red
