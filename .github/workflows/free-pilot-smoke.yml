@@ -120,39 +120,23 @@ jobs:
         env:
           OAGENT_CI_ALLOW_PASSWORD_GRANT: "1"
         run: node deploy/saas/free-pilot/ci-oidc-smoke.mjs
-      - name: Prove encrypted database backup and destructive CI-only restore
+      - name: Prove encrypted DB backup and CI-only restore
         env:
           OAGENT_BACKUP_PASSPHRASE: "CI-ONLY-Ephemeral-AEAD-Backup-2026-Never-Use-For-Users"
           OAGENT_RESTORE_CONFIRM: "I_ACCEPT_DESTRUCTIVE_PILOT_RESTORE"
         run: |
-          node deploy/saas/free-pilot/backup.mjs "$RUNNER_TEMP/oagent-ci-encrypted-backup"
-          test -s "$RUNNER_TEMP/oagent-ci-encrypted-backup/oagent.oagent.enc"
-          test -s "$RUNNER_TEMP/oagent-ci-encrypted-backup/keycloak.oagent.enc"
-          if grep -a -q "CREATE TABLE" "$RUNNER_TEMP/oagent-ci-encrypted-backup/oagent.oagent.enc"; then
-            echo "SECURITY FAILURE: plaintext SQL detected in encrypted backup"; exit 1
+          node deploy/saas/free-pilot/backup.mjs "$RUNNER_TEMP/oagent-ci-backup"
+          test -s "$RUNNER_TEMP/oagent-ci-backup/oagent.oagent.enc"
+          test -s "$RUNNER_TEMP/oagent-ci-backup/keycloak.oagent.enc"
+          if grep -a -q "CREATE TABLE" "$RUNNER_TEMP/oagent-ci-backup/oagent.oagent.enc"; then
+            echo "Encrypted backup unexpectedly contains plaintext SQL"; exit 1
           fi
-          node deploy/saas/free-pilot/restore.mjs "$RUNNER_TEMP/oagent-ci-encrypted-backup"
-          docker compose --env-file deploy/saas/free-pilot/.env.local             -f deploy/saas/free-pilot/compose.yaml up -d
-          docker compose --env-file deploy/saas/free-pilot/.env.local             -f deploy/saas/free-pilot/compose.yaml exec -T db             psql -U postgres -d oagent -Atc "SELECT count(*) FROM schema_migrations" |
-            grep -Eq '^[1-9][0-9]*
-        if: failure()
-        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=80 gateway
-      - name: Show isolated realm installer errors on failure (never print realm JSON)
-        if: failure()
-        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=30 realm-init
-      - name: Show identity startup failure classification (never display credential values)
-        if: failure()
-        run: |
-          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=120 identity | grep -E 'Permission denied|FileNotFoundException|Failed to start|ERROR.*realm import' || true
-      - name: Show container status on failure (never print environment secrets)
-        if: failure()
-        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml ps
-      - name: Discard only CI's disposable local database
-        if: always()
-        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml down -v --remove-orphans || true
-
-          rm -rf "$RUNNER_TEMP/oagent-ci-encrypted-backup"
-          echo "Encrypted PostgreSQL backup / authenticated restore passed on disposable CI only."
+          node deploy/saas/free-pilot/restore.mjs "$RUNNER_TEMP/oagent-ci-backup"
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml up -d
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml exec -T db psql -U postgres -d oagent -Atc "SELECT count(*) FROM schema_migrations" > "$RUNNER_TEMP/oagent-migrations-count"
+          grep -qE "^[1-9][0-9]*$" "$RUNNER_TEMP/oagent-migrations-count"
+          rm -rf "$RUNNER_TEMP/oagent-ci-backup" "$RUNNER_TEMP/oagent-migrations-count"
+          echo "Disposable encrypted backup and database restore succeeded"
       - name: Show static gateway errors on failure (not account secrets)
         if: failure()
         run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=80 gateway
