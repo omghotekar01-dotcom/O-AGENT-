@@ -8,7 +8,8 @@ const { realpath, stat, readdir } = require("node:fs/promises");
 const { resolve, basename } = require("node:path");
 const { safeRelativePath, withinWorkspace } = require("./path-policy.cjs");
 const { parseBackendOrigin, explainHttpFailure, explainFetchFailure } = require("./connection.cjs");
-const { listWorkspaceFolder, readWorkspaceText, writeWorkspaceText } = require("./file-access.cjs");
+const { listWorkspaceFolder, readWorkspaceText, writeWorkspaceText,
+  createWorkspaceText,renameWorkspaceFile,deleteWorkspaceFile } = require("./file-access.cjs");
 
 const STORAGE_URL = "oagent.server";
 const STORAGE_TOKEN = "oagent.workerToken";
@@ -157,11 +158,20 @@ async function processMobileFiles() {
       result = await listWorkspaceFolder(root,request.path);
     } else if (request.op === "read") {
       result = await readWorkspaceText(root,request.path,vscode);
-    } else if (request.op === "write") {
+    } else if (["write","create","rename","delete"].includes(request.op)) {
       if (Date.now() > mobileEditsUntil)
-        throw Error("Mobile file edits are disabled. Enable them locally in VS Code for 30 minutes.");
-      result = await writeWorkspaceText(root,request.path,
-        request.content,request.expectedHash,vscode);
+        throw Error("Mobile file modifications are disabled. Enable them locally in VS Code for 30 minutes.");
+      if (request.op === "write") {
+        result = await writeWorkspaceText(root,request.path,
+          request.content,request.expectedHash,vscode);
+      } else if (request.op === "create") {
+        result = await createWorkspaceText(root,request.path,request.content,vscode);
+      } else if (request.op === "rename") {
+        result = await renameWorkspaceFile(root,request.path,
+          request.newPath,request.expectedHash,vscode);
+      } else {
+        result = await deleteWorkspaceFile(root,request.path,request.expectedHash,vscode);
+      }
     } else {
       throw Error("Unsupported file operation");
     }
@@ -261,10 +271,11 @@ async function enableMobileEdits() {
     return;
   }
   const decision = await vscode.window.showWarningMessage(
-    "Allow your paired O-AGENT owner phone to modify text files in the current "
-    + "trusted workspace for 30 minutes? Every save is confirmed on the phone, "
-    + "uses the original file hash and rejects unsaved local changes. Avoid "
-    + "sensitive projects. You can stop the companion anytime.",
+    "Allow your O-AGENT owner phone to create, rename, move to Trash, or edit "
+    + "allowed text files in this exact workspace for 30 minutes? Every action "
+    + "requires confirmation on the phone. Rename/delete also check file versions; "
+    + "Trash requests require an additional local approval. Stop the companion "
+    + "at any time to revoke. Do not use with sensitive projects.",
     {modal:true},"Enable for 30 minutes","Cancel");
   if (decision !== "Enable for 30 minutes") return;
   mobileEditsUntil = Date.now()+30*60*1000;
