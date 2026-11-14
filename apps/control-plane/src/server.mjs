@@ -134,6 +134,11 @@ const server = createServer(async (req, res) => {
         (publicAuth.authenticate(authHeader.slice(7)) || accountHub.authenticate(authHeader.slice(7))) : null;
     if (isWorkerRoute ? !worker : (!owner && !member)) throw new DomainError(401, "Invalid authorization token");
     const userId = owner ? "owner" : member?.id;
+    // Read-only worker-auth probe enables same-Windows-user credential import
+    // without registering any device or granting access to a project.
+    if (req.method === "GET" && path === "/api/workers/credential-check") {
+      return send(res, 200, {authenticated:true,role:"worker"});
+    }
     if (req.method === "POST" && path === "/api/auth/logout") {
       return send(res, 200, publicAuth.logout(authHeader.slice(7)));
     }

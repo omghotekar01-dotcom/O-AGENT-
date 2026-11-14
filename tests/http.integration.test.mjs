@@ -151,6 +151,15 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal((await call("/api/projects/github%3Aunknown%2Frepo", apiToken)).status, 404);
     assert.equal((await call("/api/integrations", apiToken)).payload.sources.some(s => s.id === "chatgpt_work" && s.status === "unsupported"), true);
 
+    // Local VS Code enrollment validates the WORKER token before creating
+    // any worker/project connection and never accepts a member or owner token.
+    assert.equal((await call("/api/workers/credential-check", "wrong")).status, 401);
+    assert.equal((await call("/api/workers/credential-check", apiToken)).status, 401);
+    const credentialProof = await call("/api/workers/credential-check", workerToken);
+    assert.equal(credentialProof.status, 200);
+    assert.deepEqual(credentialProof.payload, {authenticated:true,role:"worker"});
+    assert.doesNotMatch(JSON.stringify(credentialProof.payload),/fedcba9876543210/);
+
     const registered = await call("/api/workers/register", workerToken, "POST", { id: "ci-worker", name: "CI worker" });
     assert.equal(registered.status, 201);
     assert.equal(registered.payload.name, "CI worker");

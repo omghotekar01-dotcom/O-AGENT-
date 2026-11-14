@@ -216,7 +216,25 @@ function workspacesView(){
     clearFile();
   }
 }
+function updateGuidedSetup(){
+  const online=(snapshot.workers||[]).filter(w=>w.status==="online").length;
+  const folders=workspaceFeed.length;
+  const usable=integrations.filter(s=>s.status==="connected").length;
+  $("setupMachine").textContent=online ?
+    online+" actual machine(s) online — ready." :
+    "No machine is online. Run O-AGENT.cmd on the trusted laptop.";
+  $("setupVsCode").textContent=folders ?
+    folders+" live VS Code workspace(s) connected — open Project files to browse." :
+    "No VS Code companion online. Use the O-AGENT sidebar in local VS Code to connect this folder.";
+  $("setupFiles").textContent=folders ?
+    "Browsing is available. Editing still requires the separate local 30-minute permission in VS Code." :
+    "Connect a VS Code workspace first. Editing permission is always granted locally and temporarily.";
+  $("setupProviders").textContent=usable ?
+    usable+" provider adapter(s) verified. Check individual capabilities and usage quotas." :
+    "No verified API provider connection. Other statuses may be configured but not tested.";
+}
 function syncUI(){
+  updateGuidedSetup();
   $("machines").textContent=String(snapshot.workers?.length||0);
   $("online").textContent=String((snapshot.workers||[]).filter(w=>w.status==="online").length);
   $("running").textContent=String((snapshot.tasks||[]).filter(t=>t.status==="running").length);
