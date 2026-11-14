@@ -10,7 +10,7 @@ void main() {
     final target = secureSaasOrigin(
       'https://laptop.tailnet.ts.net/agent?token=must-not-share#session');
     expect(target.toString(), 'https://laptop.tailnet.ts.net/');
-    expect(target.query, isEmpty);
+    expect(target!.query, isEmpty);
     expect(target.fragment, isEmpty);
     expect(target.userInfo, isEmpty);
   });
