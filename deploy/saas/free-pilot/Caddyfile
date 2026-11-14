@@ -1,0 +1,19 @@
+:8081 {
+  encode gzip
+  @idp path /auth/*
+  handle @idp {
+    reverse_proxy identity:8080 {
+      header_up X-Forwarded-Proto https
+      header_up X-Forwarded-Port 443
+      header_up X-Forwarded-Host {http.request.host}
+    }
+  }
+  handle {
+    reverse_proxy api:8790
+  }
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy no-referrer
+  }
+}
