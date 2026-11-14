@@ -83,7 +83,7 @@ export async function assertTenantDatabaseSecurity(pool) {
   if(owners.rowCount)throw Error("Unsafe runtime role: owner of tenant tables");
   const guard=await pool.query(
     "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r'",
-    [["devices","runs","approvals","run_events","audit_events"]]);
+    [["devices","runs","approvals","run_events","audit_events","push_subscriptions"]]);
   if(guard.rowCount!==6||guard.rows.some(x=>!x.relrowsecurity||
       !x.relforcerowsecurity))
     throw Error("Tenant isolation tables have missing or disabled FORCE RLS");
