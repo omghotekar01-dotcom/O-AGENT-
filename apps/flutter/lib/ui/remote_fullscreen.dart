@@ -290,6 +290,11 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
                 child: Text('No fresh screen frame. Remote input is disabled.',
                   style: TextStyle(color: Colors.orangeAccent, fontSize: 11))),
               if (_paired && _control) ...[
+                Text('Actual screen capture: ${_sharing?['estimatedFps'] ?? 'measuring'} fps · '
+                  'Windows input queue: ${_input?['queueDepth'] ?? 0}',
+                  style: const TextStyle(color: Colors.white70,
+                    fontSize: 10)),
+                const SizedBox(height: 5),
                 const Text('Drag anywhere to move the real laptop cursor. '
                   'Tap clicks its current position (not the touched pixel). '
                   'Long press right-clicks.',
