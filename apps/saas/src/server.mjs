@@ -10,7 +10,7 @@ import {createPool,withIdentity,withTenant,assertTenantDatabaseSecurity} from ".
 import {verifyDeviceHeaders} from "./device-crypto.mjs";
 import {createMcp} from "./mcp.mjs";
 import {
-  httpError,startEnrollment,approveEnrollment,listDevices,revokeDevice,
+  httpError,startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,
   updateCapabilities,heartbeat,createRun,listRuns,runDetail,
   listApprovals,decideApproval,claimRun,renewLease,finishRun,
   requestToolApproval,toolApprovalStatus,appendRunEvent,listRunEvents,isUUID,
@@ -118,6 +118,11 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         const value=await startEnrollment(pool,data,source);
         return reply(res,201,value);
       }
+      if(method==="POST"&&path==="/v1/devices/enrollments/status"){
+        assertJson(req);
+        return reply(res,200,await enrollmentStatus(pool,
+          objectJson(await bytes(req,1000)).pairingToken));
+      }
       if(path.startsWith("/v1/device/")){
         // Workers cannot use a global shared bearer secret, a user token, or
         // an unverified device id as authority. Require per-request Ed25519
@@ -175,10 +180,15 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           ]})));
       if(method==="GET"&&path==="/v1/devices")
         return reply(res,200,{devices:await asTenant(c=>listDevices(c))});
+      if(method==="POST"&&path==="/v1/devices/enrollments/inspect"){
+        assertJson(req);const data=objectJson(await bytes(req,1000));
+        return reply(res,200,await asTenant(c=>
+          inspectEnrollment(c,data.pairingToken)));
+      }
       if(method==="POST"&&path==="/v1/devices/enrollments/approve"){
         assertJson(req);const data=objectJson(await bytes(req,4096));
         return reply(res,201,await asTenant((c,t)=>approveEnrollment(
-          c,t,identity.subject,data.pairingToken)));
+          c,t,identity.subject,data.pairingToken,data.expectedFingerprint)));
       }
       const revoke=capturePath(path,
         /^\/v1\/devices\/([0-9a-f-]{36})\/revoke$/i);
