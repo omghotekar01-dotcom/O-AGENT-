@@ -5,6 +5,7 @@ import {randomUUID} from "node:crypto";
 import {deviceHeaders} from "../../saas/src/device-crypto.mjs";
 import {runProviderTurn} from "../../gateway/src/provider-turn.mjs";
 import {runCodexTurn} from "../../gateway/src/codex-turn.mjs";
+import {readIdentity} from "./enroll.mjs";
 
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const fail=message=>Object.assign(Error(message),{safe:true});
@@ -182,12 +183,15 @@ export class SignedCloudWorker {
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const env=process.env;
-  const file=env.OAGENT_DEVICE_PRIVATE_KEY_FILE;
-  if(!file || !env.OAGENT_DEVICE_ID || !env.OAGENT_WORKSPACE_ROOT)
-    throw Error("Set OAGENT_DEVICE_PRIVATE_KEY_FILE, OAGENT_DEVICE_ID and OAGENT_WORKSPACE_ROOT");
-  const privateKeyPem=await readFile(file,"utf8");
+  const identity=await readIdentity();
+  const privateKeyPem=env.OAGENT_DEVICE_PRIVATE_KEY_FILE
+    ? await readFile(env.OAGENT_DEVICE_PRIVATE_KEY_FILE,"utf8")
+    : identity?.privateKeyPem;
+  const deviceId=env.OAGENT_DEVICE_ID||identity?.deviceId;
+  if(!privateKeyPem || !deviceId || !env.OAGENT_WORKSPACE_ROOT)
+    throw Error("Enroll with npm run enroll first and set OAGENT_WORKSPACE_ROOT");
   const worker=new SignedCloudWorker({
-    origin:env.OAGENT_SAAS_ORIGIN,deviceId:env.OAGENT_DEVICE_ID,
+    origin:env.OAGENT_SAAS_ORIGIN,deviceId,
     privateKeyPem,root:env.OAGENT_WORKSPACE_ROOT,
   });
   await worker.start();
