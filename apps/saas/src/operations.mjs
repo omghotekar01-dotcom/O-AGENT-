@@ -38,22 +38,52 @@ export async function startEnrollment(pool,body,sourceHash) {
   }catch(err){await client.query("ROLLBACK");throw err;}
   finally{client.release();}
 }
-export async function approveEnrollment(client,tenantId,subject,token) {
-  if(typeof token!=="string"||!/^oen_[A-Za-z0-9_-]{43}$/.test(token))
+const pairingTokenValid=token=>typeof token==="string"&&
+  /^oen_[A-Za-z0-9_-]{43}$/.test(token);
+const keyFingerprint=key=>hexSha256(key).slice(0,24);
+export async function inspectEnrollment(client,token) {
+  if(!pairingTokenValid(token))
+    throw httpError(400,"Invalid enrollment link");
+  const {rows}=await client.query(
+    "SELECT name,public_key,approved_device_id,expires_at FROM pending_devices WHERE token_hash=$1 AND expires_at>now()",
+    [sha256(token)]);
+  if(!rows[0])throw httpError(404,"Enrollment request expired");
+  return {name:rows[0].name,
+    fingerprint:keyFingerprint(rows[0].public_key),
+    approved:!!rows[0].approved_device_id,
+    expiresAt:rows[0].expires_at};
+}
+export async function enrollmentStatus(pool,token) {
+  if(!pairingTokenValid(token))throw httpError(400,"Invalid enrollment request");
+  const {rows}=await pool.query(
+    "SELECT approved_device_id FROM pending_devices WHERE token_hash=$1 AND expires_at>now()",
+    [sha256(token)]);
+  if(!rows[0])throw httpError(404,"Enrollment request expired or unavailable");
+  return {approved:!!rows[0].approved_device_id,
+    deviceId:rows[0].approved_device_id??null};
+}
+export async function approveEnrollment(client,tenantId,subject,token,expectedFingerprint) {
+  if(!pairingTokenValid(token))
     throw httpError(400,"Invalid or expired enrollment request");
   const pending=await client.query(
-    "SELECT id,name,public_key FROM pending_devices WHERE token_hash=$1 AND expires_at>now() FOR UPDATE",
+    "SELECT id,name,public_key FROM pending_devices WHERE token_hash=$1 AND approved_device_id IS NULL AND expires_at>now() FOR UPDATE",
     [sha256(token)]);
   if(!pending.rows[0])throw httpError(404,"Pairing request expired or already used");
   const deviceId=randomUUID(), p=pending.rows[0];
+  if(typeof expectedFingerprint!=="string"||
+      expectedFingerprint!==keyFingerprint(p.public_key))
+    throw httpError(409,"Device identity changed. Scan the QR again.");
   await client.query(
     "INSERT INTO devices(id,tenant_id,name) VALUES($1,$2,$3)",[deviceId,tenantId,p.name]);
   await client.query(
     "INSERT INTO device_auth_keys(device_id,tenant_id,public_key) VALUES($1,$2,$3)",
     [deviceId,tenantId,p.public_key]);
-  await client.query("DELETE FROM pending_devices WHERE id=$1",[p.id]);
+  // Keep the short-lived pairing record until expiry so the original
+  // private-key-holding worker can learn its assigned device ID automatically.
+  await client.query("UPDATE pending_devices SET approved_device_id=$1 WHERE id=$2",
+    [deviceId,p.id]);
   await audit(client,tenantId,subject,"device.enrolled",deviceId);
-  return {deviceId,name:p.name};
+  return {deviceId,name:p.name,fingerprint:expectedFingerprint};
 }
 export async function listDevices(client) {
   const result=await client.query(
