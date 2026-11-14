@@ -24,8 +24,7 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
   bool _control = false;
   bool _sending = false;
   String? _error;
-  int _lastMoveMs = 0;
-  int _frameSequence = -1;
+   int _frameSequence = -1;
   int _pollCount = 0;
   double _pointerSpeed = 1.5;
   final List<Map<String, dynamic>> _actions = [];
@@ -183,13 +182,11 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
 
   void _move(DragUpdateDetails details) {
     if (!_control || !_paired) return;
-    final now = DateTime.now().millisecondsSinceEpoch;
     // Do not drop the motion delta before coalescing: doing so used to make
     // cursor movement noticeably shorter than the actual finger drag.
     final dx = (details.delta.dx * _pointerSpeed).round().clamp(-150, 150);
     final dy = (details.delta.dy * _pointerSpeed).round().clamp(-150, 150);
     if (dx == 0 && dy == 0) return;
-    _lastMoveMs = now;
     _send({'type': 'move', 'dx': dx, 'dy': dy});
   }
 
