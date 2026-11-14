@@ -27,6 +27,7 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
    int _frameSequence = -1;
   int _pollCount = 0;
   double _pointerSpeed = 1.5;
+  double _residualX = 0, _residualY = 0;
   final List<Map<String, dynamic>> _actions = [];
 
   bool get _paired => _input?['paired'] == true;
@@ -184,8 +185,12 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
     if (!_control || !_paired) return;
     // Do not drop the motion delta before coalescing: doing so used to make
     // cursor movement noticeably shorter than the actual finger drag.
-    final dx = (details.delta.dx * _pointerSpeed).round().clamp(-150, 150);
-    final dy = (details.delta.dy * _pointerSpeed).round().clamp(-150, 150);
+    final exactX = details.delta.dx * _pointerSpeed + _residualX;
+    final exactY = details.delta.dy * _pointerSpeed + _residualY;
+    final dx = exactX.round().clamp(-150, 150);
+    final dy = exactY.round().clamp(-150, 150);
+    _residualX = exactX - dx;
+    _residualY = exactY - dy;
     if (dx == 0 && dy == 0) return;
     _send({'type': 'move', 'dx': dx, 'dy': dy});
   }
