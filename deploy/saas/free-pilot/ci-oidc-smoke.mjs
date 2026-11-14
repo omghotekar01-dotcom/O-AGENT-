@@ -41,6 +41,40 @@ function request(path,{method="GET",body,authorization}={}){
     req.end(payload);
   });
 }
+// Validate the imported *actual* Keycloak client scope assignments, not
+// merely the JSON syntax. No admin token or generated password is logged.
+const adminSecret=data.match(/^OAGENT_KEYCLOAK_ADMIN_PASSWORD=([A-Za-z0-9_-]{20,})$/m)?.[1];
+if(!adminSecret)throw Error("CI admin configuration is incomplete");
+const admin=await request("/auth/realms/master/protocol/openid-connect/token",{
+  method:"POST",body:new URLSearchParams({grant_type:"password",
+    client_id:"admin-cli",username:"admin",password:adminSecret}),
+});
+if(admin.status!==200||typeof admin.body.access_token!=="string")
+  throw Error("CI admin scope verification was unavailable (HTTP "+admin.status+")");
+const adminAuth=admin.body.access_token;
+const listing=await request("/auth/admin/realms/oagent/client-scopes",
+  {authorization:adminAuth});
+if(listing.status!==200||!Array.isArray(listing.body))
+  throw Error("Keycloak realm client scope inventory unavailable");
+const clients=await request("/auth/admin/realms/oagent/clients?clientId=oagent-web",
+  {authorization:adminAuth});
+if(clients.status!==200||!Array.isArray(clients.body)||
+    clients.body.length!==1)throw Error("OIDC public client not imported");
+const configured=await request("/auth/admin/realms/oagent/clients/"+
+  encodeURIComponent(clients.body[0].id)+"/default-client-scopes",
+  {authorization:adminAuth});
+if(configured.status!==200||!Array.isArray(configured.body))
+  throw Error("OIDC client default scopes not available");
+const expected=["oagent-read","oagent-operate"];
+const createdNames=new Set(listing.body.map(x=>x.name));
+const linkedNames=new Set(configured.body.map(x=>x.name));
+for(const name of expected){
+  if(!createdNames.has(name)||!linkedNames.has(name))
+    throw Error("O-AGENT OAuth scope was not imported/linked: "+name+
+      "; created="+createdNames.has(name)+", assigned="+linkedNames.has(name));
+}
+console.log("Keycloak custom client scopes verified as created and linked.");
+
 const form=new URLSearchParams({
   grant_type:"password",client_id:"oagent-web",username:"pilot-owner",
   password:secret,scope:"openid profile oagent-read oagent-operate",
