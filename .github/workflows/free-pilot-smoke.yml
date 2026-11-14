@@ -1,0 +1,73 @@
+name: O-AGENT Private Pilot Container Smoke (No APK)
+on:
+  workflow_dispatch:
+  # Initial integration smoke once on this implementation branch; later runs
+  # are manual so a free-tier account does not pay repeated container pulls.
+  push:
+    branches: ["feat/saas-secure-control-plane-20261114"]
+    paths:
+      - ".github/workflows/free-pilot-smoke.yml"
+permissions:
+  contents: read
+jobs:
+  boot-private-stack:
+    name: Boot actual PostgreSQL, Keycloak, API and local Caddy
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      OAGENT_TAILNET_HOST: ci-runner.example.ts.net
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Generate ephemeral local-only pilot secrets
+        run: node deploy/saas/free-pilot/setup.mjs
+      - name: Validate private Compose and build all containers
+        run: |
+          docker compose --env-file deploy/saas/free-pilot/.env.local \
+            -f deploy/saas/free-pilot/compose.yaml config --quiet
+          docker compose --env-file deploy/saas/free-pilot/.env.local \
+            -f deploy/saas/free-pilot/compose.yaml up -d --build
+      - name: Probe API readiness, realm discovery and secure browser config
+        run: |
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          const base="http://127.0.0.1:8791";
+          const origin="https://ci-runner.example.ts.net";
+          const header={host:"ci-runner.example.ts.net"};
+          const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+          async function read(path){
+            const result=await fetch(base+path,{headers:header,
+              redirect:"manual",signal:AbortSignal.timeout(4000)});
+            if(!result.ok)throw Error(path+" HTTP "+result.status);
+            return result.json();
+          }
+          let lastError;
+          for(let attempt=0;attempt<85;attempt++){
+            try{
+              const health=await read("/health/ready");
+              assert.equal(health.status,"ready");
+              const oidc=await read(
+                "/auth/realms/oagent/.well-known/openid-configuration");
+              assert.equal(oidc.issuer,origin+"/auth/realms/oagent");
+              assert.ok(oidc.authorization_endpoint.startsWith(origin+"/auth/"));
+              const web=await read("/v1/public-config");
+              assert.equal(web.authEnabled,true);
+              assert.equal(web.clientId,"oagent-web");
+              assert.equal(web.redirectUri,origin+"/");
+              assert.equal(web.audience,"oagent-api");
+              const push=await fetch(base+"/v1/push/config",{headers:header});
+              assert.equal(push.status,401,"Push endpoints require real OIDC");
+              console.log("Private pilot booted: PostgreSQL, Keycloak OIDC, Caddy, API and HTTP access guard verified.");
+              process.exit(0);
+            }catch(error){lastError=error;await sleep(4000);}
+          }
+          throw Error("Private pilot container startup failed checks: "+lastError?.message);
+          JS
+      - name: Show container status on failure (never print environment secrets)
+        if: failure()
+        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml ps
+      - name: Discard only CI's disposable local database
+        if: always()
+        run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml down -v --remove-orphans || true
