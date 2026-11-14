@@ -21,7 +21,7 @@ test("temporary VS Code file relay rejects unpaired and malformed requests", () 
     assert.throws(()=>relay.request({workerId:"vscode-test",op:"read",path}),/Invalid/);
   }
   assert.throws(()=>relay.request({workerId:"vscode-test",op:"write",path:"test.txt",
-    content:"abc",expectedHash:"wrong"}),/invalid/);
+    content:"abc",expectedHash:"wrong"}),/file hash|version/);
   assert.throws(()=>relay.request({workerId:"vscode-test",op:"shell",path:""}),/Unsupported/);
   const first=relay.request({workerId:"vscode-test",op:"list",path:""});
   assert.match(first.id,/^[a-f0-9-]{36}$/);
