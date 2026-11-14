@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import 'ios_components.dart';
+import 'vscode_mobile_files.dart';
 
 Map<String,dynamic> vsMap(Object? value) =>
   value is Map ? Map<String,dynamic>.from(value) : <String,dynamic>{};
@@ -114,6 +115,24 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
           if(error!=null)Padding(padding:const EdgeInsets.only(top:12),
             child:OSurface(child:Text(error!,
               style:const TextStyle(color:OVisual.rose)))),
+          const OSectionTitle('Browse project files'),
+          const OSurface(child:Text(
+            'Tap through real folders, preview supported source files, '
+            'review text changes and save to the laptop after permission. '
+            'This does not read Copilot Chat or protected credentials.',
+            style:TextStyle(fontSize:12))),
+          for(final workspace in workspaces) Padding(
+            padding:const EdgeInsets.only(bottom:10),
+            child:FilledButton.icon(
+              onPressed:()=>Navigator.push(context,MaterialPageRoute<void>(
+                builder:(_)=>VsCodeFilesScreen(
+                  controller:widget.controller,
+                  workerId:vsText(workspace['workerId']),
+                  workspace:vsText(workspace['workspace']),
+                ))),
+              icon:const Icon(Icons.folder_open),
+              label:const Text('Browse project files'),
+            )),
           const OSectionTitle('Live workspace changes'),
           if(workspaces.isEmpty) const OSurface(child:Text(
             'No opted-in VS Code file feed is online yet. Install and start '
@@ -177,6 +196,11 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
                   OStatePill(vsText(task?['status'])),
                 ]),
                 const SizedBox(height:10),
+                TextButton.icon(
+                  onPressed:()=>setState(() {task=null;taskId=null;error=null;}),
+                  icon:const Icon(Icons.add),
+                  label:const Text('New file-open request')),
+                const SizedBox(height:8),
                 SelectableText(vsText(vsMap(task?['parameters'])['relativePath'])),
                 const SizedBox(height:10),
                 if(task?['status']=='waiting_for_approval')
@@ -194,10 +218,11 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
               ])),
           const OSectionTitle('Safety boundary'),
           const OIconTile(icon:CupertinoIcons.shield_lefthalf_fill,
-            title:'No silent VS Code control',
-            subtitle:'The extension must be installed and started by the '
-              'local user. It opens only workspace-contained files, and '
-              'cannot take over Copilot Chat, terminals, or editor settings.'),
+            title:'Scoped project file access',
+            subtitle:'View project files only after local enrollment. '
+              'Each edit requires phone confirmation and a separate local '
+              '30-minute permission. Protected files and Copilot chats '
+              'are outside this companion.'),
         ],
       ),
     ))),

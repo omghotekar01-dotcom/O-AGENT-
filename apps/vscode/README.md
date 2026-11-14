@@ -1,8 +1,11 @@
 # O-AGENT VS Code Companion
 
-An opt-in extension for tracking changed/unsaved filenames and approved file opens
-in a trusted Visual Studio **Code** workspace. This is **not** a Copilot chat
-takeover or a screen-control extension.
+An opt-in extension for tracking Git/unsaved files, browsing a real
+source tree, viewing supported source text, and saving reviewed edits
+to a trusted Visual Studio **Code** workspace. File content flows only
+through an expiring, owner-only in-memory request relay; it is not persisted
+in the task database. This is **not** a Copilot chat takeover or screen
+control extension.
 
 ## Install in VS Code (not Visual Studio)
 
@@ -35,11 +38,25 @@ Then either:
 6. Press `Ctrl+Shift+P` → **O-AGENT: Start Remote Workspace Companion** →
    **Enable**. The status bar should show `O-AGENT: connected`.
 
-The extension sends only a short list of Git changed paths and unsaved
-file names to the private backend. It does not upload file contents or diffs.
-The owner phone can open **Remote → VS Code live file changes** to inspect
-the feed. Opening a specific file requires owner approval **and** a second
-confirmation in the local VS Code window.
+The extension sends a short list of Git changed paths and unsaved
+file names to the private backend every five seconds. When the owner
+deliberately opens **Remote → VS Code live file changes → Browse project
+files**, it can also browse folders and read allowed text files. The
+contents are held only temporarily in server memory and are never
+persisted in task history.
+
+To enable remote saving of edited text, you MUST locally run
+**O-AGENT: Enable Mobile File Editing (30 minutes)** from VS Code's
+Command Palette and confirm its modal. Each phone edit requires a
+separate **Review & save** confirmation and succeeds only if the
+file still matches the hash originally read and has no unsaved local
+edits. This permission expires after 30 minutes or when the companion
+stops. Source reads are capped at 48,000 characters and protected /
+hidden, binary and linked files cannot be edited.
+
+The legacy **Remote file navigation** form only requests opening a
+specific file in the local VS Code window. It still requires owner
+approval and a second local confirmation; it is not the file editor.
 
 ## If connection fails
 

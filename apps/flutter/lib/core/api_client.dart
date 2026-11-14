@@ -225,6 +225,20 @@ class AgentApi {
   Future<Map<String, dynamic>> vscodeWorkspaces() =>
     _request('/api/vscode/workspaces');
 
+  /// User-initiated, ephemeral VS Code file browsing and text edits.
+  /// No source file contents are persisted in backend tasks or activity.
+  Future<Map<String, dynamic>> vscodeFileRequest({
+    required String workerId, required String op, String path = '',
+    String? content, String? expectedHash,
+  }) => _request('/api/vscode/files/request',method:'POST',body:{
+    'workerId':workerId,'op':op,'path':path,
+    if(content!=null)'content':content,
+    if(expectedHash!=null)'expectedHash':expectedHash,
+  });
+
+  Future<Map<String, dynamic>> vscodeFileResult(String id) =>
+    _request('/api/vscode/files/${Uri.encodeComponent(id)}');
+
   /// Owner-only remote session, run and approval status.
   Future<Map<String, dynamic>> remoteAgentOverview() => _request('/api/remote/overview');
 

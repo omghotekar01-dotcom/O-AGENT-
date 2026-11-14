@@ -8,13 +8,16 @@ const { realpath, stat, readdir } = require("node:fs/promises");
 const { resolve, basename } = require("node:path");
 const { safeRelativePath, withinWorkspace } = require("./path-policy.cjs");
 const { parseBackendOrigin, explainHttpFailure, explainFetchFailure } = require("./connection.cjs");
+const { listWorkspaceFolder, readWorkspaceText, writeWorkspaceText } = require("./file-access.cjs");
 
 const STORAGE_URL = "oagent.server";
 const STORAGE_TOKEN = "oagent.workerToken";
 let running = false, timer = null, pending = false, statusBar = null;
+let mobileEditsUntil = 0;
+let enrolledRoot = null;
 let contextRef = null;
 const workerId = "vscode-" + hostname().replace(/[^a-zA-Z0-9_-]/g,"").slice(0,32) + "-companion";
-const caps = ["workspace_inventory","vscode_open_file"];
+const caps = ["workspace_inventory","vscode_open_file","vscode_workspace_files"];
 async function settings() {
   const origin = await contextRef.secrets.get(STORAGE_URL);
   const token = await contextRef.secrets.get(STORAGE_TOKEN);
@@ -122,7 +125,9 @@ async function openFile(task) {
   const relative = task.parameters?.relativePath;
   if (!safeRelativePath(relative)) throw Error("Invalid relative file path");
   const dest = resolve(root,relative);
-  const real = await realpath(dest);
+  let real;
+  try { real = await realpath(dest); }
+  catch { throw Error("File does not exist under the enrolled VS Code folder. Use Browse project files to pick an existing path."); }
   if (!withinWorkspace(root,real)) throw Error("File resolves outside trusted workspace");
   const s = await stat(real);
   if (!s.isFile()) throw Error("Target must be a file");
@@ -142,21 +147,59 @@ async function runTask(task) {
   if (task.kind === "vscode_open_file") return openFile(task);
   throw Error("Unsupported VS Code action");
 }
+async function processMobileFiles() {
+  const {request} = await api("/api/workers/" + workerId + "/vscode/files/next",{});
+  if (!request) return;
+  try {
+    const root = await currentWorkspace();
+    let result;
+    if (request.op === "list") {
+      result = await listWorkspaceFolder(root,request.path);
+    } else if (request.op === "read") {
+      result = await readWorkspaceText(root,request.path,vscode);
+    } else if (request.op === "write") {
+      if (Date.now() > mobileEditsUntil)
+        throw Error("Mobile file edits are disabled. Enable them locally in VS Code for 30 minutes.");
+      result = await writeWorkspaceText(root,request.path,
+        request.content,request.expectedHash,vscode);
+    } else {
+      throw Error("Unsupported file operation");
+    }
+    await api("/api/workers/" + workerId + "/vscode/files/finish",
+      {id:request.id,ok:true,result});
+  } catch (error) {
+    // The result is only sent to the authenticated OWNER, and never persisted.
+    const message = error instanceof Error ? error.message : "Workspace file operation failed";
+    await api("/api/workers/" + workerId + "/vscode/files/finish",
+      {id:request.id,ok:false,error:message.slice(0,250)}).catch(()=>{});
+  }
+}
 async function poll() {
   if (!running || pending) return;
   pending = true;
   try {
+    const actualRoot = await currentWorkspace();
+    if (!enrolledRoot || actualRoot !== enrolledRoot) {
+      await stop();
+      vscode.window.showWarningMessage("VS Code project folder changed. Start O-AGENT again to consent to the new workspace.");
+      return;
+    }
     await api("/api/workers/" + workerId + "/heartbeat");
     await publishChangedFiles();
+    await processMobileFiles();
     const {task} = await api("/api/workers/" + workerId + "/next");
     if (task) {
       try {
         const result = await runTask(task);
         await api("/api/workers/" + workerId + "/tasks/" + task.id + "/finish",
           {ok:true,result});
-      } catch {
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "VS Code operation unavailable";
+        const safe = /File does not exist|Invalid|denied|not a file|workspace/i.test(message)
+          ? message.slice(0,240)
+          : "VS Code operation unavailable. Open the exact project folder and retry.";
         await api("/api/workers/" + workerId + "/tasks/" + task.id + "/finish",
-          {ok:false,error:"VS Code operation denied or unavailable"}).catch(()=>{});
+          {ok:false,error:safe}).catch(()=>{});
       }
     }
     statusBar.text = "$(shield) O-AGENT: connected";
@@ -167,7 +210,11 @@ async function poll() {
   } finally { pending = false; }
 }
 async function stop() {
+  mobileEditsUntil = 0;
+  enrolledRoot = null;
   if (running) {
+    try { await api("/api/workers/" + workerId + "/vscode/files/stop",{}); }
+    catch { /* ephemeral relay expires independently */ }
     try { await api("/api/workers/" + workerId + "/vscode/snapshot", {}, "DELETE"); }
     catch { /* server expires data independently */ }
   }
@@ -185,14 +232,18 @@ async function start() {
   try {
     await settings();
     await checkBackend();
+    const root = await currentWorkspace();
     const confirm = await vscode.window.showInformationMessage(
-      "Enroll this VS Code workspace? O-AGENT may send a short list of changed "
-      + "and unsaved file names (NEVER file contents) to your private owner backend "
-      + "while this companion is enabled. Opening a file still requires approval "
-      + "on the phone and in this IDE. No edits or Copilot chats are transmitted.",
+      "Enroll this exact VS Code folder: " + root + "? "
+      + "Enable O-AGENT for this trusted workspace? The owner phone may list folders "
+      + "and view non-secret text files within this project. Contents are relayed "
+      + "temporarily and never stored in the backend database. Changes require "
+      + "a separate locally enabled 30-minute editing window AND confirmation on "
+      + "the phone. Copilot chats, secrets and external folders are not accessible.",
       {modal:true}, "Enable", "Cancel");
     if (confirm !== "Enable") return;
     await api("/api/workers/register",{id:workerId,name:"VS Code " + hostname(),capabilities:caps});
+    enrolledRoot = root;
     running = true;
     statusBar.show();
     await poll();
@@ -203,6 +254,22 @@ async function start() {
     statusBar.tooltip = detail;
     vscode.window.showErrorMessage("O-AGENT connection failed: " + detail);
   }
+}
+async function enableMobileEdits() {
+  if (!running) {
+    vscode.window.showWarningMessage("Start the O-AGENT workspace companion first.");
+    return;
+  }
+  const decision = await vscode.window.showWarningMessage(
+    "Allow your paired O-AGENT owner phone to modify text files in the current "
+    + "trusted workspace for 30 minutes? Every save is confirmed on the phone, "
+    + "uses the original file hash and rejects unsaved local changes. Avoid "
+    + "sensitive projects. You can stop the companion anytime.",
+    {modal:true},"Enable for 30 minutes","Cancel");
+  if (decision !== "Enable for 30 minutes") return;
+  mobileEditsUntil = Date.now()+30*60*1000;
+  vscode.window.showInformationMessage(
+    "O-AGENT mobile file editing enabled for 30 minutes in this VS Code workspace.");
 }
 async function configure() {
   const url = await vscode.window.showInputBox({
@@ -234,7 +301,8 @@ function activate(context) {
   context.subscriptions.push(statusBar,
     vscode.commands.registerCommand("oagent.configure",configure),
     vscode.commands.registerCommand("oagent.start",start),
-    vscode.commands.registerCommand("oagent.stop",stop));
+    vscode.commands.registerCommand("oagent.stop",stop),
+    vscode.commands.registerCommand("oagent.enableMobileEdits",enableMobileEdits));
 }
 function deactivate() { void stop(); }
 module.exports={activate,deactivate};
