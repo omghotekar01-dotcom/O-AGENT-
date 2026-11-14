@@ -515,9 +515,13 @@ function updateDesktopControls(){
     ? "Measured capture: "+(desktopState.estimatedFps??"measuring")+
       " fps · Queued mouse/keyboard actions: "+(desktopInput?.queueDepth??0)
     : "Start a consented browser screen share on your laptop.";
-  $("desktopInputFeedback").textContent=canControl
-    ? "Paired for this laptop. Use the touchpad below; never type secrets remotely."
-    : "Input unavailable until the laptop is sharing and its visible helper is paired.";
+  const ack=desktopInput?.lastInputResult;
+  $("desktopInputFeedback").textContent=ack&&canControl
+    ? (ack.ok ? "Windows executed your last "+ack.type+" action."
+      : "Windows rejected your last "+ack.type+" action. Check the focused window and permissions.")
+    : canControl
+      ? "Paired for this laptop. Use the touchpad below; never type secrets remotely."
+      : "Input unavailable until the laptop is sharing and its visible helper is paired.";
 }
 async function desktopRefresh(){
   if(!connected||currentView!=="desktop"||document.hidden||desktopBusy)return;
