@@ -161,7 +161,16 @@ const server = createServer(async (req, res) => {
           req.headers["x-oagent-capture-token"], image));
       }
       if (req.method === "GET" && path === "/api/screen/frame") {
-        const image = screenShare.frame();
+        const afterRaw = url.searchParams.get("after");
+        const after = afterRaw != null && /^\\d{1,12}$/.test(afterRaw)
+          ? Number(afterRaw) : -1;
+        const image = screenShare.frameSince(after);
+        if (image == null) {
+          res.writeHead(204, { "cache-control": "no-store",
+            "x-content-type-options": "nosniff" });
+          res.end();
+          return;
+        }
         res.writeHead(200, {
           "content-type": "image/jpeg",
           "cache-control": "no-store",
