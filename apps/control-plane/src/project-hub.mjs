@@ -145,7 +145,8 @@ export class ProjectHub {
    */
   remoteOverview() {
     const now = this.now();
-    const machines = this.core.snapshot().workers.map(w => ({
+    const snapshot = this.core.snapshot();
+    const machines = snapshot.workers.map(w => ({
       id: w.id, name: w.name, status: w.status, lastSeenAt: w.lastSeenAt,
       capabilities: (w.capabilities ?? []).filter(x => typeof x === "string"),
     }));
@@ -161,10 +162,37 @@ export class ProjectHub {
         observedState: synced ? "saved_session" : "stale_session",
       }));
     }).slice(0, 80);
-    const taskState = this.core.snapshot().tasks
+    const taskState = snapshot.tasks
       .filter(t => ["codex_cli_turn", "codex_cloud_submit",
         "claude_agent_turn", "copilot_sdk_turn", "vscode_open_file"].includes(t.kind))
       .slice(0, 70);
+    // Only completed, worker-authenticated SDK turns supply native session IDs.
+    // An online worker makes a resume attempt eligible, not guaranteed.
+    const nativeSessions = [];
+    const seenNative = new Set();
+    for (const task of snapshot.tasks) {
+      if (!["claude_agent_turn", "copilot_sdk_turn"].includes(task.kind) ||
+          task.status !== "completed") continue;
+      const sessionId = task.result?.sessionId;
+      const cwd = task.parameters?.cwd;
+      if (typeof sessionId !== "string" ||
+          !/^[a-zA-Z0-9_-]{8,120}$/.test(sessionId) ||
+          typeof cwd !== "string" || cwd.length < 3 || cwd.length > 600) continue;
+      const identity = [task.workerId, task.kind, sessionId].join("|");
+      if (seenNative.has(identity)) continue;
+      seenNative.add(identity);
+      const machine = machines.find(w => w.id === task.workerId);
+      nativeSessions.push({
+        kind: task.kind,
+        label: task.kind === "claude_agent_turn" ? "Claude Agent SDK" : "GitHub Copilot SDK",
+        workerId: task.workerId, sessionId, cwd,
+        lastRunId: task.id, lastUsedAt: task.updatedAt,
+        lastPrompt: shorten(task.parameters?.prompt, 180),
+        resumeEligible: machine?.status === "online" &&
+          machine.capabilities.includes(task.kind),
+      });
+      if (nativeSessions.length >= 30) break;
+    }
     const runs = taskState.map(t => {
       const approvals = Object.values(t.approvals ?? {}).filter(a =>
         a.state === "pending" && a.expiresAt > now && t.status === "running")
@@ -196,7 +224,7 @@ export class ProjectHub {
     });
     return {
       generatedAt: new Date(now).toISOString(),
-      machines, sessions, runs,
+      machines, sessions, nativeSessions, runs,
       sources: this.sources().map(s => ({
         id: s.id, label: s.label, status: s.status,
         capabilities: s.capabilities, limitation: s.limitation,
