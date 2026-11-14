@@ -11,6 +11,7 @@ import { PublicAuth } from "./public-auth.mjs";
 import { ScreenShare } from "./screen-share.mjs";
 import { RemoteInput } from "./remote-input.mjs";
 import { VscodePresence } from "./vscode-presence.mjs";
+import { VscodeFileRelay } from "./vscode-file-relay.mjs";
 import { PushHub } from "./push-hub.mjs";
 
 const apiToken = process.env.OAGENT_API_TOKEN ?? "";
@@ -38,6 +39,7 @@ const publicAuth = new PublicAuth(core);
 const screenShare = new ScreenShare();
 const remoteInput = new RemoteInput({ captureFresh: () => screenShare.status().fresh });
 const vscodePresence = new VscodePresence();
+const vscodeFileRelay = new VscodeFileRelay();
 const pushHub = new PushHub(core, accountHub);
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" };
 function send(res, code, payload) {
@@ -423,6 +425,22 @@ const server = createServer(async (req, res) => {
         return send(res, 200, remoteInput.stop(id));
       throw new DomainError(404, "Unknown Windows input-helper endpoint");
     }
+    // Explicit owner-only file access. The relay is in memory, expiring after
+    // 90 seconds; file text must never enter persistent tasks/events/logs.
+    if (path === "/api/vscode/files/request" && req.method === "POST") {
+      if (!owner) throw new DomainError(403, "Only the workspace owner may browse or edit VS Code files");
+      const value = await readJson(req, 60000);
+      const enrolled = core.snapshot().workers.some(w =>
+        w.id === value.workerId && w.status === "online" &&
+        w.capabilities?.includes("vscode_workspace_files"));
+      if (!enrolled) throw new DomainError(409, "No enrolled VS Code file companion online");
+      return send(res, 201, vscodeFileRelay.request(value));
+    }
+    const fileResult = path.match(/^\\/api\\/vscode\\/files\\/([0-9a-f-]{36})$/);
+    if (req.method === "GET" && fileResult) {
+      if (!owner) throw new DomainError(403,"Owner-only file result");
+      return send(res, 200, vscodeFileRelay.status(fileResult[1]));
+    }
     if (req.method === "GET" && path === "/api/vscode/workspaces") {
       if (!owner) throw new DomainError(403, "Owner-only editor workspace feed");
       return send(res, 200, vscodePresence.list());
@@ -472,6 +490,18 @@ const server = createServer(async (req, res) => {
 
     if (req.method === "POST" && path === "/api/workers/register") {
       return send(res, 201, core.registerWorker(await readJson(req)));
+    }
+    const vscodeFilePath = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/vscode\/files\/(next|finish|stop)$/);
+    if (vscodeFilePath) {
+      const wid = vscodeFilePath[1], operation = vscodeFilePath[2];
+      const known = core.data.workers[wid];
+      if (!known?.capabilities?.includes("vscode_workspace_files"))
+        throw new DomainError(403, "Worker not enrolled for explicit VS Code file access");
+      if (req.method !== "POST") throw new DomainError(405, "POST required");
+      if (operation === "next") return send(res, 200, vscodeFileRelay.claim(wid));
+      if (operation === "finish") return send(res, 200,
+        vscodeFileRelay.finish(wid, await readJson(req, 100000)));
+      if (operation === "stop") { vscodeFileRelay.clearWorker(wid);return send(res,200,{ok:true}); }
     }
     const vscodeSnapshot = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/vscode\/snapshot$/);
     if (vscodeSnapshot && req.method === "POST") {
