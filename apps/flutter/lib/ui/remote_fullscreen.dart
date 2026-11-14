@@ -5,7 +5,8 @@ import '../core/controller.dart';
 import '../core/api_client.dart';
 
 /// Fullscreen viewer for an explicitly shared Windows desktop. Touch input is
-/// DISABLED until a visible local companion is paired with a one-time code.
+/// DISABLED until a locally trusted visible companion is explicitly activated
+/// by the owner, or a legacy short-lived pairing code is confirmed.
 /// Never attaches to a browser's account/session or silently captures a screen.
 class RemoteFullscreenScreen extends StatefulWidget {
   const RemoteFullscreenScreen({super.key, required this.controller});
@@ -24,8 +25,9 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
   bool _loading = false;
   bool _control = false;
   bool _sending = false;
+  bool _connecting = false;
   String? _error;
-   int _frameSequence = -1;
+  int _frameSequence = -1;
   int _pollCount = 0;
   double _pointerSpeed = 1.5;
   double _residualX = 0, _residualY = 0;
@@ -50,7 +52,7 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool force = false}) async {
     if (!mounted || _loading) return;
     final api = widget.controller.client;
     if (api == null) return;
@@ -59,7 +61,7 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
       // Refresh metadata every ~2 seconds; request only JPEGs with a newer
       // sequence in between. This avoids three full HTTP round-trips and
       // repeated decoding for every preview tick.
-      final metadata = _sharing == null || (_pollCount++ % 4 == 0);
+      final metadata = force || _sharing == null || (_pollCount++ % 4 == 0);
       final sharing = metadata ? await api.screenStatus() : _sharing!;
       final input = metadata ? await api.remoteInputStatus() : _input;
       final picture = sharing['fresh'] == true
@@ -88,23 +90,71 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
     }
   }
 
-  Future<void> _pair() async {
+  Future<void> _activate() async {
+    if (_connecting) return;
+    if (!_fresh) {
+      setState(() => _error =
+        'The laptop is not sending live screen frames. Select a screen on your laptop first.');
+      return;
+    }
+    if (_input?['trustedReady'] != true && _input?['trustedMode'] != true) {
+      if (!mounted) return;
+      final legacy = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Enable one-tap control once'),
+          content: const Text(
+            'On the trusted laptop, run ENABLE-ONE-TAP-CONTROL.cmd '
+            'and choose ENABLE. Restart O-AGENT.cmd once. '
+            'The visible Windows helper will then start automatically. '
+            'After that, press Control here—no eight-digit codes. '
+            'A temporary manual pairing option is available for older setups.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Not now')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Temporary code instead')),
+          ],
+        ),
+      );
+      if (legacy == true && mounted) await _legacyPair();
+      return;
+    }
+    setState(() => _connecting = true);
+    try {
+      final api = widget.controller.client;
+      if (api == null) throw const ApiException('Backend is not connected');
+      final result = await api.activateTrustedRemoteInput();
+      if (!mounted) return;
+      setState(() {
+        _input = result;
+        _control = result['paired'] == true;
+        _error = _control ? null : 'The laptop did not confirm remote input activation.';
+      });
+      await _refresh(force: true);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
+  }
+
+  Future<void> _legacyPair() async {
     String codeInput = '';
     final value = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Pair Windows remote control'),
+        title: const Text('Temporary Windows pairing'),
         content: Column(mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('On your laptop, keep screen sharing active and double-click REMOTE-CONTROL.cmd. Type ENABLE in its visible window. Enter the 8-digit code it displays.',
+          const Text('On the laptop, start REMOTE-CONTROL.cmd, type ENABLE, '
+            'then enter its temporary eight-digit code. '
+            'For everyday use, enable trusted one-tap control instead.',
             style: TextStyle(fontSize: 13, height: 1.5)),
           const SizedBox(height: 12),
           TextField(autofocus: true, onChanged: (value) => codeInput = value,
             keyboardType: TextInputType.number, maxLength: 8,
-            decoration: const InputDecoration(labelText: '8-digit pairing code')),
-          const SizedBox(height: 8),
-          const Text('Pairing permits mouse and keyboard access to the Windows desktop for 20 minutes. Anyone at your laptop can stop the companion.',
-            style: TextStyle(fontSize: 12)),
+            decoration: const InputDecoration(labelText: 'Temporary code')),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx),
@@ -116,9 +166,12 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
     );
     if (value == null || !mounted) return;
     try {
-      await widget.controller.client?.pairRemoteInput(value);
-      await _refresh();
-      if (mounted && _paired) setState(() => _control = true);
+      final result = await widget.controller.client?.pairRemoteInput(value);
+      if (mounted) setState(() {
+        _input = result;
+        _control = result?['paired'] == true;
+      });
+      await _refresh(force: true);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
@@ -127,8 +180,11 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
   Future<void> _stop() async {
     try {
       await widget.controller.client?.stopRemoteInput();
-      if (mounted) setState(() => _control = false);
-      await _refresh();
+      if (mounted) setState(() {
+        _control = false;
+        _actions.clear();
+      });
+      await _refresh(force: true);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
@@ -269,12 +325,14 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
               _control ? 'Remote input ON' : 'Fullscreen view · pinch to zoom',
               style: const TextStyle(color: Colors.white, fontSize: 12))),
             if (_paired) TextButton(
-              onPressed: () => setState(() => _control = !_control),
-              child: Text(_control ? 'View' : 'Control',
+              onPressed: _control ? _stop : _activate,
+              child: Text(_control ? 'Stop input' : 'Control',
                 style: const TextStyle(color: Colors.white))),
             if (!_paired) TextButton(
-              onPressed: _pair, child: const Text('Pair control',
-                style: TextStyle(color: Colors.white))),
+              onPressed: _connecting ? null : _activate,
+              child: Text(_connecting ? 'Connecting...' :
+                (_input?['trustedReady'] == true ? 'Control' : 'Set up control'),
+                style: const TextStyle(color: Colors.white))),
           ]))),
       ),
       Positioned(left: 10, right: 10, bottom: 18,
@@ -366,7 +424,9 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
                   ])),
               ] else Text(_paired
                 ? 'Control paired. Tap Control above to use the virtual trackpad.'
-                : 'View only. Pair a visible Windows helper for pointer/keyboard input.',
+                : _input?['trustedReady'] == true
+                  ? 'Laptop ready. Tap Control above to start a time-limited session.'
+                  : 'View only. Enable trusted one-tap control on your laptop once.',
                 style: const TextStyle(color: Colors.white70, fontSize: 11),
                 textAlign: TextAlign.center),
             ]),
