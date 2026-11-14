@@ -20,7 +20,7 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
       const versions=await admin.query(
         "SELECT name,length(checksum) AS length FROM schema_migrations ORDER BY name");
       assert.deepEqual(versions.rows.map(x=>x.name),
-        ["001_init.sql","002_legacy_upgrade.sql"]);
+        ["001_init.sql","002_legacy_upgrade.sql","003_team_workspaces.sql"]);
       assert.ok(versions.rows.every(x=>x.length===64));
       await admin.query("DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='oagent_test_runtime') THEN CREATE ROLE oagent_test_runtime LOGIN PASSWORD 'temporary-testing-password' NOSUPERUSER NOBYPASSRLS; END IF; END $$");
       await admin.query("GRANT USAGE ON SCHEMA public TO oagent_test_runtime");
