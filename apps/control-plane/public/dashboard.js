@@ -75,7 +75,7 @@ function navigate(view){
   }
   $("viewName").textContent=({
     overview:"Overview",files:"Project files",desktop:"Live desktop",
-    activity:"Activity & approvals",
+    activity:"Action inbox",
     integrations:"Connected tools",setup:"Guided setup",
   })[view]||"Workspace";
   $("sidebar").classList.remove("open");
@@ -176,7 +176,8 @@ function approvalInboxView() {
   const queue=Array.isArray(ownerOverview.approvalInbox)?
     ownerOverview.approvalInbox:[];
   const summary=ownerOverview.approvalInboxSummary||{};
-  $("approvalInboxCount").textContent=String(summary.total??queue.length)+" pending";
+  $("approvalInboxCount").textContent=ownerOverview.error?"Unavailable":
+    String(summary.total??queue.length)+" pending";
   if(!queue.length) {
     panel.append(create("p",ownerOverview.error?
       "Approval service unavailable. Refresh or update the backend.":
@@ -307,8 +308,9 @@ function syncUI(){
   $("machines").textContent=String(snapshot.workers?.length||0);
   $("online").textContent=String((snapshot.workers||[]).filter(w=>w.status==="online").length);
   $("running").textContent=String((snapshot.tasks||[]).filter(t=>t.status==="running").length);
-  $("approvals").textContent=String(ownerOverview.approvalInboxSummary?.total ??
-    (snapshot.tasks||[]).filter(t=>t.status==="waiting_for_approval").length);
+  $("approvals").textContent=ownerOverview.error?"—":
+    String(ownerOverview.approvalInboxSummary?.total ??
+      (snapshot.tasks||[]).filter(t=>t.status==="waiting_for_approval").length);
   machinesView();approvalInboxView();taskView();projectView();integrationView();workspacesView();
 }
 async function refresh(){
