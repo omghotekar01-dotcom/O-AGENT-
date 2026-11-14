@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/controller.dart';
 import '../core/api_client.dart';
@@ -10,6 +11,16 @@ import '../core/models.dart';
 import '../theme.dart';
 import 'remote_mission_control.dart';
 import 'free_ai_hub.dart';
+
+/// This SaaS pilot is a separate OIDC web control plane, not the legacy
+/// operator-token API. Only launch a clean HTTPS origin; never append tokens.
+Uri? secureSaasOrigin(String input) {
+  final uri = Uri.tryParse(input.trim());
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty) return null;
+  return Uri(scheme: 'https', host: uri.host,
+    port: uri.hasPort ? uri.port : null, path: '/');
+}
 
 const _muted = Color(0xFF777A78);
 const _ok = Color(0xFF437963);
@@ -771,6 +782,25 @@ class _StudioConnectState extends State<StudioConnect> {
   bool joining = false;
   bool hidden = true;
   bool rememberDevice = false;
+  Future<void> openPrivateSaas() async {
+    final destination = secureSaasOrigin(url.text);
+    if (destination == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter your private HTTPS Tailnet URL first.')));
+      return;
+    }
+    try {
+      final opened = await launchUrl(destination,
+        mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not open the private command center. Check Tailscale.')));
+      }
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Secure browser unavailable. Check your HTTPS connection.')));
+    }
+  }
   @override
   void dispose() { url.dispose(); token.dispose(); inviteCode.dispose(); displayName.dispose(); super.dispose(); }
 
@@ -811,6 +841,15 @@ class _StudioConnectState extends State<StudioConnect> {
           const SizedBox(height: 14),
           TextField(controller: url, keyboardType: TextInputType.url,
             decoration: const InputDecoration(labelText: 'Backend HTTPS URL', prefixIcon: Icon(Icons.link))),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: openPrivateSaas,
+            icon: const Icon(Icons.open_in_new_rounded),
+            label: const Text('Open secure SaaS command center'),
+          ),
+          const SizedBox(height: 7),
+          const Text('Free private pilot: enter your Tailscale HTTPS URL above. The secure owner dashboard opens in your browser using OIDC sign-in. No operator token or pairing code is copied to it.',
+            style: TextStyle(fontSize: 12, color: _muted, height: 1.45)),
           const SizedBox(height: 13),
           if (joining) ...[
             const Padding(padding: EdgeInsets.only(bottom: 10),
