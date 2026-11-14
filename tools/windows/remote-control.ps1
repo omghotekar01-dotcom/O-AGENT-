@@ -248,6 +248,30 @@ try {
                     'scroll' { [OAgentUserInput]::Scroll([int]$a.steps) }
                     'key' { [OAgentUserInput]::Key([string]$a.key) }
                     'text' { [OAgentUserInput]::TypeText([string]$a.text) }
+                    'paste_image' {
+                        # User-selected, ephemeral image. The backend already
+                        # validates the JPEG/PNG header and a strict size cap.
+                        # Do not print or write these bytes to disk.
+                        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+                        Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+                        $imageBytes = [Convert]::FromBase64String([string]$a.base64)
+                        $stream = New-Object System.IO.MemoryStream (,$imageBytes)
+                        $image = $null
+                        try {
+                            $image = [System.Drawing.Image]::FromStream($stream)
+                            [System.Windows.Forms.Clipboard]::SetImage($image)
+                            [OAgentUserInput]::Shortcut('paste')
+                            # Do not leave a sensitive screenshot on the
+                            # Windows clipboard after the paste event.
+                            Start-Sleep -Milliseconds 2500
+                            [System.Windows.Forms.Clipboard]::Clear()
+                        } finally {
+                            if ($image) { $image.Dispose() }
+                            $stream.Dispose()
+                            [Array]::Clear($imageBytes, 0, $imageBytes.Length)
+                            $imageBytes = $null
+                        }
+                    }
                     'shortcut' { [OAgentUserInput]::Shortcut([string]$a.name) }
                 }
                 # Report only action ID/type success, never key content.
