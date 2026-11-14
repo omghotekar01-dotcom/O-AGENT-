@@ -36,6 +36,7 @@ export function createMcp({pool,config}){
         mode:z.enum(["read_only","workspace_write"]),
         prompt:z.string().max(8000).default("Inspect enrolled workspace files"),
         cwd:z.string().max(600).default(""),
+        sessionId:z.string().min(8).max(120).optional(),
       }),
     },async(args)=>{
       // Require a distinct write scope; read-only MCP tokens cannot enqueue.
