@@ -40,3 +40,7 @@ Live IdP/provider verification, cloud provisioning, tenant-team membership/roles
 Provider website session takeovers are still limited by official integration scopes: no universal control of arbitrary ChatGPT Work, Claude web, or local Cursor IDE tabs is implied.
 
 **Do not open paid public customer signup until these gates have documented real-world passes.**
+
+## Database upgrades and release safety
+
+The migration runner now records SHA-256 checksums in `schema_migrations`, takes a transaction-scoped PostgreSQL advisory lock, applies migrations exactly once, and refuses to continue if an applied migration file was edited. Existing personal pilots receive an idempotent forward-only workspace-root/push-subscription compatibility upgrade. **Back up first**; running this migrator is an operational database change, not a substitute for a restore drill. Never change the contents of a numbered migration after rollout; write a new numbered file instead.

@@ -48,7 +48,14 @@ const form=new URLSearchParams({
 const token=await request(
   "/auth/realms/oagent/protocol/openid-connect/token",
   {method:"POST",body:form});
-assert.equal(token.status,200,"Synthetic CI owner token exchange failed");
+if(token.status!==200){
+  // Only reveal Keycloak's public OAuth error CODE, never descriptions/tokens.
+  const code=String(token.body?.error||"unknown");
+  const safe=new Set(["invalid_grant","invalid_request","invalid_scope",
+    "invalid_client","unauthorized_client","temporarily_unavailable"]);
+  throw Error("Synthetic CI owner token exchange failed (HTTP "+
+    token.status+", OAuth code: "+(safe.has(code)?code:"unknown")+")");
+}
 assert.equal(typeof token.body.access_token,"string");
 assert.ok(token.body.access_token.length>100);
 const scopes=new Set((token.body.scope||"").split(" "));

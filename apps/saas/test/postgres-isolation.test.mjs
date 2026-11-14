@@ -15,7 +15,13 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
     const admin=new Pool({connectionString:process.env.OAGENT_TEST_DATABASE_URL});
     try {
       await migrate(admin);
-      await admin.query("DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='oagent_test_runtime') THEN CREATE ROLE oagent_test_runtime LOGIN PASSWORD 'temporary-testing-password' NOSUPERUSER NOBYPASSRLS; END IF; END $$");
+      await migrate(admin); // Idempotent, immutable migrations are not replayed.
+      const versions=await admin.query(
+        "SELECT name,length(checksum) AS length FROM schema_migrations ORDER BY name");
+      assert.deepEqual(versions.rows.map(x=>x.name),
+        ["001_init.sql","002_legacy_upgrade.sql"]);
+      assert.ok(versions.rows.every(x=>x.length===64));
+      await admin.query("DO $ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='oagent_test_runtime') THEN CREATE ROLE oagent_test_runtime LOGIN PASSWORD 'temporary-testing-password' NOSUPERUSER NOBYPASSRLS; END IF; END $$");
       await admin.query("GRANT USAGE ON SCHEMA public TO oagent_test_runtime");
       await admin.query("GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO oagent_test_runtime");
       await admin.query("GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO oagent_test_runtime");

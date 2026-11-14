@@ -1,4 +1,4 @@
-import {randomUUID} from "node:crypto";
+import {randomUUID,createHash} from "node:crypto";
 import pg from "pg";
 import {readFile} from "node:fs/promises";
 import {fileURLToPath} from "node:url";
@@ -8,12 +8,38 @@ export const createPool=config=>new Pool({
   connectionTimeoutMillis:5000,idleTimeoutMillis:30000,
   application_name:"oagent_saas",
 });
+const migrationFiles=["001_init.sql","002_legacy_upgrade.sql"];
 export async function migrate(pool) {
-  const sql=await readFile(fileURLToPath(new URL("../sql/001_init.sql",import.meta.url)),"utf8");
+  const migrations=await Promise.all(migrationFiles.map(async name=>{
+    const sql=await readFile(fileURLToPath(new URL("../sql/"+name,import.meta.url)),"utf8");
+    return {name,sql,checksum:createHash("sha256").update(sql).digest("hex")};
+  }));
   const client=await pool.connect();
-  try {await client.query("BEGIN");await client.query(sql);await client.query("COMMIT");}
-  catch(error){await client.query("ROLLBACK");throw error;}
-  finally{client.release();}
+  try{
+    await client.query("BEGIN");
+    // Multiple API rollout jobs cannot apply half a migration concurrently.
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended('oagent.schema.v2',0))");
+    await client.query(
+      "CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())");
+    for(const {name,sql,checksum} of migrations){
+      const {rows}=await client.query(
+        "SELECT checksum FROM schema_migrations WHERE name=$1 FOR UPDATE",[name]);
+      if(rows[0]){
+        if(rows[0].checksum!==checksum)
+          throw Error("Applied schema migration has changed: "+name);
+        continue;
+      }
+      await client.query(sql);
+      await client.query(
+        "INSERT INTO schema_migrations(name,checksum) VALUES($1,$2)",
+        [name,checksum]);
+    }
+    await client.query("COMMIT");
+  }catch(error){
+    try{await client.query("ROLLBACK");}catch{}
+    throw error;
+  }finally{client.release();}
 }
 /** All tenant queries use a single client with transaction-scoped RLS context. */
 export async function withTenant(pool,tenantId,fn) {
