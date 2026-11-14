@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {Pool} from "pg";
 import {migrate,withIdentity,withTenant,audit,assertTenantDatabaseSecurity} from "../src/store.mjs";
-import {startEnrollment,approveEnrollment,listDevices,revokeDevice,updateCapabilities,
+import {startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,updateCapabilities,
   heartbeat,createRun,listRuns,runDetail,listApprovals,decideApproval,claimRun,
   finishRun} from "../src/operations.mjs";
 import {generateDeviceKeys,sha256,deviceHeaders,verifyDeviceHeaders} from "../src/device-crypto.mjs";
@@ -35,8 +35,21 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
         const pairing=await startEnrollment(pool,{
           name:"Test laptop",publicKeyPem:keys.publicKeyPem,
         },sha256("test-ip-"+randomUUID()));
+        const review=await withIdentity(pool,owner,c=>
+          inspectEnrollment(c,pairing.pairingToken));
+        assert.equal(review.name,"Test laptop");
+        assert.match(review.fingerprint,/^[0-9a-f]{24}$/);
+        await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>
+          approveEnrollment(c,t,owner.subject,pairing.pairingToken,
+            "incorrect-fingerprint")),/identity changed/);
         const device=await withIdentity(pool,owner,(c,t)=>
-          approveEnrollment(c,t,owner.subject,pairing.pairingToken));
+          approveEnrollment(c,t,owner.subject,pairing.pairingToken,
+            review.fingerprint));
+        assert.deepEqual(await enrollmentStatus(pool,pairing.pairingToken),
+          {approved:true,deviceId:device.deviceId});
+        await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>
+          approveEnrollment(c,t,owner.subject,pairing.pairingToken,
+            review.fingerprint)),/expired or already used/);
         assert.ok(device.deviceId);
         await assert.rejects(()=>withIdentity(pool,stranger,(c,t)=>
           revokeDevice(c,t,stranger.subject,device.deviceId)),/Device not found/);
