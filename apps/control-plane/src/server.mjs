@@ -436,7 +436,7 @@ const server = createServer(async (req, res) => {
       if (!enrolled) throw new DomainError(409, "No enrolled VS Code file companion online");
       return send(res, 201, vscodeFileRelay.request(value));
     }
-    const fileResult = path.match(/^\\/api\\/vscode\\/files\\/([0-9a-f-]{36})$/);
+    const fileResult = path.match(/^\/api\/vscode\/files\/([0-9a-f-]{36})$/);
     if (req.method === "GET" && fileResult) {
       if (!owner) throw new DomainError(403,"Owner-only file result");
       return send(res, 200, vscodeFileRelay.status(fileResult[1]));
