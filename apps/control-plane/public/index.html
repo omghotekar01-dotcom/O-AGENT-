@@ -1,28 +1,105 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#15141e">
-<title>O-AGENT | Control Plane</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101820">
+<meta name="description" content="O-AGENT secure workspace control for real connected coding tools.">
+<title>O-AGENT — Workspace</title>
 <link rel="stylesheet" href="/dashboard.css">
 <script type="module" src="/dashboard.js"></script>
 </head>
 <body>
-<header class="top"><div class="logo">✳ <span>O-AGENT</span></div><div class="subtitle">Real execution control plane · Development MVP</div></header>
-<main>
-<section class="intro"><p class="eyebrow">Agent operations</p><h1>Your command centre</h1><p>Monitor registered machines, submit authorized work, and review actual execution results. No demo counters.</p></section>
-<section class="panel" id="authPanel"><h2>Connect securely</h2><p>Enter the operator token configured on the backend. The token remains in this browser tab.</p><form id="authForm"><label>Operator token<input id="token" required type="password" autocomplete="off" placeholder="OAGENT_API_TOKEN"></label><button type="submit">Connect</button></form></section>
-<div id="workspace" hidden>
-<div class="stats"><article><small>Registered machines</small><strong id="machines">0</strong></article><article><small>Online machines</small><strong id="online">0</strong></article><article><small>Running tasks</small><strong id="running">0</strong></article><article><small>Needs approval</small><strong id="approvals">0</strong></article></div>
-<div class="layout">
-<section class="panel"><div class="heading"><h2>Machines</h2><button class="secondary" id="refresh" type="button">Refresh</button></div><div id="workerList" class="stack"></div><p class="hint">Machines must run the local gateway. An offline machine cannot execute tasks.</p></section>
-<section class="panel"><h2>New task</h2><form id="taskForm"><label>Execution machine<select id="workerSelect" required></select></label><label>Supported operation<select id="kind"><option value="system_info">Read system health</option><option value="workspace_inventory">Inspect workspace (approval required)</option></select></label><button type="submit">Submit task</button></form><p class="hint">No arbitrary shell access or destructive operations are enabled in this MVP.</p></section>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">O</span><span><strong>O-AGENT</strong><small>Workspace OS</small></span></div>
+    <p class="nav-caption">WORKSPACE</p>
+    <nav class="side-nav" aria-label="Workspace navigation">
+      <button class="nav-link selected" data-view="overview" aria-current="page"><span aria-hidden="true">◫</span> Overview</button>
+      <button class="nav-link" data-view="files"><span aria-hidden="true">▤</span> Project files</button>
+      <button class="nav-link" data-view="activity"><span aria-hidden="true">◷</span> Activity & approvals</button>
+      <button class="nav-link" data-view="integrations"><span aria-hidden="true">◇</span> Connected tools</button>
+    </nav>
+    <p class="nav-caption">ACCOUNT & HELP</p>
+    <nav class="side-nav" aria-label="Settings navigation">
+      <button class="nav-link" data-view="setup"><span aria-hidden="true">☷</span> Guided setup</button>
+    </nav>
+    <div class="side-bottom">
+      <div class="status-line"><span class="indicator" id="sideDot"></span><span id="sideStatus">Checking connection</span></div>
+      <p>Only verified connections appear as online. Your files stay inside an explicitly enrolled workspace.</p>
+    </div>
+  </aside>
+  <div class="main-shell">
+    <header class="topbar">
+      <div class="top-start"><button type="button" id="menuToggle" class="icon-button mobile-only" aria-label="Open navigation">☰</button><span class="top-label">WORKSPACE</span><span class="divider-mark">/</span><strong id="viewName">Overview</strong></div>
+      <div class="top-actions"><span id="connectionBadge" class="connection-chip">Not connected</span><button type="button" id="refresh" class="button secondary">Refresh</button><button type="button" id="disconnect" class="button outline" hidden>Disconnect</button></div>
+    </header>
+    <main id="main">
+      <section id="authPanel" class="auth-wrap" aria-labelledby="authTitle">
+        <div class="auth-copy"><p class="eyebrow">YOUR PRIVATE CONTROL PLANE</p><h1 id="authTitle">One place for your coding workspace.</h1><p>Connect your private O-AGENT backend to see actual project files, machine status, approvals and supported agents. No simulated sessions or fake connections.</p>
+          <div class="feature-notes"><p><span>01</span> Start O-AGENT on your laptop.</p><p><span>02</span> Sign in with its operator token.</p><p><span>03</span> Enroll only the project folders you choose.</p></div>
+        </div>
+        <div class="panel auth-card">
+          <div class="panel-icon" aria-hidden="true">↗</div>
+          <h2>Connect your workspace</h2>
+          <p class="muted">For local Windows use <code>http://127.0.0.1:8787</code>. Remote access requires trusted private HTTPS.</p>
+          <form id="authForm">
+            <label for="token">Operator token</label><input id="token" required type="password" minlength="24" autocomplete="off" placeholder="Paste your operator token">
+            <button class="button primary full" type="submit">Connect to O-AGENT <span aria-hidden="true">→</span></button>
+          </form>
+          <p class="form-note">Your token stays only in this browser tab session. Never paste it into a chat or public website.</p>
+        </div>
+      </section>
+      <div id="workspace" hidden>
+        <section class="view" data-panel="overview">
+          <div class="page-heading"><div><p class="eyebrow">CONTROL CENTRE</p><h1>Workspace overview</h1><p class="muted">Real machine state and authorized project activity.</p></div><button class="button primary" type="button" data-navigate="files">Browse project files <span aria-hidden="true">→</span></button></div>
+          <div class="stats" aria-label="Live workspace metrics">
+            <article class="stat"><span>Machines registered</span><strong id="machines">—</strong><small>Registered gateways</small></article>
+            <article class="stat"><span>Machines online</span><strong id="online">—</strong><small>Recent heartbeats</small></article>
+            <article class="stat"><span>Executing tasks</span><strong id="running">—</strong><small>Backend confirmed</small></article>
+            <article class="stat"><span>Need your approval</span><strong id="approvals">—</strong><small>Awaiting decision</small></article>
+          </div>
+          <div class="two-col">
+            <section class="panel"><div class="panel-heading"><div><p class="eyebrow">DEVICES</p><h2>Connected machines</h2></div><span class="subtle">Live</span></div><div id="workerList" class="list-stack"></div></section>
+            <section class="panel"><div class="panel-heading"><div><p class="eyebrow">QUICK ACTION</p><h2>Run a task</h2></div></div><form id="taskForm" class="field-stack">
+              <label for="workerSelect">Machine</label><select id="workerSelect" required></select>
+              <label for="kind">Operation</label><select id="kind"><option value="system_info">Check system health</option><option value="workspace_inventory">Inspect approved workspace</option></select>
+              <button class="button primary" type="submit">Send task for execution</button></form><p class="hint">Workspace inspection requires approval. Only operations advertised by the connected worker can run.</p></section>
+          </div>
+          <section class="panel"><div class="panel-heading"><div><p class="eyebrow">YOUR PROJECTS</p><h2>Projects and workspaces</h2></div><button class="text-button" type="button" data-navigate="files">Open files →</button></div><div id="projectList" class="list-stack"></div></section>
+        </section>
+        <section class="view" data-panel="files" hidden>
+          <div class="page-heading"><div><p class="eyebrow">WORKSPACES</p><h1>Project files</h1><p class="muted">Browse files from VS Code instances you explicitly enrolled. No path guessing.</p></div></div>
+          <div class="panel workspace-toolbar"><label for="workspaceSelect">Connected VS Code workspace</label><select id="workspaceSelect"></select><button class="button secondary" type="button" id="openWorkspace">Open workspace</button></div>
+          <div class="file-layout">
+            <section class="panel file-tree"><div class="panel-heading"><h2 id="folderName">Files</h2><div class="inline-actions"><button class="icon-button" id="folderUp" title="Parent folder" aria-label="Parent folder">↑</button><button class="icon-button" id="folderRefresh" title="Refresh folder" aria-label="Refresh folder">↻</button><button class="icon-button" id="newFile" title="Create a text file" aria-label="Create text file">＋</button></div></div><div id="fileList" class="list-stack" aria-label="Workspace directory"></div></section>
+            <section class="panel file-detail"><div class="panel-heading"><div><p class="eyebrow">SOURCE PREVIEW</p><h2 id="fileTitle">Choose a file</h2></div><span class="file-status" id="fileStatus">Read only until permitted</span></div>
+              <p class="hint" id="fileHint">Open a text file from the left. Editing requires a local 30-minute grant from VS Code and confirmation here.</p>
+              <textarea id="fileEditor" spellcheck="false" aria-label="Source code content" placeholder="Select a file to display its contents" readonly></textarea>
+              <div class="inline-actions file-actions"><button class="button secondary" id="editFile" type="button" disabled>Edit</button><button class="button primary" id="saveFile" type="button" disabled>Review & save</button><button class="button secondary" id="renameFile" type="button" disabled>Rename</button><button class="button danger" id="deleteFile" type="button" disabled>Move to Trash</button></div>
+            </section>
+          </div>
+          <p class="hint">Protected files, credentials, linked directories and binary files are not available. Text edits are version-checked and use a temporary in-memory relay.</p>
+        </section>
+        <section class="view" data-panel="activity" hidden><div class="page-heading"><div><p class="eyebrow">EXECUTION</p><h1>Activity & approvals</h1><p class="muted">A trace of actual backend activity. Every approval is a decision, not a simulation.</p></div></div>
+          <div class="two-col"><section class="panel"><div class="panel-heading"><h2>Tasks</h2><span class="subtle">Most recent first</span></div><div id="taskList" class="list-stack"></div></section><section class="panel"><div class="panel-heading"><h2>Event history</h2><span class="subtle">Recent</span></div><div id="eventList" class="list-stack"></div></section></div>
+        </section>
+        <section class="view" data-panel="integrations" hidden><div class="page-heading"><div><p class="eyebrow">CONNECTORS</p><h1>Connected tools</h1><p class="muted">The actual capability and state of each provider. An AI website bookmark is not a live integration.</p></div></div>
+          <div id="integrationList" class="integration-grid"></div><p class="hint">Some providers do not expose their existing consumer chats or approvals to third-party applications. Those will not be represented as connected.</p>
+        </section>
+        <section class="view" data-panel="setup" hidden><div class="page-heading"><div><p class="eyebrow">GET STARTED</p><h1>Guided setup</h1><p class="muted">Connect only what you need. Each item has a clear verification step.</p></div></div>
+          <div class="setup-list">
+            <article class="setup-step"><span class="step-index">01</span><div><h2>Install the desktop companion</h2><p>On your trusted Windows laptop, install O-AGENT and launch <code>O-AGENT.cmd</code>. A local gateway registers your machine.</p><p class="hint">Check: the Overview screen shows an online machine.</p></div></article>
+            <article class="setup-step"><span class="step-index">02</span><div><h2>Enroll a project in VS Code</h2><p>Open the actual repository folder in VS Code, install the O-AGENT Workspace Companion, then run <b>O-AGENT: Start Remote Workspace Companion</b> from the Command Palette.</p><p class="hint">Check: the status bar says O-AGENT: connected and the folder appears under Project files.</p></div></article>
+            <article class="setup-step"><span class="step-index">03</span><div><h2>Choose file permissions</h2><p>Browsing is read-only by default. To edit text, locally run <b>O-AGENT: Enable Mobile File Editing (30 minutes)</b>. Confirm each proposed change on your phone or this page.</p><p class="hint">Check: save a harmless file and verify it in the original editor.</p></div></article>
+            <article class="setup-step"><span class="step-index">04</span><div><h2>Connect supported AI providers individually</h2><p>Go to Connected tools to see which official adapter capabilities are available. Provider usage quotas, paid plans and private session restrictions still apply.</p><p class="hint">No universal permission to take over unrelated AI apps or private chats is assumed.</p></div></article>
+          </div>
+        </section>
+      </div>
+      <div id="notice" role="status" aria-live="polite"></div>
+    </main>
+  </div>
 </div>
-<section class="panel"><h2>Tasks and approvals</h2><div id="taskList" class="stack"></div></section>
-<section class="panel"><h2>Recent events</h2><div id="eventList" class="stack"></div></section>
-<button class="secondary" id="disconnect" type="button">Disconnect this tab</button>
-</div>
-<p id="notice" role="status" aria-live="polite"></p>
-</main>
-<footer>O-AGENT development MVP · Execution depends on a real connected worker.</footer>
-</body></html>
+<dialog id="confirmDialog" aria-labelledby="confirmTitle"><form method="dialog" class="confirm-body"><h2 id="confirmTitle">Confirm action</h2><p id="confirmText"></p><div class="dialog-actions"><button class="button secondary" value="cancel">Cancel</button><button class="button primary" id="confirmAccept" value="confirm">Continue</button></div></form></dialog>
+</body>
+</html>
