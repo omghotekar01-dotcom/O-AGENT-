@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {Pool} from "pg";
-import {migrate,withIdentity,withTenant,audit} from "../src/store.mjs";
+import {migrate,withIdentity,withTenant,audit,assertTenantDatabaseSecurity} from "../src/store.mjs";
 import {startEnrollment,approveEnrollment,listDevices,revokeDevice,updateCapabilities,
   heartbeat,createRun,listRuns,runDetail,listApprovals,decideApproval,claimRun,
   finishRun} from "../src/operations.mjs";
@@ -21,6 +21,8 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
       url.username="oagent_test_runtime";url.password="temporary-testing-password";
       const pool=new Pool({connectionString:url.toString()});
       try{
+        await assert.rejects(()=>assertTenantDatabaseSecurity(admin),/Unsafe PostgreSQL runtime role/);
+        assert.deepEqual(await assertTenantDatabaseSecurity(pool),{ok:true});
         const owner={issuer:"https://issuer.test/",subject:"owner-"+randomUUID()};
         const stranger={issuer:owner.issuer,subject:"stranger-"+randomUUID()};
         const tenantA=await withIdentity(pool,owner,async(client,tenant)=>{
