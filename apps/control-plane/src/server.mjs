@@ -436,6 +436,11 @@ const server = createServer(async (req, res) => {
         return send(res, 200, remoteInput.activateTrusted());
       if (req.method === "POST" && path === "/api/input/action")
         return send(res, 200, remoteInput.action(await readJson(req, 2048)));
+      if (req.method === "POST" && path === "/api/input/image") {
+        const mime = String(req.headers["content-type"] || "").split(";")[0].toLowerCase();
+        const bytes = await readBinary(req, RemoteInput.maxImageBytes);
+        return send(res, 200, remoteInput.image(bytes, mime));
+      }
       if (req.method === "POST" && path === "/api/input/stop")
         return send(res, 200, remoteInput.stop());
       throw new DomainError(404, "Unknown remote input endpoint");
