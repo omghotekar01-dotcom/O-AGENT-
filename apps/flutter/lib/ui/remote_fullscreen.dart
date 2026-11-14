@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/controller.dart';
@@ -283,6 +284,32 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
     );
   }
 
+  /// Translate a touch on the letterboxed JPEG into normalized monitor
+  /// coordinates. A window/tab share falls back to relative trackpad clicks.
+  /// Windows independently rejects absolute clicks on multiple monitors.
+  void _tapAt(Offset local, Size view, String button) {
+    if (!_control || !_paired || !_fresh) return;
+    final sourceW = (_sharing?['sourceWidth'] as num?)?.toDouble() ?? 0;
+    final sourceH = (_sharing?['sourceHeight'] as num?)?.toDouble() ?? 0;
+    if (_sharing?['displaySurface'] != 'monitor' ||
+        sourceW <= 0 || sourceH <= 0 ||
+        view.width <= 0 || view.height <= 0) {
+      _send({'type': 'click', 'button': button});
+      return;
+    }
+    final scale = math.min(view.width / sourceW, view.height / sourceH);
+    final drawnW = sourceW * scale, drawnH = sourceH * scale;
+    final left = (view.width - drawnW) / 2;
+    final top = (view.height - drawnH) / 2;
+    if (local.dx < left || local.dy < top ||
+        local.dx > left + drawnW || local.dy > top + drawnH) return;
+    final x = (((local.dx - left) / drawnW) * 10000).round()
+      .clamp(0, 10000);
+    final y = (((local.dy - top) / drawnH) * 10000).round()
+      .clamp(0, 10000);
+    _send({'type': 'tap', 'x': x, 'y': y, 'button': button});
+  }
+
   Widget _desktopImage() {
     if (_frame == null) {
       return const Center(child: Padding(
@@ -291,15 +318,23 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
           style: TextStyle(color: Colors.white70), textAlign: TextAlign.center)));
     }
     if (_control && _paired) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanUpdate: _move,
-        onTap: () => _send({'type': 'click', 'button': 'left'}),
-        onDoubleTap: () => _send({'type': 'click', 'button': 'double'}),
-        onLongPress: () => _send({'type': 'click', 'button': 'right'}),
-        child: SizedBox.expand(
-          child: Image.memory(_frame!, fit: BoxFit.contain, gaplessPlayback: true)),
-      );
+      return LayoutBuilder(builder: (context, limits) {
+        final view = Size(limits.maxWidth, limits.maxHeight);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanUpdate: _move,
+          onTapUp: (details) =>
+            _tapAt(details.localPosition, view, 'left'),
+          onDoubleTapDown: (details) =>
+            _tapAt(details.localPosition, view, 'double'),
+          onDoubleTap: () {},
+          onLongPressStart: (details) =>
+            _tapAt(details.localPosition, view, 'right'),
+          child: SizedBox.expand(
+            child: Image.memory(_frame!, fit: BoxFit.contain,
+              gaplessPlayback: true)),
+        );
+      });
     }
     return InteractiveViewer(
       minScale: 1, maxScale: 6, panEnabled: true,
@@ -367,9 +402,12 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
                           ? Colors.lightGreenAccent : Colors.orangeAccent,
                         fontSize: 10))),
                 const SizedBox(height: 5),
-                const Text('Drag anywhere to move the real laptop cursor. '
-                  'Tap clicks its current position (not the touched pixel). '
-                  'Long press right-clicks.',
+                Text(_sharing?['displaySurface'] == 'monitor'
+                  ? 'Tap the shared screen to click that point (single-monitor laptops). '
+                    'Drag to move the cursor. Long press right-clicks.'
+                  : 'Drag to move the cursor. In window/tab sharing, '
+                    'tap clicks at the current pointer position.',
+
                   style: TextStyle(color: Colors.white70, fontSize: 10),
                   textAlign: TextAlign.center),
                 Row(children: [
