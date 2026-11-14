@@ -106,13 +106,13 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           redirectUri:config.webAuth?.redirectUri??null,
           logoutEndpoint:config.webAuth?.logoutEndpoint??null,
           audience:config.audience,
-          scope:"openid profile oagent:read oagent:operate",
+          scope:"openid profile oagent-read oagent-operate",
         });
       if(method==="GET"&&path==="/.well-known/oauth-protected-resource")
         return reply(res,200,{
           resource:config.publicOrigin+"/mcp",
           authorization_servers:[config.issuer],
-          scopes_supported:["oagent:read","oagent:operate"],
+          scopes_supported:["oagent-read","oagent-operate"],
           bearer_methods_supported:["header"],
         });
       if(parsed.search&&!/^\/v1\/runs\/[0-9a-f-]{36}\/events$/i.test(path))
@@ -121,7 +121,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         if(!["GET","POST","DELETE"].includes(method))
           throw httpError(405,"Unsupported MCP method");
         let identity;
-        try {identity=await verifier(req.headers.authorization,"oagent:read");}
+        try {identity=await verifier(req.headers.authorization,"oagent-read");}
         catch(error){
           if(error.status===401){
             res.writeHead(401,{"content-type":"application/json",
@@ -225,7 +225,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
       // this API audience. No caller-supplied tenant id or owner token.
       const write=method!=="GET";
       const identity=await verifier(req.headers.authorization,
-        write?"oagent:operate":"oagent:read");
+        write?"oagent-operate":"oagent-read");
       const asTenant=fn=>withIdentity(pool,identity,fn);
       if(method==="GET"&&path==="/v1/me")
         return reply(res,200,await asTenant(async(_c,tenant)=>({

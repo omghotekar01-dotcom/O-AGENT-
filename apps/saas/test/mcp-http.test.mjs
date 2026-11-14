@@ -7,7 +7,7 @@ test("official MCP v2 Streamable HTTP exposes real scoped tools and never an app
   {timeout:15000},async()=>{
   const pool={connect:async()=>{throw Error("Read-only protocol enumeration should not query tenant database");}};
   const handler=createMcp({pool,config:{issuer:"https://issuer.example/",publicOrigin:"https://app.example"}});
-  async function request(method,params={},scope="oagent:read"){
+  async function request(method,params={},scope="oagent-read"){
     const raw={jsonrpc:"2.0",id:1,method,params};
     const result=await handler.fetch(new Request("https://app.example/mcp",{
       method:"POST",headers:{
@@ -33,7 +33,7 @@ test("official MCP v2 Streamable HTTP exposes real scoped tools and never an app
     assert.doesNotMatch(tools.body,/oagent_approve|arbitrary_shell|steal_session/);
     const denied=await request("tools/call",{name:"oagent_request_run",
       arguments:{deviceId:randomUUID(),kind:"workspace_inventory",
-        mode:"read_only",prompt:"Inspect",cwd:""}},"oagent:read");
+        mode:"read_only",prompt:"Inspect",cwd:""}},"oagent-read");
     assert.equal(denied.status,200,denied.body);
     assert.match(denied.body,/Write scope required/);
     assert.match(denied.body,/"isError":true/);

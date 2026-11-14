@@ -6,7 +6,7 @@ export function createOidcVerifier(config, {jwksFactory=createRemoteJWKSet,
   const keys=jwksFactory(new URL(config.jwksUrl),{
     timeoutDuration:5000, cooldownDuration:30000,cacheMaxAge:300000,
   });
-  return async function authenticate(header, requiredScope="oagent:read") {
+  return async function authenticate(header, requiredScope="oagent-read") {
     if(typeof header!=="string"||!/^Bearer [A-Za-z0-9._~-]{50,8000}$/.test(header))
       throw Object.assign(Error("Missing or invalid bearer token"),{status:401});
     let claims;

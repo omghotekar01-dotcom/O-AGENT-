@@ -52,7 +52,7 @@ test("OIDC validates issuer/audience/algorithms/client audience and scopes",asyn
     jwksFactory:()=>({}),
     verify:async(_token,_keys,opts)=>{
       options=opts;
-      return {payload:{sub:"oidc-user-a",azp:"mobile-prod",scope:"oagent:read",
+      return {payload:{sub:"oidc-user-a",azp:"mobile-prod",scope:"oagent-read",
         exp:1770000000,email_verified:true}};
     },
   });
@@ -62,11 +62,11 @@ test("OIDC validates issuer/audience/algorithms/client audience and scopes",asyn
   assert.equal(options.issuer,config.issuer);
   assert.equal(options.audience,config.audience);
   assert.deepEqual(options.algorithms,["RS256","ES256","PS256"]);
-  await assert.rejects(()=>verifier(token,"oagent:operate"),/Insufficient/);
+  await assert.rejects(()=>verifier(token,"oagent-operate"),/Insufficient/);
   await assert.rejects(()=>verifier("Bearer short"),/invalid bearer/);
   const invalid=createOidcVerifier(config,{
     jwksFactory:()=>({}),
-    verify:async()=>({payload:{sub:"someone",azp:"other-client",scope:"oagent:read"}}),
+    verify:async()=>({payload:{sub:"someone",azp:"other-client",scope:"oagent-read"}}),
   });
   await assert.rejects(()=>invalid(token),/not authorized/);
 });

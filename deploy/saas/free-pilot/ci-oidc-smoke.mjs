@@ -43,7 +43,7 @@ function request(path,{method="GET",body,authorization}={}){
 }
 const form=new URLSearchParams({
   grant_type:"password",client_id:"oagent-web",username:"pilot-owner",
-  password:secret,scope:"openid profile oagent:read oagent:operate",
+  password:secret,scope:"openid profile oagent-read oagent-operate",
 });
 const token=await request(
   "/auth/realms/oagent/protocol/openid-connect/token",
@@ -59,8 +59,8 @@ if(token.status!==200){
 assert.equal(typeof token.body.access_token,"string");
 assert.ok(token.body.access_token.length>100);
 const scopes=new Set((token.body.scope||"").split(" "));
-assert.ok(scopes.has("oagent:read"),"OIDC read scope missing");
-assert.ok(scopes.has("oagent:operate"),"OIDC operate scope missing");
+assert.ok(scopes.has("oagent-read"),"OIDC read scope missing");
+assert.ok(scopes.has("oagent-operate"),"OIDC operate scope missing");
 const access=token.body.access_token;
 const me=await request("/v1/me",{authorization:access});
 assert.equal(me.status,200,"OIDC access token was not accepted by O-AGENT API");

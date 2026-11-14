@@ -29,7 +29,7 @@ test("real HTTP + PostgreSQL: OIDC owner, exact fingerprint pairing, signed work
         header==="Bearer other-user"?otherId:null;
       if(!subject)throw Object.assign(Error("Not authenticated"),{status:401});
       return {issuer:config.issuer,subject,
-        clientId:"client-test",scopes:new Set(["oagent:read","oagent:operate"]),
+        clientId:"client-test",scopes:new Set(["oagent-read","oagent-operate"]),
         expiresAt:Date.now()+60000};
     };
     app=makeSaasServer({config,pool,authenticate});

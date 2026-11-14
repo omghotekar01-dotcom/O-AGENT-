@@ -41,3 +41,5 @@ After the pilot has been initialized and both devices have Tailscale, from the r
 
 ### Real OIDC CI verification
 The one-time GitHub Actions private-pilot smoke test uses an explicitly modified **disposable test realm** to exchange a synthetic account password for a JWT, then verifies the real audience/scope-protected `/v1/me`, `/v1/audit`, and approvals endpoints. This password grant is never enabled in the shipped Keycloak realm; real users sign in through OAuth authorization-code PKCE and must change the generated temporary password. No CI token or password is printed. Actual browser login/MFA and phone sign-in still require physical acceptance.
+
+**OAuth compatibility:** O-AGENT's registered Keycloak permissions use the literal scope names `oagent-read` and `oagent-operate` (no colon; colon syntax may be parsed as a Keycloak parameterized scope). Existing previously imported Keycloak realms are not automatically rewritten; use Keycloak administration to migrate the registered client scopes and confirm token issuance, and do not delete a database volume to force a reimport of live data.

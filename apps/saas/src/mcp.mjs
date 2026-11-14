@@ -41,7 +41,7 @@ export function createMcp({pool,config}){
       }),
     },async(args)=>{
       // Require a distinct write scope; read-only MCP tokens cannot enqueue.
-      if(!identity.scopes.has("oagent:operate"))
+      if(!identity.scopes.has("oagent-operate"))
         return {isError:true,content:[{type:"text",text:"Write scope required"}]};
       const nonce=randomBytes(24).toString("base64url");
       let tenantId;

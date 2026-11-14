@@ -10,7 +10,7 @@
   "accessTokenLifespan": 900,
   "clientScopes": [
     {
-      "name": "oagent:read",
+      "name": "oagent-read",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -18,7 +18,7 @@
       }
     },
     {
-      "name": "oagent:operate",
+      "name": "oagent-operate",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -54,8 +54,8 @@
         "email",
         "roles",
         "web-origins",
-        "oagent:read",
-        "oagent:operate"
+        "oagent-read",
+        "oagent-operate"
       ],
       "protocolMappers": [
         {

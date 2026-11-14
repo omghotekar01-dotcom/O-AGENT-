@@ -6,7 +6,7 @@
 
 Use managed PostgreSQL 16 with TLS hostname verification, encrypted backups, and a separate SQL migration identity. The runtime database identity must not be a superuser, table owner, or BYPASSRLS role. The application checks forced row-level security at startup. The migration identity is only supplied to a short-lived migration job, never the public API container.
 
-Use an OIDC provider with exact issuer, JWKS, API audience, registered OAuth client IDs, and oagent:read / oagent:operate scopes. A browser public client must support authorization-code PKCE S256 and allow its trusted origin to exchange the code for access tokens. For initial setup configure the documented variables in deploy/saas/api.env.example through a secret manager.
+Use an OIDC provider with exact issuer, JWKS, API audience, registered OAuth client IDs, and oagent-read / oagent-operate scopes. A browser public client must support authorization-code PKCE S256 and allow its trusted origin to exchange the code for access tokens. For initial setup configure the documented variables in deploy/saas/api.env.example through a secret manager.
 
 Build the API: docker build -f deploy/saas/Dockerfile.api -t oagent/saas-api:staging .
 
