@@ -122,8 +122,12 @@ export class RemoteInput {
       "Start a consented screen share before enabling remote input");
     if (typeof workerId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(workerId))
       throw new DomainError(400, "Invalid worker ID");
-    if (this.current()?.active) throw new DomainError(409,
-      "A remote control session is already paired. Stop it first");
+    const existing = this.current();
+    if (existing?.active) throw new DomainError(409,
+      "A remote control session is already active. Stop it first.");
+    if (existing && this.now() - existing.lastPoll < HEARTBEAT_TTL)
+      throw new DomainError(409,
+        "A Windows remote-control helper is already running. Close that helper before starting another.");
     const code = trusted ? null :
       String(randomInt(0, 100000000)).padStart(8, "0");
     const now = this.now();
