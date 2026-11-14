@@ -2,21 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 
 class OTheme {
-  static const purple = Color(0xFFB48CFF);
-  static const aqua = Color(0xFF5FE0C0);
-  static const deep = Color(0xFF11111A);
-  static const panel = Color(0xFF1D1C28);
-  static const panelElevated = Color(0xFF29263A);
+  static const purple = Color(0xFF97D5CE);
+  static const aqua = Color(0xFF64C5B0);
+  static const deep = Color(0xFF101F29);
+  static const panel = Color(0xFF20313C);
+  static const panelElevated = Color(0xFF2D4651);
 
   // O-AGENT Studio: quiet paper surfaces, editorial typography and measured
   // accent colors rather than neon gradients and generic dashboard tiles.
-  static const paper = Color(0xFFF6F6F8);
-  static const ink = Color(0xFF1C1C21);
-  static const violet = Color(0xFF5850A9);
-  static const lavender = Color(0xFFEDEBFC);
-  static const warm = Color(0xFFF0DDCF);
-  static const sage = Color(0xFFDDE6D7);
-  static const hairline = Color(0xFFE8E8EC);
+  static const paper = Color(0xFFF7F9FB);
+  static const ink = Color(0xFF20323D);
+  static const violet = Color(0xFF1B5966);
+  static const lavender = Color(0xFFE2F1F0);
+  static const warm = Color(0xFFF3E5D5);
+  static const sage = Color(0xFFE2EEE7);
+  static const hairline = Color(0xFFDCE6E9);
 
   static ThemeData studio() {
     final colors = ColorScheme.fromSeed(
@@ -43,7 +43,7 @@ class OTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24)),
+          borderRadius: BorderRadius.circular(16)),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: Colors.white,
@@ -60,7 +60,7 @@ class OTheme {
         color: Colors.white,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(17),
+          borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: hairline),
         ),
       ),
@@ -68,7 +68,7 @@ class OTheme {
         style: FilledButton.styleFrom(
           backgroundColor: ink, foregroundColor: Colors.white,
           minimumSize: const Size(0, 48),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
