@@ -174,7 +174,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           return reply(res,200,await call(c=>heartbeat(c,device.deviceId)));
         if(method==="POST"&&path==="/v1/device/capabilities")
           return reply(res,200,await call((c,t)=>updateCapabilities(
-            c,t,device.deviceId,data.capabilities)));
+            c,t,device.deviceId,data.capabilities,data.workspaceRoot)));
         if(method==="POST"&&path==="/v1/device/claim")
           return reply(res,200,await call((c,t)=>claimRun(c,t,device.deviceId)));
         const runLease=capturePath(path,
