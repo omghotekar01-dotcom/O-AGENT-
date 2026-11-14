@@ -33,6 +33,11 @@ function validateAction(input) {
       throw new DomainError(400, "Unsupported key");
     return { type, key: input.key };
   }
+  if (type === "shortcut") {
+    if (!["copy","paste","cut","undo","redo","select_all","save","find"].includes(input.name))
+      throw new DomainError(400, "Unsupported keyboard shortcut");
+    return {type,name:input.name};
+  }
   if (type === "text") {
     if (typeof input.text !== "string" || !input.text ||
         input.text.length > 300 || /[\u0000-\u0008\u000b-\u001f]/.test(input.text))
