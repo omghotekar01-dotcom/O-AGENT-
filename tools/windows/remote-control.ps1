@@ -178,7 +178,7 @@ public static class OAgentUserInput {
 function Send-OAgentInputRequest([string]$action, [hashtable]$data) {
     $data['workerId'] = $workerId
     try {
-        return Invoke-RestMethod -Method Post -Uri "$origin/api/workers/remote-input/$action" -Headers $headers -ContentType 'application/json' -Body ($data | ConvertTo-Json -Compress) -TimeoutSec 6
+        return Invoke-RestMethod -Method Post -Uri "$origin/api/workers/remote-input/$action" -Headers $headers -ContentType 'application/json' -Body ($data | ConvertTo-Json -Compress -Depth 5) -TimeoutSec 6
     } catch {
         throw (Get-OAgentInputError $_)
     }
@@ -198,7 +198,8 @@ try {
     Write-Host ''
     while ($true) {
         try {
-            $next = Send-OAgentInputRequest 'next' @{}
+            $next = Send-OAgentInputRequest 'next' @{ lastAck = $lastAck }
+            $lastAck = $null
         } catch {
             Write-Host "Remote input stopped: $($_.Exception.Message)" -ForegroundColor Yellow
             break
@@ -214,7 +215,10 @@ try {
                     'text' { [OAgentUserInput]::TypeText([string]$a.text) }
                     'shortcut' { [OAgentUserInput]::Shortcut([string]$a.name) }
                 }
+                # Report only action ID/type success, never key content.
+                $lastAck = @{ id = [int]$a.id; ok = $true }
             } catch {
+                $lastAck = @{ id = [int]$a.id; ok = $false }
                 Write-Host 'Windows did not accept an input action; check focus and permissions.' -ForegroundColor Yellow
             }
         }
