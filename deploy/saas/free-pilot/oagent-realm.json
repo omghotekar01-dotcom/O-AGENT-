@@ -76,14 +76,17 @@
     {
       "username": "pilot-owner",
       "enabled": true,
-      "emailVerified": true,
+      "emailVerified": false,
       "credentials": [
         {
           "type": "password",
           "value": "${OAGENT_OWNER_PASSWORD}",
           "temporary": true
         }
-      ]
+      ],
+      "email": "pilot-owner@oagent.invalid",
+      "firstName": "O-AGENT",
+      "lastName": "Owner"
     }
   ],
   "defaultDefaultClientScopes": [
