@@ -30,6 +30,8 @@ export class ScreenShare {
       lastFrameAt: s.lastFrameAt ? new Date(s.lastFrameAt).toISOString() : null,
       expiresAt: new Date(s.expiresAt).toISOString(),
       frameSequence: s.sequence,
+      estimatedFps: s.averageFrameGapMs != null
+        ? Math.round(10000 / s.averageFrameGapMs) / 10 : null,
       mode: "view_only_consent_screen_frames",
     };
   }
@@ -42,6 +44,7 @@ export class ScreenShare {
     this.active = {
       token, startedAt: now, expiresAt: now + LEASE_TTL_MS,
       lastFrameAt: 0, frame: null, sequence: 0,
+      averageFrameGapMs: null,
     };
     return { captureToken: token, ...this.status() };
   }
@@ -76,6 +79,11 @@ export class ScreenShare {
     const now = this.now();
     if (now - this.active.lastFrameAt < FRAME_GAP_MS)
       throw new DomainError(429, "Screen updates are arriving faster than the supported capture rate (180 ms minimum)");
+    if (this.active.lastFrameAt > 0) {
+      const interval = now - this.active.lastFrameAt;
+      this.active.averageFrameGapMs = this.active.averageFrameGapMs == null
+        ? interval : this.active.averageFrameGapMs * .7 + interval * .3;
+    }
     this.active.frame = Buffer.from(bytes);
     this.active.lastFrameAt = now;
     this.active.sequence += 1;
