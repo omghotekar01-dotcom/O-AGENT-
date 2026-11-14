@@ -109,6 +109,19 @@ export class ControlPlane {
       if (sessionId != null && (typeof sessionId !== "string" ||
           !/^[a-zA-Z0-9_-]{8,120}$/.test(sessionId)))
         throw new DomainError(400, "Invalid SDK session ID");
+      if (sessionId != null) {
+        const knownSession = Object.values(this.data.tasks).find(t =>
+          t.kind === kind && t.status === "completed" &&
+          t.result?.sessionId === sessionId);
+        if (knownSession &&
+            (knownSession.workerId !== workerId ||
+             knownSession.parameters?.cwd !== cwd))
+          throw new DomainError(409,
+            "This SDK session belongs to a different enrolled worker or workspace");
+        if (this.clock() - this.data.workers[workerId].lastSeenAt > 30000)
+          throw new DomainError(409,
+            "The original SDK session worker is offline. Reconnect it before resuming.");
+      }
       parameters = { cwd, prompt, mode, sessionId };
     }
     if (kind === "vscode_open_file") {
