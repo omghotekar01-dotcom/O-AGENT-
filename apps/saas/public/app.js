@@ -690,6 +690,53 @@ for(const btn of document.querySelectorAll("[data-view]"))
   btn.addEventListener("click",()=>navigate(btn.dataset.view));
 for(const btn of document.querySelectorAll("[data-go]"))
   btn.addEventListener("click",()=>navigate(btn.dataset.go));
+
+$("workspaceSwitch").addEventListener("change",event=>{
+  try{switchWorkspace(event.target.value);}
+  catch(error){notice(error.message,true);}
+});
+$("joinTeamForm").addEventListener("submit",event=>{
+  event.preventDefault();
+  const button=event.currentTarget.querySelector("button");button.disabled=true;
+  void (async()=>{
+    const inviteToken=$("joinToken").value.trim();
+    const result=await api("/v1/team/join",{method:"POST",body:{inviteToken}});
+    $("joinToken").value="";
+    notice("Team joined. Verify your role before requesting work.");
+    workspaceId=result.workspaceId;
+    sessionStorage.setItem("oagent_active_workspace",workspaceId);
+    await refresh();navigate("team");
+  })().catch(error=>notice(error.message,true)).finally(()=>{button.disabled=false;});
+});
+$("workspaceNameForm").addEventListener("submit",event=>{
+  event.preventDefault();
+  const button=event.currentTarget.querySelector("button");button.disabled=true;
+  void api("/v1/team/settings",{method:"POST",
+    body:{name:$("workspaceName").value.trim()}})
+    .then(()=>{notice("Workspace name updated.");return refresh();})
+    .catch(error=>notice(error.message,true))
+    .finally(()=>{button.disabled=false;});
+});
+$("inviteTeamForm").addEventListener("submit",event=>{
+  event.preventDefault();
+  const button=event.currentTarget.querySelector("button");button.disabled=true;
+  void api("/v1/team/invites",{method:"POST",
+    body:{role:$("teamInviteRole").value}})
+    .then(result=>{
+      $("generatedInvite").value=result.inviteToken;
+      $("inviteResult").hidden=false;
+      notice("15-minute invitation created. Share it only with the intended teammate.");
+    }).catch(error=>notice(error.message,true))
+    .finally(()=>{button.disabled=false;});
+});
+$("copyTeamInvite").addEventListener("click",()=>{
+  const value=$("generatedInvite").value;
+  if(!/^oti_[A-Za-z0-9_-]{43}$/.test(value))return;
+  void navigator.clipboard.writeText(value)
+    .then(()=>notice("Invitation copied privately."))
+    .catch(()=>notice("Copy unavailable. Select the invitation manually.",true));
+});
+
 $("signIn").addEventListener("click",()=>void authorize().catch(e=>notice(e.message,true)));
 $("enableAlerts").addEventListener("click",()=>{
   const btn=$("enableAlerts");btn.disabled=true;
