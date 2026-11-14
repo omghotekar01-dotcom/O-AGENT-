@@ -21,7 +21,7 @@ test("remote input requires live screen, visible local pairing code and worker h
   assert.equal(broker.status().paired, true);
   now += 40;
   assert.equal(broker.action({type:"move",dx:3,dy:-4}).accepted,true);
-  assert.deepEqual(broker.next("my-laptop").action,{type:"move",dx:3,dy:-4});
+  assert.deepEqual(broker.next("my-laptop").action,{type:"move",dx:3,dy:-4,id:1});
   now += 40;
   broker.action({type:"click",button:"left"});
   capture = false;
@@ -103,10 +103,18 @@ test("rapid pointer deltas coalesce without skipping click or keyboard order",()
   input.action({type:"move",dx:10,dy:11});
   input.action({type:"move",dx:9,dy:4});
   assert.equal(input.status().queueDepth,4);
-  assert.deepEqual(input.next("my-laptop").action,{type:"move",dx:40,dy:3});
-  assert.deepEqual(input.next("my-laptop").action,{type:"click",button:"left"});
-  assert.deepEqual(input.next("my-laptop").action,{type:"shortcut",name:"save"});
-  assert.deepEqual(input.next("my-laptop").action,{type:"move",dx:19,dy:15});
+  assert.deepEqual(input.next("my-laptop").action,{type:"move",dx:40,dy:3,id:1});
+  const clicked=input.next("my-laptop",{id:1,ok:true});
+  assert.deepEqual(clicked.action,{type:"click",button:"left",id:2});
+  assert.equal(clicked.lastInputResult.ok,true);
+  assert.equal(clicked.lastInputResult.type,"move");
+  const rejected=input.next("my-laptop",{id:2,ok:false});
+  assert.deepEqual(rejected.action,{type:"shortcut",name:"save",id:3});
+  assert.equal(rejected.lastInputResult.ok,false);
+  assert.equal(rejected.lastInputResult.type,"click");
+  assert.equal(JSON.stringify(rejected).includes("secret"),false);
+  assert.deepEqual(input.next("my-laptop",{id:3,ok:true}).action,
+    {type:"move",dx:19,dy:15,id:4});
   assert.equal(input.next("my-laptop").action,null);
   assert.throws(()=>input.action({type:"shortcut",name:"powershell"}),/Unsupported/);
 });
