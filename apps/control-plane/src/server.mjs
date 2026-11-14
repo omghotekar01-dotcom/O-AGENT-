@@ -90,7 +90,7 @@ function readBinary(req, maxBytes) {
 }
 function staticFile(res, filename, type) {
   const bytes = readFileSync(join(publicDir, filename));
-  res.writeHead(200, { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'" });
+  res.writeHead(200, { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'self'; connect-src 'self'; img-src 'self' blob:; script-src 'self'; style-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'" });
   res.end(bytes);
 }
 const server = createServer(async (req, res) => {
