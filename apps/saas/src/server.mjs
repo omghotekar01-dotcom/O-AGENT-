@@ -7,7 +7,7 @@ import {resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {readSaasConfig} from "./config.mjs";
 import {createOidcVerifier} from "./oidc.mjs";
-import {createPool,withIdentity,withTenant,assertTenantDatabaseSecurity} from "./store.mjs";
+import {createPool,withIdentity,withTenant,assertTenantDatabaseSecurity,pruneEphemeralAuthenticationData} from "./store.mjs";
 import {verifyDeviceHeaders} from "./device-crypto.mjs";
 import {createMcp} from "./mcp.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "./push.mjs";
@@ -321,10 +321,17 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   const config=readSaasConfig();
   const pool=createPool(config);
   await assertTenantDatabaseSecurity(pool);
+  // Expired replay nonces otherwise grow with every signed heartbeat.
+  // Failure is logged without interrupting existing agent runs.
+  const clean=()=>void pruneEphemeralAuthenticationData(pool)
+    .catch(()=>console.error("SaaS ephemeral authentication cleanup unavailable"));
+  clean();
+  const retention=setInterval(clean,60*60*1000);
+  retention.unref();
   const app=makeSaasServer({config,pool});
   app.server.listen(config.port,config.host,()=>console.log(
     "O-AGENT isolated SaaS control plane ready on "+config.host+":"+config.port));
-  const shutdown=async()=>{await app.close();await pool.end();};
+  const shutdown=async()=>{clearInterval(retention);await app.close();await pool.end();};
   process.once("SIGTERM",()=>void shutdown());
   process.once("SIGINT",()=>void shutdown());
 }
