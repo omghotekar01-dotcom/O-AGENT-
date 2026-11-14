@@ -462,18 +462,25 @@ async function refresh(){
   if(!loggedIn()||refreshing||document.hidden)return;
   refreshing=true;$("refresh").disabled=true;
   try{
-    const [me,deviceData,runData,approvalData,auditData]=await Promise.all([
-      api("/v1/me"),api("/v1/devices"),api("/v1/runs"),api("/v1/approvals"),
-      api("/v1/audit"),
+    const me=await api("/v1/me");
+    if(!me.tenantId||!["owner","operator","viewer"].includes(me.role))
+      throw Error("Account workspace role was not verified.");
+    const [deviceData,runData,approvalData,auditData,workspaceData,memberData]=await Promise.all([
+      api("/v1/devices"),api("/v1/runs"),api("/v1/approvals"),
+      me.role==="viewer"?Promise.resolve({events:[]}):api("/v1/audit"),
+      api("/v1/team/workspaces"),
+      me.role==="owner"?api("/v1/team/members"):Promise.resolve({members:[]}),
     ]);
-    if(!me.tenantId)throw Error("Account identity was not verified.");
     state={
+      tenantId:me.tenantId,role:me.role,
       devices:Array.isArray(deviceData.devices)?deviceData.devices:NONE,
       runs:Array.isArray(runData.runs)?runData.runs:NONE,
       approvals:Array.isArray(approvalData.approvals)?approvalData.approvals:NONE,
       audit:Array.isArray(auditData.events)?auditData.events:NONE,
+      workspaces:Array.isArray(workspaceData.workspaces)?workspaceData.workspaces:NONE,
+      members:Array.isArray(memberData.members)?memberData.members:NONE,
     };
-    render();pillConnection(true);showAuth(true);
+    render();renderTeam();pillConnection(true);showAuth(true);
     if(navigator.setAppBadge){
       void navigator.setAppBadge(state.approvals.length).catch(()=>{});
     }
@@ -483,7 +490,10 @@ async function refresh(){
     for(const id of ["statDevices","statRunning","statApprovals","statCompleted"])
       $(id).textContent="—";
     $("sidePending").textContent="!";
-    notice("Unable to verify current workspace: "+error.message,true);
+    if(workspaceId && /Workspace membership or permission required/.test(error.message)){
+      workspaceId=null;sessionStorage.removeItem("oagent_active_workspace");
+      notice("Shared workspace access changed. Switched to private workspace. Refresh to reload.",true);
+    }else notice("Unable to verify current workspace: "+error.message,true);
   }finally{refreshing=false;$("refresh").disabled=false;}
 }
 function disconnect(){
