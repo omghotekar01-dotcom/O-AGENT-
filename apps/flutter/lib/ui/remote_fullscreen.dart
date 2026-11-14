@@ -294,6 +294,20 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
                   'Windows input queue: ${_input?['queueDepth'] ?? 0}',
                   style: const TextStyle(color: Colors.white70,
                     fontSize: 10)),
+                if (_input?['lastInputResult'] is Map)
+                  Padding(padding: const EdgeInsets.only(top: 4, bottom: 4),
+                    child: Text(
+                      (_input!['lastInputResult']['ok'] == true
+                        ? 'Windows executed the last '
+                        : 'Windows rejected the last ') +
+                      (_input!['lastInputResult']['type']?.toString() ??
+                        'input action') +
+                      (_input!['lastInputResult']['ok'] == true
+                        ? '' : ' · check active window focus/permissions'),
+                      style: TextStyle(
+                        color: _input!['lastInputResult']['ok'] == true
+                          ? Colors.lightGreenAccent : Colors.orangeAccent,
+                        fontSize: 10))),
                 const SizedBox(height: 5),
                 const Text('Drag anywhere to move the real laptop cursor. '
                   'Tap clicks its current position (not the touched pixel). '
