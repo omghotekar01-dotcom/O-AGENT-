@@ -15,7 +15,7 @@ export function createMcp({pool,config}){
     const server=new McpServer({name:"o-agent",version:"0.1.0"});
     const identity={issuer:config.issuer,subject:authInfo?.clientId,
       scopes:new Set(authInfo?.scopes||[])};
-    const scoped=fn=>withIdentity(pool,identity,fn);
+    const scoped=(fn,requiredRole="viewer")=>withIdentity(pool,identity,fn,{requiredRole});
     server.registerTool("oagent_list_runs",{
       description:"Read real recent O-AGENT runs within your authenticated workspace",
       inputSchema:z.object({}),
@@ -48,7 +48,7 @@ export function createMcp({pool,config}){
       const created=await scoped((c,t)=>{
         tenantId=t;
         return createRun(c,t,identity.subject,args,"mcp_"+nonce);
-      });
+      },"operator");
       if(!created.reused)void notifyTenant(pool,tenantId,config).catch(()=>{});
       return content(created);
     });
