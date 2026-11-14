@@ -18,7 +18,8 @@ class RemoteFullscreenScreen extends StatefulWidget {
   State<RemoteFullscreenScreen> createState() => _RemoteFullscreenState();
 }
 
-class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
+class _RemoteFullscreenState extends State<RemoteFullscreenScreen>
+    with WidgetsBindingObserver {
   Timer? _poller;
   Uint8List? _frame;
   Map<String, dynamic>? _sharing;
@@ -41,13 +42,31 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _refresh();
     _poller = Timer.periodic(const Duration(milliseconds: 450), (_) => _refresh());
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      if (_control && _paired) unawaited(_stop());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Closing the remote screen must not leave a privileged input window
+    // silently armed. The local trusted helper remains available for a
+    // new explicit owner Control activation.
+    final api = widget.controller.client;
+    if (_control && api != null) {
+      unawaited(api.stopRemoteInput().then<void>((_) {})
+        .catchError((Object _) {}));
+    }
     _poller?.cancel();
     _actions.clear();
     _text.dispose();
