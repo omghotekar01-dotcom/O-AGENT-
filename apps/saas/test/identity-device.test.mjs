@@ -25,6 +25,12 @@ test("SaaS config fails closed without HTTPS, explicit OIDC and database",()=>{
   env.DATABASE_URL="postgres://user:pass@localhost/db?sslmode=verify-full";
   assert.equal(readSaasConfig(env).publicOrigin,"https://app.example.com");
   assert.equal(readSaasConfig(env).issuer,"https://id.example.com");
+  assert.throws(()=>readSaasConfig({...env,OAGENT_LOCAL_PILOT:"1"}),
+    /Private pilot requires/);
+  assert.throws(()=>readSaasConfig({...env,DATABASE_URL:
+    "postgres://user:pass@db/oagent?sslmode=disable"}),
+    /sslmode=verify-full/);
+
 });
 test("OIDC validates issuer/audience/algorithms/client audience and scopes",async()=>{
   let options;

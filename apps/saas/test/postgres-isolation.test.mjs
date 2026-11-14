@@ -23,6 +23,12 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
       try{
         await assert.rejects(()=>assertTenantDatabaseSecurity(admin),/Unsafe PostgreSQL runtime role/);
         assert.deepEqual(await assertTenantDatabaseSecurity(pool),{ok:true});
+        await assert.rejects(()=>assertTenantDatabaseSecurity(
+          {query:async sql=>sql.includes("pg_roles")?
+            {rows:[{rolsuper:false,rolbypassrls:false}],rowCount:1}:
+            {rows:[{relname:"runs"}],rowCount:1}}),
+          /owner of tenant tables/);
+
         const owner={issuer:"https://issuer.test/",subject:"owner-"+randomUUID()};
         const stranger={issuer:owner.issuer,subject:"stranger-"+randomUUID()};
         const tenantA=await withIdentity(pool,owner,async(client,tenant)=>{

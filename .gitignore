@@ -7,3 +7,8 @@ node_modules/
 dist/
 coverage/
 .DS_Store
+
+# Free personal pilot secrets; never commit
+**/.env.local
+**/*.backup.age
+**/*.backup.enc

@@ -22,12 +22,22 @@ export function readSaasConfig(env = process.env) {
   // validate the URL but preserve the identity provider's advertised string.
   const issuerValue=required(env,"OAGENT_OIDC_ISSUER");
   absolute(issuerValue,"OAGENT_OIDC_ISSUER");
-  const jwks = absolute(required(env,"OAGENT_OIDC_JWKS_URL"),"OAGENT_OIDC_JWKS_URL");
+  // Explicit personal Tailnet-only mode; NEVER selected in commercial deployments.
+  const localPilot=env.OAGENT_LOCAL_PILOT==="1";
+  if(localPilot && (!/\\.ts\\.net$/i.test(publicUrl.hostname) || env.NODE_ENV==="test"))
+    throw Error("Private pilot requires a non-test HTTPS Tailscale .ts.net origin");
+  const requestedJwks=required(env,"OAGENT_OIDC_JWKS_URL");
+  const internalKeycloak="http://identity:8080/auth/realms/oagent/protocol/openid-connect/certs";
+  const jwksValue=localPilot&&requestedJwks===internalKeycloak
+    ?requestedJwks:absolute(requestedJwks,"OAGENT_OIDC_JWKS_URL").href;
   const db = new URL(required(env,"DATABASE_URL"));
   if (!["postgres:","postgresql:"].includes(db.protocol) || !db.hostname)
     throw Error("DATABASE_URL must be a PostgreSQL connection URL");
   // PostgreSQL TLS hostname verification is mandatory outside isolated tests.
-  if (env.NODE_ENV !== "test" && db.searchParams.get("sslmode")!=="verify-full")
+  const privatePilotDb=localPilot&&db.hostname==="db"&&
+    db.searchParams.get("sslmode")==="disable";
+  if (env.NODE_ENV !== "test" && !privatePilotDb &&
+      db.searchParams.get("sslmode")!=="verify-full")
     throw Error("Production DATABASE_URL must use sslmode=verify-full");
   const clientIds = required(env,"OAGENT_OIDC_CLIENT_IDS").split(",").map(s=>s.trim()).filter(Boolean);
   if (!clientIds.length || clientIds.some(s=>s.length>250)) throw Error("Invalid OIDC client allowlist");
@@ -52,8 +62,8 @@ export function readSaasConfig(env = process.env) {
   const port = Number(env.PORT || 8790);
   if (!Number.isSafeInteger(port) || port<1 || port>65535) throw Error("Invalid PORT");
   return Object.freeze({
-    publicOrigin:publicUrl.origin, issuer:issuerValue, jwksUrl:jwks.href,
-    audience, clientIds, webAuth, databaseUrl:db.href,
+    publicOrigin:publicUrl.origin, issuer:issuerValue, jwksUrl:jwksValue,
+    audience, clientIds, webAuth, databaseUrl:db.href, localPilot,
     host:env.HOST || "127.0.0.1", port,
     mode:env.NODE_ENV || "production",
   });

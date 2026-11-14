@@ -76,6 +76,11 @@ export async function assertTenantDatabaseSecurity(pool) {
     "SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user");
   if(role.rowCount!==1||role.rows[0].rolsuper||role.rows[0].rolbypassrls)
     throw Error("Unsafe PostgreSQL runtime role: superuser/BYPASSRLS forbidden");
+  // Table owners can change RLS policy, even with FORCE RLS.
+  const owners=await pool.query(
+    "SELECT relname FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r' AND pg_has_role(current_user,relowner,'MEMBER')",
+    [["devices","runs","approvals","run_events","audit_events"]]);
+  if(owners.rowCount)throw Error("Unsafe runtime role: owner of tenant tables");
   const guard=await pool.query(
     "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r'",
     [["devices","runs","approvals","run_events","audit_events"]]);
