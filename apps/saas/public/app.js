@@ -8,7 +8,7 @@ const create = (tag,text,className) => {
 };
 const NONE = Object.freeze([]);
 let config=null, accessToken=null, expiresAt=0,refreshing=false;
-let state={devices:[],runs:[],approvals:[],audit:[],role:"viewer",workspaces:[],members:[],tenantId:null};
+let state={devices:[],runs:[],approvals:[],audit:[],role:"viewer",workspaces:[],members:[],tenantId:null,billing:null};
 const WORKSPACE_ID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 let workspaceId=sessionStorage.getItem("oagent_active_workspace");
 if(workspaceId && !WORKSPACE_ID.test(workspaceId)){
@@ -455,6 +455,15 @@ function renderTeam(){
   const active=state.workspaces.find(w=>w.tenant_id===state.tenantId);
   $("teamRole").textContent=(active?.display_name||"Selected workspace")+
     " · "+state.role.toUpperCase();
+  if(state.role==="owner"){
+    const counts=state.billing?.usage;
+    $("billingUsage").textContent=counts?
+      "This month: "+counts.requests_this_month+
+      " supervised requests · Last 24h: "+counts.requests_last_24_hours+
+      " / "+state.billing.limits.runsPerRolling24Hours+
+      " · Payment processing: not configured":
+      "Usage unavailable. No billing activation has been verified.";
+  }
   $("teamAdmin").hidden=state.role!=="owner";
   $("workspaceName").value=active?.display_name||"";
   $("deleteAccount").disabled=state.role!=="owner";
@@ -525,11 +534,12 @@ async function refresh(){
     const me=await api("/v1/me");
     if(!me.tenantId||!["owner","operator","viewer"].includes(me.role))
       throw Error("Account workspace role was not verified.");
-    const [deviceData,runData,approvalData,auditData,workspaceData,memberData]=await Promise.all([
+    const [deviceData,runData,approvalData,auditData,workspaceData,memberData,billingData]=await Promise.all([
       api("/v1/devices"),api("/v1/runs"),api("/v1/approvals"),
       me.role==="viewer"?Promise.resolve({events:[]}):api("/v1/audit"),
       api("/v1/team/workspaces"),
       me.role==="owner"?api("/v1/team/members"):Promise.resolve({members:[]}),
+      me.role==="owner"?api("/v1/billing/usage"):Promise.resolve(null),
     ]);
     state={
       tenantId:me.tenantId,role:me.role,
@@ -539,6 +549,7 @@ async function refresh(){
       audit:Array.isArray(auditData.events)?auditData.events:NONE,
       workspaces:Array.isArray(workspaceData.workspaces)?workspaceData.workspaces:NONE,
       members:Array.isArray(memberData.members)?memberData.members:NONE,
+      billing:billingData,
     };
     render();renderTeam();pillConnection(true);showAuth(true);
     if(navigator.setAppBadge){
@@ -558,7 +569,7 @@ async function refresh(){
 }
 function disconnect(){
   accessToken=null;expiresAt=0;
-  state={devices:[],runs:[],approvals:[],audit:[],role:"viewer",workspaces:[],members:[],tenantId:null};
+  state={devices:[],runs:[],approvals:[],audit:[],role:"viewer",workspaces:[],members:[],tenantId:null,billing:null};
   workspaceId=null;sessionStorage.removeItem("oagent_active_workspace");
   showAuth(false);pillConnection(false);
 }
