@@ -9,6 +9,7 @@
   const canvas = document.createElement("canvas");
   const context = canvas.getContext("2d");
   let media = null, lease = "", timer = null, busy = false, alive = false;
+  let maxDimension = 1140, jpegQuality = .54, lastUploadMs = 0;
   const info = text => { message.textContent = text; };
   const authHeaders = () => ({Authorization: "Bearer " + token.value.trim()});
   async function request(path, method = "GET", headers = {}, body) {
@@ -50,18 +51,34 @@
     if (!video.videoWidth || !video.videoHeight || !context) return;
     busy = true;
     try {
-      const scale = Math.min(1, 900 / video.videoWidth, 540 / video.videoHeight);
+      const scale = Math.min(1, maxDimension / video.videoWidth,
+        720 / video.videoHeight);
       canvas.width = Math.max(1, Math.floor(video.videoWidth * scale));
       canvas.height = Math.max(1, Math.floor(video.videoHeight * scale));
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", .49));
-      if (!blob || blob.size > 160000) {
-        info("Preview too large; adjust the shared area.");
+      let blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", jpegQuality));
+      if (blob && blob.size > 230000) {
+        // Large noisy frames must not kill the whole screen-sharing session.
+        // Drop the size and quality, then retry on the next capture interval.
+        maxDimension = Math.max(680, Math.round(maxDimension * .88));
+        jpegQuality = Math.max(.39, jpegQuality - .04);
         return;
       }
+      if (!blob) { info("Could not encode shared screen. Check browser permissions.");return; }
+      const sentAt = performance.now();
       await request("/api/screen/frame", "POST",
         {"Content-Type":"image/jpeg","X-OAGENT-Capture-Token": lease},blob);
-      info("Sharing a consented view-only preview with the owner's phone.");
+      lastUploadMs = performance.now() - sentAt;
+      // Adapt to connection RTT rather than accumulating stale frames.
+      if (lastUploadMs > 850) {
+        maxDimension = Math.max(680, Math.round(maxDimension * .92));
+        jpegQuality = Math.max(.40, jpegQuality - .02);
+      } else if(lastUploadMs < 300 && blob.size < 125000) {
+        maxDimension = Math.min(1280, maxDimension + 25);
+        jpegQuality = Math.min(.65, jpegQuality + .01);
+      }
+      info("Sharing selected screen · adaptive preview · upload " +
+        Math.round(lastUploadMs) + " ms");
     } catch (err) {
       info("Screen upload stopped: " + err.message);
       await cleanup(false);
@@ -75,7 +92,7 @@
       // The picker must originate directly from a user gesture. Do not
       // auto-start or silently request an additional display.
       media = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 1, max: 2 } }, audio: false,
+        video: { frameRate: { ideal: 6, max: 8 } }, audio: false,
       });
       video.srcObject = media;
       media.getVideoTracks()[0]?.addEventListener("ended", () => {
@@ -88,7 +105,7 @@
       stop.disabled = false;
       status.textContent = "Sharing selected display";
       info("Sharing started. Stop immediately whenever you need.");
-      timer = setInterval(() => { void tick(); }, 900);
+      timer = setInterval(() => { void tick(); }, 250);
       await tick();
     } catch (err) {
       info("Not sharing: " + err.message);
