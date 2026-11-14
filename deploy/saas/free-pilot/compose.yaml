@@ -39,7 +39,7 @@ services:
       OAGENT_ORIGIN: ${OAGENT_ORIGIN:?Missing Tailnet origin}
       OAGENT_OWNER_PASSWORD: ${OAGENT_OWNER_PASSWORD:?Missing initial owner password}
     volumes:
-      - ./oagent-realm.json:/opt/keycloak/data/import/oagent-realm.json:ro
+      - ./.private/oagent-realm.json:/opt/keycloak/data/import/oagent-realm.json:ro
     depends_on:
       db: {condition: service_healthy}
     networks: [private]

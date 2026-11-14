@@ -1,10 +1,46 @@
 import {execFileSync} from "node:child_process";
 import {randomBytes,generateKeyPairSync} from "node:crypto";
-import {readFile,writeFile,chmod} from "node:fs/promises";
+import {readFile,writeFile,chmod,mkdir} from "node:fs/promises";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 const dir=dirname(fileURLToPath(import.meta.url));
 const file=join(dir,".env.local");
+const realmPath=join(dir,".private","oagent-realm.json");
+const realmTemplate=join(dir,"oagent-realm.json");
+export function renderOwnerRealm(template,{origin,password}){
+  if(!/^https:\/\/[a-z0-9.-]+\.ts\.net$/i.test(origin)||
+      typeof password!=="string"||!/^[a-f0-9]{48}$/.test(password))
+    throw Error("Invalid private realm origin or generated password");
+  const raw=JSON.stringify(template);
+  const replaced=raw.replaceAll("$"+"{OAGENT_ORIGIN}",origin)
+    .replaceAll("$"+"{OAGENT_OWNER_PASSWORD}",password);
+  if(replaced===raw||replaced.includes("$"+"{OAGENT_"))
+    throw Error("Unresolved Keycloak realm template values");
+  const realm=JSON.parse(replaced);
+  const user=realm.users?.find(u=>u.username==="pilot-owner");
+  const client=realm.clients?.find(u=>u.clientId==="oagent-web");
+  if(user?.credentials?.[0]?.value!==password||
+      client?.redirectUris?.[0]!==origin+"/" ||
+      (client?.directAccessGrantsEnabled!==false && process.env.CI!=="true"))
+    throw Error("Invalid generated private realm");
+  return realm;
+}
+async function ensurePrivateRealm(secretContents,origin){
+  const password=secretContents.match(
+    /^OAGENT_OWNER_PASSWORD=([a-f0-9]{48})$/m)?.[1];
+  if(!password)throw Error("Local owner password is missing or invalid");
+  await mkdir(join(dir,".private"),{recursive:true,mode:0o700});
+  const text=JSON.stringify(renderOwnerRealm(
+    JSON.parse(await readFile(realmTemplate,"utf8")),{origin,password}),null,2)+"\n";
+  try{
+    const existing=await readFile(realmPath,"utf8");
+    if(existing!==text)
+      throw Error("Existing private Keycloak realm differs from current secrets. Never overwrite a live identity realm automatically.");
+    return;
+  }catch(error){if(error.code!=="ENOENT")throw error;}
+  await writeFile(realmPath,text,{flag:"wx",mode:0o600});
+  if(process.platform!=="win32")await chmod(realmPath,0o600);
+}
 export function tailnetOrigin(env=process.env,execute=execFileSync) {
   let name=env.OAGENT_TAILNET_HOST;
   if(!name){
@@ -28,6 +64,7 @@ export async function setupPilot({env=process.env,notify=console.log,execute=exe
     const existing=await readFile(file,"utf8");
     if(!existing.includes("OAGENT_ORIGIN="+origin+"\n"))
       throw Error("Pilot already configured for a different tailnet URL. Do not silently rotate keys or overwrite.");
+    await ensurePrivateRealm(existing,origin);
     notify("Existing private secrets preserved: "+file);
     return {created:false,origin};
   }catch(error){if(error.code!=="ENOENT")throw error;}
@@ -46,6 +83,7 @@ export async function setupPilot({env=process.env,notify=console.log,execute=exe
     "OAGENT_VAPID_PRIVATE_KEY="+priv.d].join("\n")+"\n";
   await writeFile(file,data,{flag:"wx",mode:0o600});
   if(process.platform!=="win32")await chmod(file,0o600);
+  await ensurePrivateRealm(data,origin);
   notify("Private pilot passwords generated at "+file+" (not displayed).");
   notify("docker compose --env-file .env.local -f compose.yaml up -d --build");
   notify("tailscale serve --bg 8791");

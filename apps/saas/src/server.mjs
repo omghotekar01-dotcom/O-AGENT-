@@ -106,7 +106,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           redirectUri:config.webAuth?.redirectUri??null,
           logoutEndpoint:config.webAuth?.logoutEndpoint??null,
           audience:config.audience,
-          scope:"openid profile oagent-read oagent-operate",
+          scope:"openid oagent-read oagent-operate",
         });
       if(method==="GET"&&path==="/.well-known/oauth-protected-resource")
         return reply(res,200,{

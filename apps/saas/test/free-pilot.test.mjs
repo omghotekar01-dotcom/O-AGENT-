@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {tailnetOrigin} from "../../../deploy/saas/free-pilot/setup.mjs";
+import {tailnetOrigin,renderOwnerRealm} from "../../../deploy/saas/free-pilot/setup.mjs";
 import {readSaasConfig} from "../src/config.mjs";
 
 const read=name=>readFileSync(new URL("../../../deploy/saas/free-pilot/"+name,import.meta.url),"utf8");
@@ -78,4 +78,17 @@ test("Keycloak private realm has exact sign-out redirect",()=>{
   const web=realm.clients.find(x=>x.clientId==="oagent-web");
   assert.equal(web.attributes["post.logout.redirect.uris"],"$"+"{OAGENT_ORIGIN}/");
   assert.match(read("compose.yaml"),/OAGENT_OIDC_LOGOUT_URL:/);
+});
+
+test("private realm renderer inserts generated owner password and HTTPS redirects",()=>{
+  const template=JSON.parse(read("oagent-realm.json"));
+  const origin="https://laptop.example.ts.net",password="a".repeat(48);
+  const realm=renderOwnerRealm(template,{origin,password});
+  assert.equal(realm.users[0].credentials[0].value,password);
+  assert.equal(realm.clients[0].redirectUris[0],origin+"/");
+  assert.equal(realm.clients[0].webOrigins[0],origin);
+  assert.equal(realm.clients[0].directAccessGrantsEnabled,false);
+  assert.ok(!JSON.stringify(realm).includes("$"+"{OAGENT_"));
+  const compose=read("compose.yaml");
+  assert.match(compose,/\.private\/oagent-realm\.json:\/opt\/keycloak/);
 });

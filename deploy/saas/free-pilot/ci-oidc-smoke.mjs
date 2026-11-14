@@ -77,7 +77,7 @@ console.log("Keycloak custom client scopes verified as created and linked.");
 
 const form=new URLSearchParams({
   grant_type:"password",client_id:"oagent-web",username:"pilot-owner",
-  password:secret,scope:"openid profile oagent-read oagent-operate",
+  password:secret,scope:"openid oagent-read oagent-operate",
 });
 const tokenEndpoint="/auth/realms/oagent/protocol/openid-connect/token";
 const token=await request(tokenEndpoint,{method:"POST",body:form});

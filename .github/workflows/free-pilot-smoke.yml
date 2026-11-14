@@ -23,8 +23,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Generate ephemeral local-only pilot secrets
-        run: node deploy/saas/free-pilot/setup.mjs
       - name: Enable synthetic password grant ONLY inside disposable CI realm
         run: |
           node --input-type=module <<'JS'
@@ -37,6 +35,8 @@ jobs:
           user.credentials[0].temporary=false;
           writeFileSync(path,JSON.stringify(realm));
           JS
+      - name: Generate ephemeral local-only pilot secrets and private realm
+        run: node deploy/saas/free-pilot/setup.mjs
       - name: Validate Caddy gateway syntax before starting containers
         run: |
           docker run --rm -v "$PWD/deploy/saas/free-pilot/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.9-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null

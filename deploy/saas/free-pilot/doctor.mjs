@@ -48,6 +48,9 @@ export async function checkPilot({
     const content=await read(secrets,"utf8");
     origin=configuredOrigin(content);
     const permissions=await statFile(secrets);
+    const privateRealm=await statFile(join(directory,".private","oagent-realm.json"));
+    if(process.platform!=="win32"&&(privateRealm.mode&0o077)!==0)
+      throw Error("Unsafe local realm permissions");
     if(process.platform!=="win32"&&(permissions.mode&0o077)!==0)
       throw Error("Unsafe permissions");
     for(const name of ["OAGENT_RUNTIME_PASSWORD",
