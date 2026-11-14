@@ -429,7 +429,7 @@ const server = createServer(async (req, res) => {
     // 90 seconds; file text must never enter persistent tasks/events/logs.
     if (path === "/api/vscode/files/request" && req.method === "POST") {
       if (!owner) throw new DomainError(403, "Only the workspace owner may browse or edit VS Code files");
-      const value = await readJson(req, 60000);
+      const value = await readJson(req, 290000);
       const enrolled = core.snapshot().workers.some(w =>
         w.id === value.workerId && w.status === "online" &&
         w.capabilities?.includes("vscode_workspace_files"));
@@ -500,7 +500,7 @@ const server = createServer(async (req, res) => {
       if (req.method !== "POST") throw new DomainError(405, "POST required");
       if (operation === "next") return send(res, 200, vscodeFileRelay.claim(wid));
       if (operation === "finish") return send(res, 200,
-        vscodeFileRelay.finish(wid, await readJson(req, 100000)));
+        vscodeFileRelay.finish(wid, await readJson(req, 290000)));
       if (operation === "stop") { vscodeFileRelay.clearWorker(wid);return send(res,200,{ok:true}); }
     }
     const vscodeSnapshot = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/vscode\/snapshot$/);
