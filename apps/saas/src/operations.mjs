@@ -193,7 +193,8 @@ export async function decideApproval(client,tenantId,subject,id,body) {
       "SELECT d.last_seen_at,d.revoked_at,a.kind,r.status,r.lease_expires_at FROM approvals a JOIN devices d ON d.id=a.device_id JOIN runs r ON r.id=a.run_id WHERE a.id=$1 AND a.status='pending' FOR UPDATE OF a",
       [id]);
     const state=active[0];
-    if(!state||state.revoked_at||
+    if(!state)throw httpError(409,"Approval expired, changed, or already decided");
+    if(state.revoked_at||
         !state.last_seen_at||
         new Date(state.last_seen_at).getTime()<Date.now()-120000)
       throw httpError(409,"Original agent worker is offline or revoked");
