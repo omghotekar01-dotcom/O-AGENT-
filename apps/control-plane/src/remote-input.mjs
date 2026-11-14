@@ -8,6 +8,7 @@ const HEARTBEAT_TTL = 6000;
 const MAX_QUEUE = 48;
 const MIN_GAP = 18;
 const CODE_PATTERN = /^[0-9]{8}$/;
+const MAX_IMAGE_BYTES = 1500000;
 
 function validateAction(input) {
   if (!input || typeof input !== "object" || Array.isArray(input))
@@ -204,13 +205,33 @@ export class RemoteInput {
     return { action, ...this.status() };
   }
   action(input) {
+    return this.enqueue(validateAction(input));
+  }
+  image(bytes, mimeType) {
+    if (!Buffer.isBuffer(bytes) || bytes.length < 64 ||
+        bytes.length > MAX_IMAGE_BYTES ||
+        !["image/jpeg","image/png"].includes(mimeType)) {
+      throw new DomainError(400, "Choose a JPEG/PNG image of 1.5 MB or less");
+    }
+    const png = bytes.subarray(0,8).equals(
+      Buffer.from([137,80,78,71,13,10,26,10]));
+    const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8 &&
+      bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9;
+    if (!((mimeType === "image/png" && png) ||
+          (mimeType === "image/jpeg" && jpeg))) {
+      throw new DomainError(400, "Invalid image format; only PNG and JPEG can be pasted");
+    }
+    // Queued only in memory; the worker retrieves it once. Never persisted.
+    return this.enqueue({type:"paste_image",mimeType,
+      base64:bytes.toString("base64")});
+  }
+  enqueue(value) {
     const s = this.current();
     if (!s?.active || !this.captureFresh())
       throw new DomainError(409, "Remote input unavailable. Pair the visible Windows helper and share the screen");
     const now = this.now();
     if (now - s.lastPoll >= HEARTBEAT_TTL)
       throw new DomainError(409, "Windows input helper disconnected");
-    const value = validateAction(input);
     if (value.type === "tap" && !this.captureDisplay())
       throw new DomainError(409,
         "Tap-to-click requires a full-display share. Use the relative trackpad for windows or tabs.");
@@ -250,4 +271,5 @@ export class RemoteInput {
     }
     return this.status();
   }
+  static get maxImageBytes() { return MAX_IMAGE_BYTES; }
 }
