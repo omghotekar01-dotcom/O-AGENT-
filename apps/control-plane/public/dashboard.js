@@ -13,6 +13,7 @@ const FOLDER_NAME=/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,119}$/;
 let token=sessionStorage.getItem("oagent_token")||"";
 let connected=false,refreshing=false,currentView="overview";
 let snapshot={workers:[],tasks:[]},workspaceFeed=[],projectFeed=[],integrations=[],events=[];
+let ownerOverview={approvalInbox:[],approvalInboxSummary:{total:0}};
 let activeFolder="",activeWorker="",openedFile=null,loadingFile=false;
 let noticeTimer=null;
 function notice(message,seconds=6){
@@ -74,7 +75,7 @@ function navigate(view){
   }
   $("viewName").textContent=({
     overview:"Overview",files:"Project files",desktop:"Live desktop",
-    activity:"Activity & approvals",
+    activity:"Action inbox",
     integrations:"Connected tools",setup:"Guided setup",
   })[view]||"Workspace";
   $("sidebar").classList.remove("open");
@@ -94,6 +95,7 @@ function connectedUi(value){
   $("sideDot").classList.toggle("online",value);
   $("sideStatus").textContent=value?"Backend connected":"Not connected";
   if(!value) {
+    ownerOverview={approvalInbox:[],approvalInboxSummary:{total:0}};
     desktopQueue.length=0;
     desktopState=null; desktopInput=null;
     clearDesktopPreview();
@@ -132,29 +134,83 @@ function updateAvailableTaskKinds(){
   $("taskForm").querySelector("button[type=submit]").disabled=
     !worker || ![...$("kind").options].some(o=>!o.disabled);
 }
+/** Fetch the authoritative task before every decision; never trust a stale card. */
+async function reviewInboxDecision(entry, approve) {
+  if(!entry?.actionable || !entry.taskId) {
+    notice("The original agent worker is offline. Reconnect before deciding.");
+    return;
+  }
+  const path="/api/tasks/"+encodeURIComponent(entry.taskId);
+  const task=await api(path);
+  if(task.workerId!==entry.workerId||task.kind!==entry.taskKind)
+    throw Error("The request changed. Refresh and review it again.");
+  const params=task.parameters||{};
+  let exact,endpoint=path+"/decision";
+  if(entry.actionKind==="tool") {
+    const item=task.approvals?.[entry.approvalId];
+    if(task.status!=="running" || item?.state!=="pending" ||
+       !Number.isFinite(item.expiresAt) || item.expiresAt<=Date.now())
+      throw Error("This tool permission is no longer active.");
+    exact=String(item.description||"");
+    endpoint=path+"/approvals/"+encodeURIComponent(entry.approvalId)+"/decision";
+  } else if(entry.actionKind==="task") {
+    if(task.status!=="waiting_for_approval")
+      throw Error("This task no longer requires approval.");
+    exact=String(params.prompt||params.relativePath||params.environmentId||
+      "Read enrolled workspace filenames");
+  } else throw Error("Unsupported approval kind");
+  const details="Provider: "+String(entry.provider||"")+
+    "\nWorker: "+String(task.workerId||"")+
+    "\nWorkspace / target: "+String(entry.target||"")+
+    "\nPermission mode: "+String(params.mode||"scoped operation")+
+    "\n\nExact request:\n"+exact+
+    "\n\nDo not approve files or commands you do not recognize.";
+  if(!await confirmAction("Review exact "+(approve?"approval":"denial"),
+    details,approve?"Approve once":"Deny request"))return;
+  await api(endpoint,{method:"POST",body:{approve}});
+  notice(approve?"Decision recorded. Check activity for execution.":"Request denied.");
+  await refresh();
+}
+function approvalInboxView() {
+  const panel=$("approvalInboxList");panel.replaceChildren();
+  const queue=Array.isArray(ownerOverview.approvalInbox)?
+    ownerOverview.approvalInbox:[];
+  const summary=ownerOverview.approvalInboxSummary||{};
+  $("approvalInboxCount").textContent=ownerOverview.error?"Unavailable":
+    String(summary.total??queue.length)+" pending";
+  if(!queue.length) {
+    panel.append(create("p",ownerOverview.error?
+      "Approval service unavailable. Refresh or update the backend.":
+      "All caught up. Genuine provider requests appear here.","empty"));
+    return;
+  }
+  for(const entry of queue) {
+    const el=item(String(entry.provider||"Agent action"),
+      String(entry.description||"Review exact request"),
+      entry.actionable?"waiting_for_approval":"offline");
+    el.classList.add("approval-item");
+    el.append(create("p","Worker: "+String(entry.workerId||"")+
+      (entry.expiresAt?" · Expires "+new Date(entry.expiresAt).toLocaleString():""),"meta"));
+    const buttons=create("div",undefined,"actions");
+    const yes=action(buttons,"Review & approve",()=>
+      reviewInboxDecision(entry,true),"primary");
+    const no=action(buttons,"Review & deny",()=>
+      reviewInboxDecision(entry,false),"secondary");
+    if(!entry.actionable) {
+      yes.disabled=true;no.disabled=true;
+      el.append(create("p","Reconnect the original worker before deciding.","hint"));
+    }
+    el.append(buttons);panel.append(el);
+  }
+  if(summary.hasMore)panel.append(create("p","More pending requests exist. Refresh for current priorities.","hint"));
+}
 function taskView(){
   const panel=$("taskList");panel.replaceChildren();
   for(const task of (snapshot.tasks||[]).slice(0,40)){
     const el=item(task.kind?.replaceAll("_"," ")||"Task",
       (task.workerId||"")+" · "+new Date(task.createdAt).toLocaleString(),task.status);
-    if(task.status==="waiting_for_approval"){
-      const actions=create("div",undefined,"actions");
-      action(actions,"Approve",async()=>{
-        const confirm=await confirmAction("Approve this exact task?",
-          "Operation: "+task.kind+"\nWorker: "+task.workerId+
-          "\n\nApprove only if you trust the requested operation.");
-        if(!confirm)return;
-        await api("/api/tasks/"+encodeURIComponent(task.id)+"/decision",{
-          method:"POST",body:{approve:true}});
-        await refresh();
-      },"primary");
-      action(actions,"Reject",async()=>{
-        await api("/api/tasks/"+encodeURIComponent(task.id)+"/decision",{
-          method:"POST",body:{approve:false}});
-        await refresh();
-      });
-      el.append(actions);
-    }
+    if(task.status==="waiting_for_approval")
+      el.append(create("p","Review the current exact request in Action inbox above.","meta"));
     if(task.status==="queued"){
       const actions=create("div",undefined,"actions");
       action(actions,"Cancel",async()=>{
@@ -252,18 +308,21 @@ function syncUI(){
   $("machines").textContent=String(snapshot.workers?.length||0);
   $("online").textContent=String((snapshot.workers||[]).filter(w=>w.status==="online").length);
   $("running").textContent=String((snapshot.tasks||[]).filter(t=>t.status==="running").length);
-  $("approvals").textContent=String((snapshot.tasks||[]).filter(t=>t.status==="waiting_for_approval").length);
-  machinesView();taskView();projectView();integrationView();workspacesView();
+  $("approvals").textContent=ownerOverview.error?"—":
+    String(ownerOverview.approvalInboxSummary?.total ??
+      (snapshot.tasks||[]).filter(t=>t.status==="waiting_for_approval").length);
+  machinesView();approvalInboxView();taskView();projectView();integrationView();workspacesView();
 }
 async function refresh(){
   if(!token||refreshing||document.hidden)return;
   refreshing=true;
   try{
-    const [state,ev,ws,providers,projects]=await Promise.all([
+    const [state,ev,ws,providers,projects,remote]=await Promise.all([
       api("/api/state"),api("/api/events"),
       api("/api/vscode/workspaces").catch(()=>({items:[]})),
       api("/api/integrations").catch(()=>({sources:[]})),
       api("/api/projects").catch(()=>({projects:[]})),
+      api("/api/remote/overview").catch(error=>({error:error.message,approvalInbox:[],approvalInboxSummary:{total:0}})),
     ]);
     snapshot={workers:state.workers||[],tasks:state.tasks||[]};
     events=ev.events||[];
@@ -271,6 +330,7 @@ async function refresh(){
     integrations=providers.sources||[];
     projectFeed=Array.isArray(projects)?projects:
       Array.isArray(projects.projects)?projects.projects:[];
+    ownerOverview=remote;
     connectedUi(true);syncUI();
   }catch(error){
     if(/Invalid authorization token|HTTP 401/i.test(error.message)){
@@ -919,6 +979,7 @@ $("disconnect").addEventListener("click",()=>{
   navigate("overview");notice("Disconnected this browser tab.");
 });
 $("refresh").addEventListener("click",refresh);
+$("refreshApprovals").addEventListener("click",refresh);
 $("workerSelect").addEventListener("change",updateAvailableTaskKinds);
 $("taskForm").addEventListener("submit",async event=>{
   event.preventDefault();

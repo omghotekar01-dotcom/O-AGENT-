@@ -514,6 +514,10 @@ const server = createServer(async (req, res) => {
     const cancel = path.match(/^\/api\/tasks\/([0-9a-f-]+)\/cancel$/);
     if (req.method === "POST" && cancel) return send(res, 200, core.cancel(cancel[1]));
 
+    const nativeSdkSync = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/native\/sessions\/sync$/);
+    if (req.method === "POST" && nativeSdkSync)
+      return send(res, 200, projectHub.publishNativeSessions(
+        nativeSdkSync[1], await readJson(req, 30000)));
     const codexLocalSync = path.match(/^\/api\/workers\/([a-zA-Z0-9_-]+)\/codex\/local\/sync$/);
     if (req.method === "POST" && codexLocalSync) {
       return send(res, 200, projectHub.publishCodexLocal(codexLocalSync[1], await readJson(req, 131072)));

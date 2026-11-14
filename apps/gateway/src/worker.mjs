@@ -6,6 +6,7 @@ import { readCodexLocalSessions } from "./codex-local.mjs";
 import { runCodexTurn } from "./codex-turn.mjs";
 import { readCodexHistory } from "./codex-history.mjs";
 import { runProviderTurn } from "./provider-turn.mjs";
+import { discoverNativeSessions } from "./native-session-discovery.mjs";
 
 const endpoint = new URL(process.env.OAGENT_SERVER_URL || "http://127.0.0.1:8787");
 if (endpoint.protocol !== "https:" && !(endpoint.protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname))) {
@@ -109,6 +110,7 @@ async function main() {
   console.log(`O-AGENT worker ${id} starting; workspace root: ${root}`);
   let lastCodexSync = 0;
   let lastLocalCodexSync = 0;
+  let lastSdkDiscovery = 0;
   let activeTask = false;
   await api("/api/workers/register", { id, name: hostname(), capabilities });
   while (true) {
@@ -136,6 +138,21 @@ async function main() {
           } catch {
             // Never leak CLI output, browser cookies, provider sessions or credentials in logs.
             console.error("Codex Cloud sync unavailable; check Codex CLI installation and login.");
+          }
+        })();
+      }
+      // Explicitly enabled, read-only SDK discovery. Never block heartbeats,
+      // stream full transcripts or send provider credentials.
+      if (capabilities.some(x => x === "claude_agent_turn" ||
+          x === "copilot_sdk_turn") &&
+          Date.now() - lastSdkDiscovery > 120000) {
+        lastSdkDiscovery = Date.now();
+        void (async () => {
+          try {
+            const metadata = await discoverNativeSessions({root});
+            await api("/api/workers/" + id + "/native/sessions/sync", metadata);
+          } catch {
+            console.error("Native SDK discovery failed. Check local SDK installation and workspace permission.");
           }
         })();
       }

@@ -12,9 +12,11 @@ String bridgeText(Object? x) => x?.toString() ?? '';
 
 /// Explicitly enrolled, SDK-owned local sessions with owner approval.
 class AgentSdkBridgeScreen extends StatefulWidget {
-  const AgentSdkBridgeScreen({super.key, required this.controller, this.taskId});
+  const AgentSdkBridgeScreen({super.key, required this.controller, this.taskId,
+    this.resumeSession, this.resumeKind, this.resumeWorkerId, this.resumeCwd});
   final ControlController controller;
   final String? taskId;
+  final String? resumeSession, resumeKind, resumeWorkerId, resumeCwd;
   @override State<AgentSdkBridgeScreen> createState() => _SdkBridgeState();
 }
 class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
@@ -30,6 +32,15 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
   @override void initState() {
     super.initState();
     taskId = widget.taskId;
+    if (widget.resumeSession != null) {
+      resume.text = widget.resumeSession!;
+      if (const {'claude_agent_turn', 'copilot_sdk_turn'}
+          .contains(widget.resumeKind)) {
+        provider = widget.resumeKind!;
+      }
+      worker = widget.resumeWorkerId;
+      cwd.text = widget.resumeCwd ?? '';
+    }
     _reload();
     timer = Timer.periodic(const Duration(seconds: 4), (_) => _reload());
   }
@@ -52,7 +63,9 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
       setState(() {
         workers = bridgeList(status['machines']);
         if (next != null) task = next;
-        if (!enrolled.any((w) => w['id'] == worker)) {
+        // Never switch a resumed session onto another worker automatically.
+        if (widget.resumeSession == null &&
+            !enrolled.any((w) => w['id'] == worker)) {
           worker = enrolled.isNotEmpty ? bridgeText(enrolled.first['id']) : null;
         }
         error = null;
@@ -72,7 +85,8 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
       ])) == true;
   Future<void> _send() async {
     if (busy || worker == null || cwd.text.trim().isEmpty ||
-        prompt.text.trim().isEmpty) return;
+        prompt.text.trim().isEmpty ||
+        !enrolled.any((w) => w['id'] == worker)) return;
     final details = 'Agent: ' + provider + '\nMachine: ' + worker! +
       '\nFolder: ' + cwd.text.trim() + '\nPermission mode: ' + mode +
       '\nSDK session: ' + (resume.text.trim().isEmpty
@@ -214,12 +228,20 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
                 SegmentedButton<String>(segments: const [
                   ButtonSegment(value: 'claude_agent_turn', label: Text('Claude')),
                   ButtonSegment(value: 'copilot_sdk_turn', label: Text('Copilot')),
-                ], selected: {provider}, onSelectionChanged: (v) =>
+                ], selected: {provider},
+                  onSelectionChanged: widget.resumeSession != null ? null : (v) =>
                     setState(() { provider = v.first; worker = null; })),
                 const SizedBox(height: 12),
                 if (enrolled.isEmpty) const Text('No enrolled online worker. '
                   'Install and sign in to the official SDK, then enable its '
                   'O-AGENT worker capability.'),
+                if (widget.resumeSession != null &&
+                    !enrolled.any((w) => w['id'] == worker))
+                  const Padding(padding: EdgeInsets.only(top: 8),
+                    child: Text('The original session worker is offline or '
+                      'does not advertise this SDK. Resume is disabled until '
+                      'that same worker reconnects.',
+                      style: TextStyle(color: OVisual.rose))),
                 if (enrolled.isNotEmpty) DropdownButtonFormField<String>(
                   initialValue: enrolled.any((w) => w['id'] == worker)
                     ? worker : null,
@@ -228,13 +250,16 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
                   items: enrolled.map((w) => DropdownMenuItem(
                     value: bridgeText(w['id']),
                     child: Text(bridgeText(w['name'])))).toList(),
-                  onChanged: (v) => setState(() => worker = v)),
+                  onChanged: widget.resumeSession != null ? null :
+                    (v) => setState(() => worker = v)),
                 const SizedBox(height: 12),
                 TextField(controller: cwd, decoration: const InputDecoration(
                   labelText: 'Existing enrolled workspace folder')),
                 const SizedBox(height: 10),
-                TextField(controller: resume, decoration: const InputDecoration(
-                  labelText: 'SDK session ID to resume (optional)')),
+                TextField(controller: resume,
+                  readOnly: widget.resumeSession != null,
+                  decoration: const InputDecoration(
+                    labelText: 'SDK session ID to resume (optional)')),
                 const SizedBox(height: 10),
                 TextField(controller: prompt, maxLength: 4000, minLines: 3,
                   maxLines: 6, decoration: const InputDecoration(
@@ -247,7 +272,8 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
                     setState(() => mode = v.first)),
                 const SizedBox(height: 12),
                 SizedBox(width: double.infinity, child: FilledButton.icon(
-                  onPressed: busy || worker == null ? null : _send,
+                  onPressed: busy || worker == null ||
+                    !enrolled.any((w) => w['id'] == worker) ? null : _send,
                   icon: const Icon(CupertinoIcons.paperplane, size: 17),
                   label: const Text('Review exact request'))),
               ])),
