@@ -13,5 +13,7 @@
 .desktop-screen img{width:100%;height:100%;object-fit:contain;display:block;position:absolute;inset:0}
 .desktop-screen p{color:#d3dfe5;text-align:center;max-width:300px;padding:20px;font-size:13px}
 .desktop-trackpad{min-height:154px;border:1px dashed #80b4bd;border-radius:12px;background:linear-gradient(145deg,#e8f4f3,#f3f7f7);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;touch-action:none;user-select:none;cursor:crosshair;color:#234957;margin:13px 0 15px;outline-offset:4px}
+.desktop-screen:fullscreen{aspect-ratio:auto;width:100vw;height:100vh;min-height:100vh;border-radius:0;background:#06080a}
+.desktop-screen:fullscreen img{width:100%;height:100%;object-fit:contain}
 .desktop-trackpad:active{background:#d4ebe8}.desktop-trackpad small{color:#758e96;font-size:11px}.desktop-key-row{gap:7px;margin:14px 0 18px}.desktop-key-row button{min-width:85px;flex:1}.desktop-pair,.desktop-text-row{display:grid;gap:8px;margin:12px 0}.desktop-pair input{max-width:250px;letter-spacing:.18em}.desktop-text-row textarea{resize:vertical;max-height:140px}.desktop-text-row .button{justify-self:start}
 @media(max-width:1040px){.desktop-layout{grid-template-columns:1fr}}
