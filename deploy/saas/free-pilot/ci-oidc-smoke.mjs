@@ -74,7 +74,19 @@ for(const name of expected){
       "; created="+createdNames.has(name)+", assigned="+linkedNames.has(name));
 }
 console.log("Keycloak custom client scopes verified as created and linked.");
-
+const users=await request("/auth/admin/realms/oagent/users?username=pilot-owner",
+  {authorization:adminAuth});
+if(users.status!==200||!Array.isArray(users.body)||users.body.length!==1)
+  throw Error("Synthetic CI pilot owner was not imported");
+const owner=users.body[0];
+const credentials=await request("/auth/admin/realms/oagent/users/"+
+  encodeURIComponent(owner.id)+"/credentials",{authorization:adminAuth});
+if(credentials.status!==200||!Array.isArray(credentials.body))
+  throw Error("CI pilot owner credentials metadata inaccessible");
+console.log("CI owner import: enabled="+(owner.enabled===true)+
+  ", requiredActions="+JSON.stringify((owner.requiredActions||[])
+    .filter(x=>["UPDATE_PASSWORD","VERIFY_EMAIL","UPDATE_PROFILE","CONFIGURE_TOTP"].includes(x)))+
+  ", hasPasswordCredential="+credentials.body.some(x=>x.type==="password"));
 const form=new URLSearchParams({
   grant_type:"password",client_id:"oagent-web",username:"pilot-owner",
   password:secret,scope:"openid oagent-read oagent-operate",
@@ -82,6 +94,12 @@ const form=new URLSearchParams({
 const tokenEndpoint="/auth/realms/oagent/protocol/openid-connect/token";
 const token=await request(tokenEndpoint,{method:"POST",body:form});
 if(token.status!==200){
+  const d=String(token.body?.error_description||"");
+  const category=/Account is not fully set up/i.test(d)?"required user action":
+    /Invalid user credentials/i.test(d)?"invalid user credentials":
+    /Account disabled/i.test(d)?"account disabled":
+    /User is temporarily disabled/i.test(d)?"user temporarily disabled":"unknown";
+  console.log("CI OAuth invalid_grant classification: "+category);
   // Diagnostic probes are CI-only. Print only known public scope names,
   // HTTP statuses, error codes and presence/absence of required scopes.
   const options=["openid","openid profile","openid oagent-read",
