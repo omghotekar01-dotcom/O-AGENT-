@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {Pool} from "pg";
-import {migrate,withIdentity,withTenant,audit,assertTenantDatabaseSecurity} from "../src/store.mjs";
+import {migrate,withIdentity,withTenant,audit,assertTenantDatabaseSecurity,pruneEphemeralAuthenticationData} from "../src/store.mjs";
 import {startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,updateCapabilities,
   heartbeat,createRun,listRuns,runDetail,listApprovals,decideApproval,claimRun,
   finishRun,requestToolApproval,toolApprovalStatus,cancelRun,
@@ -185,6 +185,23 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
             {confirm:"MARK_INTERRUPTED_RUN_FAILED"}));
         assert.deepEqual(recovered,{runId:interrupted.runId,
           status:"failed",replayed:false});
+        const staleNonce="expired-"+randomUUID();
+        await admin.query(
+          "INSERT INTO device_replay_nonces(device_id,nonce,expires_at) VALUES($1,$2,now()-interval '1 minute')",
+          [device.deviceId,staleNonce]);
+        const stalePair=await startEnrollment(pool,{
+          name:"Expired test pairing",publicKeyPem:keys.publicKeyPem,
+        },sha256("expired-source-"+randomUUID()));
+        await admin.query(
+          "UPDATE pending_devices SET expires_at=now()-interval '1 minute' WHERE token_hash=$1",
+          [sha256(stalePair.pairingToken)]);
+        const pruned=await pruneEphemeralAuthenticationData(pool);
+        assert.ok(pruned.expiredNonces>=1);
+        assert.ok(pruned.expiredEnrollmentRequests>=1);
+        const retained=await admin.query(
+          "SELECT count(*)::int AS count FROM device_replay_nonces WHERE nonce=$1",
+          [staleNonce]);
+        assert.equal(retained.rows[0].count,0);
         const direct=await pool.query("SELECT count(*)::int AS count FROM runs");
         assert.equal(direct.rows[0].count,0,
           "FORCE RLS without a scoped transaction denies all tenant runs");
