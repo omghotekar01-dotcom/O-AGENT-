@@ -98,6 +98,8 @@ public static class OAgentUserInput {
   [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point p);
   [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
+  [DllImport("user32.dll")] private static extern uint GetClipboardSequenceNumber();
+  public static uint ClipboardVersion() { return GetClipboardSequenceNumber(); }
   [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
   [DllImport("user32.dll")] private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
   [StructLayout(LayoutKind.Sequential)] private struct Input {
@@ -255,17 +257,26 @@ try {
                         Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
                         Add-Type -AssemblyName System.Drawing -ErrorAction Stop
                         $imageBytes = [Convert]::FromBase64String([string]$a.base64)
-                        $stream = New-Object System.IO.MemoryStream (,$imageBytes)
+                        $stream = New-Object System.IO.MemoryStream -ArgumentList (,$imageBytes)
                         $image = $null
+                        $clipboardVersion = $null
                         try {
                             $image = [System.Drawing.Image]::FromStream($stream)
                             [System.Windows.Forms.Clipboard]::SetImage($image)
+                            $clipboardVersion = [OAgentUserInput]::ClipboardVersion()
                             [OAgentUserInput]::Shortcut('paste')
-                            # Do not leave a sensitive screenshot on the
-                            # Windows clipboard after the paste event.
+                            # Let the target application process its paste.
                             Start-Sleep -Milliseconds 2500
-                            [System.Windows.Forms.Clipboard]::Clear()
                         } finally {
+                            # Only clear if the clipboard still contains our
+                            # content. Do not wipe something copied meanwhile.
+                            if ($null -ne $clipboardVersion) {
+                                try {
+                                    if ([OAgentUserInput]::ClipboardVersion() -eq $clipboardVersion) {
+                                        [System.Windows.Forms.Clipboard]::Clear()
+                                    }
+                                } catch { }
+                            }
                             if ($image) { $image.Dispose() }
                             $stream.Dispose()
                             [Array]::Clear($imageBytes, 0, $imageBytes.Length)
