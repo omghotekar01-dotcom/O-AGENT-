@@ -55,3 +55,10 @@ test("native Web Push VAPID keys are EC-P256, generated locally without a paid v
   assert.match(script,/OAGENT_VAPID_PUBLIC_KEY/);
   assert.match(script,/OAGENT_VAPID_PRIVATE_KEY/);
 });
+
+test("free pilot exposes a single private start command, never Funnel",()=>{
+  const program=read("start.mjs");
+  assert.match(program,/startFreePilot/);
+  assert.match(program,/127\.0\.0\.1:8791/);
+  assert.doesNotMatch(program,/run\("tailscale",\["funnel"/);
+});
