@@ -30,7 +30,7 @@ test("free-pilot doctor checks real prerequisites without revealing credentials"
     read:async()=>secrets,statFile:async()=>({mode:0o100600}),
     fetchImpl:fakeFetch,nodeVersion:"22.13.0"});
   assert.equal(r.ready,true,JSON.stringify(r.checks));
-  assert.equal(r.checks.length,7);
+  assert.equal(r.checks.length,8);
   const message=formatDoctor(r);
   assert.match(message,/Private pilot prerequisites/);
   assert.doesNotMatch(message,/a{20}|password:|PRIVATE KEY/);
