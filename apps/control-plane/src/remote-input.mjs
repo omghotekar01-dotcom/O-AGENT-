@@ -19,6 +19,14 @@ function validateAction(input) {
         Math.abs(dy) > 150) throw new DomainError(400, "Pointer delta out of range");
     return { type, dx, dy };
   }
+  if (type === "tap") {
+    if (!Number.isSafeInteger(input.x) || !Number.isSafeInteger(input.y) ||
+        input.x < 0 || input.x > 10000 ||
+        input.y < 0 || input.y > 10000 ||
+        !["left","right","double"].includes(input.button))
+      throw new DomainError(400, "Tap coordinates or button invalid");
+    return {type,x:input.x,y:input.y,button:input.button};
+  }
   if (type === "click") {
     if (!["left", "right", "double"].includes(input.button))
       throw new DomainError(400, "Invalid mouse button");
@@ -53,9 +61,11 @@ function validateAction(input) {
  * without a fresh opted-in browser screen capture and paired Windows helper.
  */
 export class RemoteInput {
-  constructor({ now = () => Date.now(), captureFresh = () => false } = {}) {
+  constructor({ now = () => Date.now(), captureFresh = () => false,
+      captureDisplay = () => false } = {}) {
     this.now = now;
     this.captureFresh = captureFresh;
+    this.captureDisplay = captureDisplay;
     this.session = null;
   }
   current() {
@@ -197,6 +207,9 @@ export class RemoteInput {
     if (now - s.lastPoll >= HEARTBEAT_TTL)
       throw new DomainError(409, "Windows input helper disconnected");
     const value = validateAction(input);
+    if (value.type === "tap" && !this.captureDisplay())
+      throw new DomainError(409,
+        "Tap-to-click requires a full-display share. Use the relative trackpad for windows or tabs.");
     // The phone may generate many small trackpad movements before the visible
     // Windows helper polls. Merge ONLY adjacent movements: never skip a click,
     // key or text action between moves, and never reorder inputs.
