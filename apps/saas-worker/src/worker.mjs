@@ -73,9 +73,9 @@ export class SignedCloudWorker {
     return result;
   }
   async initialize(){
-    await realpath(this.root);
+    const enrolledRoot=await realpath(this.root);
     await this.api("/v1/device/capabilities",
-      {body:{capabilities:supported(this.env)}});
+      {body:{capabilities:supported(this.env),workspaceRoot:enrolledRoot}});
   }
   async execute(run){
     if(!run?.id||!run.leaseToken)throw fail("Missing server-issued run lease");
