@@ -116,6 +116,10 @@ jobs:
       - name: Show static gateway errors on failure (not account secrets)
         if: failure()
         run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=80 gateway
+      - name: Show identity startup failure classification (never display credential values)
+        if: failure()
+        run: |
+          docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml logs --no-color --tail=120 identity | grep -E 'Permission denied|FileNotFoundException|Failed to start|ERROR.*realm import' || true
       - name: Show container status on failure (never print environment secrets)
         if: failure()
         run: docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml ps

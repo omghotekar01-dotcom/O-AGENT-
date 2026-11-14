@@ -20,6 +20,20 @@ services:
       timeout: 5s
       retries: 20
     networks: [private]
+  # One-shot no-network copy into a private volume readable by Keycloak uid
+  # 1000. Host-generated owner password stays 0600 outside Docker build context.
+  realm-init:
+    image: busybox:1.37
+    restart: "no"
+    read_only: true
+    network_mode: none
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN"]
+    command: ["sh","-ec","cp /incoming/realm.json /out/oagent-realm.json && chown 1000:0 /out/oagent-realm.json && chmod 0400 /out/oagent-realm.json"]
+    volumes:
+      - ./.private/oagent-realm.json:/incoming/realm.json:ro
+      - pilot_realm:/out
   identity:
     image: quay.io/keycloak/keycloak:26.4.0
     restart: unless-stopped
@@ -39,9 +53,10 @@ services:
       OAGENT_ORIGIN: ${OAGENT_ORIGIN:?Missing Tailnet origin}
       OAGENT_OWNER_PASSWORD: ${OAGENT_OWNER_PASSWORD:?Missing initial owner password}
     volumes:
-      - ./.private/oagent-realm.json:/opt/keycloak/data/import/oagent-realm.json:ro
+      - pilot_realm:/opt/keycloak/data/import:ro
     depends_on:
       db: {condition: service_healthy}
+      realm-init: {condition: service_completed_successfully}
     networks: [private]
   migrate:
     build:
@@ -113,3 +128,4 @@ networks:
   private: {driver: bridge}
 volumes:
   pilot_pg:
+  pilot_realm:

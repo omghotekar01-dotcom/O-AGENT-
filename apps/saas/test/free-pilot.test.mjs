@@ -92,3 +92,14 @@ test("private realm renderer inserts generated owner password and HTTPS redirect
   const compose=read("compose.yaml");
   assert.match(compose,/\.private\/oagent-realm\.json:\/opt\/keycloak/);
 });
+
+test("one-shot private realm copy stays isolated and readable only by Keycloak uid",()=>{
+  const compose=read("compose.yaml");
+  assert.match(compose,/realm-init:\n    image: busybox:1\.37/);
+  assert.match(compose,/network_mode: none/);
+  assert.match(compose,/cap_add: \["CHOWN"\]/);
+  assert.match(compose,/chown 1000:0 \/out\/oagent-realm\.json/);
+  assert.match(compose,/chmod 0400 \/out\/oagent-realm\.json/);
+  assert.match(compose,/pilot_realm:\/opt\/keycloak\/data\/import:ro/);
+  assert.doesNotMatch(compose,/\.private\/oagent-realm\.json:\/opt\/keycloak/);
+});
