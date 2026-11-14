@@ -8,7 +8,7 @@ export const createPool=config=>new Pool({
   connectionTimeoutMillis:5000,idleTimeoutMillis:30000,
   application_name:"oagent_saas",
 });
-const migrationFiles=["001_init.sql","002_legacy_upgrade.sql"];
+const migrationFiles=["001_init.sql","002_legacy_upgrade.sql","003_team_workspaces.sql"];
 export async function migrate(pool) {
   const migrations=await Promise.all(migrationFiles.map(async name=>{
     const sql=await readFile(fileURLToPath(new URL("../sql/"+name,import.meta.url)),"utf8");
@@ -60,29 +60,48 @@ export async function withTenant(pool,tenantId,fn) {
  * one private workspace per OIDC identity; org membership must be implemented
  * before advertising shared-enterprise workspaces.
  */
-export async function withIdentity(pool,identity,fn) {
-  if(!identity || typeof identity.issuer!=="string" ||
-     typeof identity.subject!=="string")
+export async function withIdentity(pool,identity,fn,{workspaceId=null,requiredRole="viewer"}={}) {
+  if(!identity || typeof identity.issuer!=="string" || !identity.issuer ||
+     typeof identity.subject!=="string" || !identity.subject)
     throw Object.assign(Error("Verified identity required"),{status:401});
+  const levels={viewer:1,operator:2,owner:3};
+  if(!Object.hasOwn(levels,requiredRole))
+    throw Error("Invalid team permission requirement");
+  if(workspaceId!=null && !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(workspaceId))
+    throw Object.assign(Error("Invalid workspace selection"),{status:400});
   const client=await pool.connect();
   try{
     await client.query("BEGIN");
-    // Serialize same-subject first login and avoid orphan tenant creation.
+    await client.query("SELECT set_config('oagent.identity_issuer',$1,true)",[identity.issuer]);
+    await client.query("SELECT set_config('oagent.identity_subject',$1,true)",[identity.subject]);
+    // Serialize same-subject first login; target membership is separately
+    // enforced for every request, not inferred from a tenant header.
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",[
-      identity.issuer + "\n" + identity.subject]);
-    let found=await client.query(
+      identity.issuer+"\\n"+identity.subject]);
+    const found=await client.query(
       "SELECT tenant_id FROM identities WHERE issuer=$1 AND subject=$2",
       [identity.issuer,identity.subject]);
-    let tenantId=found.rows[0]?.tenant_id;
-    if(!tenantId){
-      tenantId=randomUUID();
-      await client.query("INSERT INTO tenants(id) VALUES($1)",[tenantId]);
+    let homeTenant=found.rows[0]?.tenant_id;
+    if(!homeTenant){
+      homeTenant=randomUUID();
+      await client.query("INSERT INTO tenants(id) VALUES($1)",[homeTenant]);
       await client.query(
         "INSERT INTO identities(issuer,subject,tenant_id) VALUES($1,$2,$3)",
-        [identity.issuer,identity.subject,tenantId]);
+        [identity.issuer,identity.subject,homeTenant]);
+      await client.query("SELECT set_config('oagent.tenant_id',$1,true)",[homeTenant]);
+      await client.query(
+        "INSERT INTO tenant_members(tenant_id,issuer,subject,role) VALUES($1,$2,$3,'owner')",
+        [homeTenant,identity.issuer,identity.subject]);
     }
+    const tenantId=workspaceId||homeTenant;
     await client.query("SELECT set_config('oagent.tenant_id',$1,true)",[tenantId]);
-    const value=await fn(client,tenantId);
+    const member=await client.query(
+      "SELECT role FROM tenant_members WHERE tenant_id=$1 AND issuer=$2 AND subject=$3",
+      [tenantId,identity.issuer,identity.subject]);
+    const role=member.rows[0]?.role;
+    if(!role || levels[role]<levels[requiredRole])
+      throw Object.assign(Error("Workspace membership or permission required"),{status:403});
+    const value=await fn(client,tenantId,role);
     await client.query("COMMIT");
     return value;
   }catch(error){
@@ -90,6 +109,7 @@ export async function withIdentity(pool,identity,fn) {
     throw error;
   }finally{client.release();}
 }
+
 export async function audit(client,tenantId,actor,action,targetId,detail={}) {
   await client.query("INSERT INTO audit_events(tenant_id,actor,action,target_id,detail) VALUES($1,$2,$3,$4,$5::jsonb)",
     [tenantId,String(actor).slice(0,160),action,targetId,
@@ -105,12 +125,12 @@ export async function assertTenantDatabaseSecurity(pool) {
   // Table owners can change RLS policy, even with FORCE RLS.
   const owners=await pool.query(
     "SELECT relname FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r' AND pg_has_role(current_user,relowner,'MEMBER')",
-    [["devices","runs","approvals","run_events","audit_events","push_subscriptions"]]);
+    [["devices","runs","approvals","run_events","audit_events","push_subscriptions","tenant_members"]]);
   if(owners.rowCount)throw Error("Unsafe runtime role: owner of tenant tables");
   const guard=await pool.query(
     "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r'",
-    [["devices","runs","approvals","run_events","audit_events","push_subscriptions"]]);
-  if(guard.rowCount!==6||guard.rows.some(x=>!x.relrowsecurity||
+    [["devices","runs","approvals","run_events","audit_events","push_subscriptions","tenant_members"]]);
+  if(guard.rowCount!==7||guard.rows.some(x=>!x.relrowsecurity||
       !x.relforcerowsecurity))
     throw Error("Tenant isolation tables have missing or disabled FORCE RLS");
   return {ok:true};
