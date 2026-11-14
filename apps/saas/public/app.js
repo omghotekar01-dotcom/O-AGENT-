@@ -224,7 +224,13 @@ function renderApproval(node,approval){
   el.append(create("p","Device "+approval.device_id+" · Expires "+
     dateText(approval.expires_at),"entry-detail"));
   const actions=create("div",undefined,"entry-actions");
-  action(actions,"Review exact request",()=>approveDialog(approval),"primary");
+  const reviewButton=action(actions,"Review exact request",
+    ()=>approveDialog(approval),"primary");
+  if(approval.actionable===false){
+    reviewButton.disabled=true;
+    el.append(create("p",approval.unavailableReason||
+      "The original worker is unavailable. Refresh to recheck.","entry-detail"));
+  }
   el.append(actions);node.append(el);
 }
 async function approveDialog(item){
