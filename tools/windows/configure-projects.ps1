@@ -64,6 +64,26 @@ if ([string]::IsNullOrWhiteSpace($local)) {
   $localEnabled = $local -match '^[yY]'
 }
 $config | Add-Member -NotePropertyName 'CodexLocalEnabled' -NotePropertyValue $localEnabled -Force
+
+Write-Host ''
+Write-Host 'OFFICIAL NATIVE AI AGENT SDKS (optional, no separate O-AGENT API keys)' -ForegroundColor Cyan
+Write-Host 'Connect your existing, signed-in Claude Code and GitHub Copilot SDK sessions.'
+Write-Host 'Both require their official SDK to be installed and an authorized provider account.'
+Write-Host 'Discovery shares only session ID, short title and path within the enrolled folder.'
+Write-Host 'No full transcripts or private browser sessions are imported.'
+Write-Host 'The phone still asks you to approve each new supervised agent turn.'
+foreach ($provider in @(
+    @{ Name = 'Claude Agent SDK'; Setting = 'ClaudeSdkEnabled' },
+    @{ Name = 'GitHub Copilot SDK'; Setting = 'CopilotSdkEnabled' }
+)) {
+  $current = 'N'
+  if (($config.PSObject.Properties.Name -contains $provider.Setting) -and
+      $config.($provider.Setting) -eq $true) { $current = 'Y' }
+  $answer = Read-Host ("Enable " + $provider.Name + " saved-session bridge? [y/N] (previous: " + $current + ")")
+  $allowed = if ([string]::IsNullOrWhiteSpace($answer)) { $current -eq 'Y' }
+             else { $answer -match '^[yY]' }
+  $config | Add-Member -NotePropertyName $provider.Setting -NotePropertyValue ([bool]$allowed) -Force
+}
 Save-OAgentConfig $config
 
 Write-Host ''
@@ -72,3 +92,5 @@ Write-Host 'To authorize Codex CLI once, run: codex login'
 Write-Host 'To inspect available Codex tasks: codex cloud list --json --limit 20'
 
 Write-Host 'Codex CLI / IDE sessions will appear on the phone after the next successful worker sync, even if Codex Cloud tasks are empty.' -ForegroundColor Cyan
+Write-Host 'Claude/Copilot native SDK sessions will appear only when the matching SDK is installed and authenticated.'
+Write-Host 'This does not access arbitrary ChatGPT Work or consumer website conversations.'
