@@ -118,6 +118,12 @@
                 <button class="button secondary" type="button" data-desktop-action="shortcut:save">Save</button>
               </div>
               <div class="desktop-text-row"><label for="desktopTypeText">Type into focused laptop window</label><textarea id="desktopTypeText" rows="2" maxlength="300" placeholder="Test-only text — never enter passwords, tokens or payment details"></textarea><button class="button primary" id="desktopSendText" type="button">Type on laptop</button></div>
+              <div class="desktop-text-row">
+                <label for="desktopImageFile">Paste a selected phone/computer screenshot into the focused laptop app</label>
+                <input id="desktopImageFile" type="file" accept="image/png,image/jpeg" aria-label="Select an image for laptop paste">
+                <button class="button secondary" id="desktopPasteImage" type="button">Paste selected image</button>
+                <p class="hint">PNG or JPEG, up to 1.5 MB. The Windows clipboard is cleared after the paste unless you copied something else.</p>
+              </div>
               <p class="hint" id="desktopInputFeedback">Input unavailable until the laptop is sharing and a visible helper is paired.</p>
               <button class="button danger full" id="desktopStopInput" type="button">Stop remote input immediately</button>
             </section>
