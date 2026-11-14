@@ -10,6 +10,28 @@
   "accessTokenLifespan": 900,
   "clientScopes": [
     {
+      "name": "basic",
+      "description": "Signed stable OIDC subject for tenant isolation",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "Subject (sub)",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "lightweight.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "name": "oagent-read",
       "protocol": "openid-connect",
       "attributes": {

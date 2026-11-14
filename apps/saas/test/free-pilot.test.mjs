@@ -105,3 +105,11 @@ test("one-shot private realm copy stays isolated and readable only by Keycloak u
   assert.match(compose,/pilot_realm:\/opt\/keycloak\/data\/import:ro/);
   assert.doesNotMatch(compose,/\.private\/oagent-realm\.json:\/opt\/keycloak/);
 });
+
+test("Keycloak stable subject mapper is explicitly imported even for minimal private realms",()=>{
+  const realm=JSON.parse(read("oagent-realm.json"));
+  const scope=realm.clientScopes.find(x=>x.name==="basic");
+  assert.ok(scope);
+  assert.ok(scope.protocolMappers.some(m=>m.protocolMapper==="oidc-sub-mapper"&&
+    m.config["access.token.claim"]==="true"));
+});
