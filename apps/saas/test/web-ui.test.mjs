@@ -11,7 +11,7 @@ test("SaaS command center has unique ids and no broken control references",()=>{
   assert.equal(new Set(ids).size,ids.length);
   for(const item of script.matchAll(/\$\("([^"]+)"\)/g))
     assert.ok(ids.includes(item[1]),"Missing "+item[1]);
-  for(const page of ["overview","approvals","runs","devices","audit"]){
+  for(const page of ["overview","approvals","runs","devices","audit","team"]){
     assert.match(ui,new RegExp('data-panel="'+page+'"'));
     assert.match(ui,new RegExp('data-view="'+page+'"'));
   }
@@ -116,4 +116,18 @@ test("account data export uses owner-scoped JSON with no credentials",()=>{
   assert.match(ui,/id="exportAccount"/);
   assert.match(script,/\/v1\/account\/export/);
   assert.match(script,/URL\.revokeObjectURL/);
+});
+
+test("team UI uses verified workspace roles, one-use invites and no fake billing",()=>{
+  for(const id of ["workspaceSwitch","teamRole","joinTeamForm","teamAdmin",
+    "inviteTeamForm","teamMemberList","billingUsage"]){
+    assert.match(ui,new RegExp('id="'+id+'"'));
+  }
+  assert.match(script,/api\("\/v1\/team\/join"/);
+  assert.match(script,/api\("\/v1\/team\/workspaces"/);
+  assert.match(script,/api\("\/v1\/billing\/usage"/);
+  assert.match(script,/state\.role==="owner"/);
+  assert.match(script,/oagent_active_workspace/);
+  assert.match(ui,/Payment processing|payment|billing/i);
+  assert.doesNotMatch(script,/innerHTML|outerHTML|eval\(/);
 });
