@@ -252,6 +252,9 @@ export async function renewLease(client,deviceId,runId,leaseToken) {
   return leaseRun(client,null,deviceId,runId,leaseToken,async()=>{
     await client.query(
       "UPDATE runs SET lease_expires_at=now()+interval '2 minutes' WHERE id=$1",[runId]);
+    await client.query(
+      "UPDATE devices SET last_seen_at=now() WHERE id=$1 AND revoked_at IS NULL",
+      [deviceId]);
     return {leaseSeconds:120};
   });
 }
