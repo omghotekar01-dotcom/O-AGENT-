@@ -540,8 +540,11 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                       style: TextStyle(fontSize: 12,
                         color: OVisual.muted(context))),
                     const SizedBox(height: 6),
-                    Text('Previous request: ' +
-                      (native['lastPrompt']?.toString() ?? ''),
+                    Text(native['provenance'] == 'sdk_saved_session'
+                      ? 'Existing saved session · discovered through the '
+                        'signed-in provider SDK'
+                      : 'Previous request: ' +
+                        (native['lastPrompt']?.toString() ?? ''),
                       maxLines: 2, overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 12,
                         color: OVisual.muted(context))),
