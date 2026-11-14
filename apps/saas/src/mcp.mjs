@@ -3,6 +3,7 @@ import * as z from "zod/v4";
 import {withIdentity} from "./store.mjs";
 import {listRuns,listApprovals,runDetail,createRun} from "./operations.mjs";
 import {randomBytes} from "node:crypto";
+import {notifyTenant} from "./push.mjs";
 
 const content=result=>({content:[{type:"text",text:JSON.stringify(result)}]});
 /** Official MCP v2 stateless handler; app verifies OIDC + Origin before entry.
@@ -43,8 +44,13 @@ export function createMcp({pool,config}){
       if(!identity.scopes.has("oagent:operate"))
         return {isError:true,content:[{type:"text",text:"Write scope required"}]};
       const nonce=randomBytes(24).toString("base64url");
-      return content(await scoped((c,t)=>createRun(c,t,identity.subject,
-        args,"mcp_"+nonce)));
+      let tenantId;
+      const created=await scoped((c,t)=>{
+        tenantId=t;
+        return createRun(c,t,identity.subject,args,"mcp_"+nonce);
+      });
+      if(!created.reused)void notifyTenant(pool,tenantId,config).catch(()=>{});
+      return content(created);
     });
     return server;
   },{responseMode:"json"});
