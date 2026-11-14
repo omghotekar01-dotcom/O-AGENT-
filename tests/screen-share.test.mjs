@@ -22,7 +22,7 @@ test("screen capture is disabled until human-enabled owner session and only acce
   assert.equal(share.frameSince(1),null, "unchanged frame must return 204 in HTTP API");
   assert.equal(share.frameSince(0).sequence,1);
   assert.equal(share.status().fresh,true);
-  assert.throws(()=>share.publish(started.captureToken,frame),/Frame rate capped/);
+  assert.throws(()=>share.publish(started.captureToken,frame),/capture rate/);
   clock+=600;
   assert.equal(share.publish(started.captureToken,frame).frameSequence,2);
   clock+=4100;
