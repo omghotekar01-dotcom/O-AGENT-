@@ -19,7 +19,27 @@ Then either:
 - In your updated O-AGENT project folder, run `INSTALL-VSCODE-COMPANION.cmd`.
   It invokes the Visual Studio Code command-line installer.
 
-## Configure on the same laptop as O-AGENT
+## Recommended: connect from the O-AGENT sidebar (no keys to paste)
+
+1. On your trusted Windows laptop start **O-AGENT.cmd** once. Use the
+   same Windows account that originally configured O-AGENT.
+2. Open your exact project folder in VS Code. Install the new
+   **O-AGENT Workspace Companion 0.5.0** VSIX and open the **O-AGENT** icon
+   in the VS Code activity bar (left sidebar).
+3. Click **1 · Connect using Windows setup**. Review the modal and select
+   **Connect this laptop**. The extension decrypts the saved WORKER token
+   using the Windows account's existing DPAPI protection; it never prints
+   the token and stores it in VS Code SecretStorage.
+4. Confirm the **exact project folder** when prompted. The status changes
+   to **Connected**. The sidebar now provides **Allow edits for 30 minutes**
+   and **Stop sharing now** without requiring the Command Palette.
+
+Automatic import is intentionally restricted to VS Code **on the same
+Windows machine and same Windows user account**. Remote VS Code extension
+hosts and other operating systems must use the manual HTTPS path below.
+It does not take over Copilot Chat or other private provider sessions.
+
+## Manual or remote connection (advanced)
 
 1. Start `O-AGENT.cmd` and verify `http://127.0.0.1:8787/health` responds
    with the O-AGENT service information. If the launcher uses another port,
