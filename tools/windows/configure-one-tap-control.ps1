@@ -23,6 +23,22 @@ if ($choice -cne 'ENABLE' -and $choice -cne 'DISABLE') {
 $config | Add-Member -NotePropertyName 'RemoteControlTrusted' -NotePropertyValue ($choice -ceq 'ENABLE') -Force
 Save-OAgentConfig $config
 if ($choice -ceq 'DISABLE') {
+    # Revoke backend input immediately before shutting down the visible
+    # helper. Only the locally DPAPI-protected worker token is used.
+    try {
+        $port = 8787
+        $running = Get-OAgentPidState
+        if ($running -and $running.Port) { $port = [int]$running.Port }
+        if ($env:OAGENT_PORT) { $port = [int]$env:OAGENT_PORT }
+        $workerSecret = Unlock-OAgentSecret $config.WorkerTokenEncrypted
+        try {
+            $null = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$port/api/workers/remote-input/stop" -Headers @{
+                Authorization = "Bearer $workerSecret"
+            } -ContentType 'application/json' -Body (@{
+                workerId = [string]$config.WorkerId
+            } | ConvertTo-Json -Compress) -TimeoutSec 3
+        } finally { $workerSecret = $null }
+    } catch { } # Revocation by closing the helper still takes effect if backend is offline.
     # Close only our own enrolled trusted helper, never unrelated PowerShell windows.
     try {
         $helperPath = Join-Path $PSScriptRoot 'remote-control.ps1'
