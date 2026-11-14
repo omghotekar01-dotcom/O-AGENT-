@@ -7,7 +7,8 @@
   },
   "scripts": {
     "start": "node src/worker.mjs",
-    "check": "node --check src/worker.mjs"
+    "check": "node --check src/worker.mjs && node --check src/enroll.mjs",
+    "enroll": "node src/enroll.mjs"
   },
   "optionalDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.322",
