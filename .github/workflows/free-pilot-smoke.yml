@@ -7,6 +7,8 @@ on:
     branches: ["feat/saas-secure-control-plane-20261114"]
     paths:
       - ".github/workflows/free-pilot-smoke.yml"
+      - "deploy/saas/free-pilot/oagent-realm.json"
+      - "deploy/saas/free-pilot/ci-oidc-smoke.mjs"
 permissions:
   contents: read
 jobs:

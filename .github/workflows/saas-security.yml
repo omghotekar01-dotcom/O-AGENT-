@@ -51,6 +51,8 @@ jobs:
           node-version: "22"
       - name: Install pinned SaaS dependencies
         run: npm --prefix apps/saas install --no-audit --no-fund
+      - name: Audit known high/critical production dependency vulnerabilities
+        run: npm --prefix apps/saas audit --omit=dev --audit-level=high
       - name: Check new service syntax
         run: npm --prefix apps/saas run check
       - name: Check isolated worker syntax
