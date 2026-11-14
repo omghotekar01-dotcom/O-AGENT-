@@ -725,6 +725,13 @@ async function localFrameTick(){
     }
   }finally{localCaptureBusy=false;}
 }
+$("desktopFullscreen").addEventListener("click",async()=>{
+  try{
+    const panel=$("desktopScreen");
+    if(document.fullscreenElement)await document.exitFullscreen();
+    else await panel.requestFullscreen();
+  }catch(error){notice("Fullscreen unavailable: "+error.message);}
+});
 $("desktopChooseScreen").addEventListener("click",async()=>{
   if(localCapture)return;
   if(!navigator.mediaDevices?.getDisplayMedia){
