@@ -5,6 +5,7 @@ on:
       - "apps/saas/**"
       - "apps/saas-worker/**"
       - "apps/gateway/src/provider-turn.mjs"
+      - "apps/gateway/src/codex-turn.mjs"
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
   push:
@@ -13,6 +14,7 @@ on:
       - "apps/saas/**"
       - "apps/saas-worker/**"
       - "apps/gateway/src/provider-turn.mjs"
+      - "apps/gateway/src/codex-turn.mjs"
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
 permissions:
