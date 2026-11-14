@@ -251,3 +251,29 @@ export async function toolApprovalStatus(client,deviceId,approvalId) {
   return {state:rows[0].status==="pending"&&new Date(rows[0].expires_at).getTime()<=Date.now()?
     "expired":rows[0].status};
 }
+
+const EVENT_KINDS=new Set(["agent_delta","status","turn_completed","warning"]);
+export async function appendRunEvent(client,tenantId,deviceId,runId,body) {
+  if(!EVENT_KINDS.has(body?.kind)||typeof body.text!=="string"||
+      body.text.length>1800||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(body.text))
+    throw httpError(400,"Invalid provider event");
+  return leaseRun(client,tenantId,deviceId,runId,body.leaseToken,async()=>{
+    const count=await client.query(
+      "SELECT count(*)::int AS count FROM run_events WHERE run_id=$1",[runId]);
+    if(count.rows[0].count>=500)throw httpError(429,"Provider event quota exceeded");
+    const {rows}=await client.query(
+      "INSERT INTO run_events(tenant_id,run_id,kind,text) VALUES($1,$2,$3,$4) RETURNING id",
+      [tenantId,runId,body.kind,body.text]);
+    return {recorded:true,eventId:rows[0].id};
+  });
+}
+export async function listRunEvents(client,runId,after=0) {
+  if(!isUUID(runId)||!Number.isSafeInteger(after)||after<0)
+    throw httpError(400,"Invalid event cursor or run ID");
+  const run=await client.query("SELECT id FROM runs WHERE id=$1",[runId]);
+  if(!run.rowCount)throw httpError(404,"Run not found");
+  const {rows}=await client.query(
+    "SELECT id,kind,text,created_at FROM run_events WHERE run_id=$1 AND id>$2 ORDER BY id LIMIT 100",
+    [runId,after]);
+  return {events:rows,nextCursor:rows.length?rows.at(-1).id:after};
+}
