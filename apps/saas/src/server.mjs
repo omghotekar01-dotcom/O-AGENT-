@@ -127,8 +127,19 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         // The official v2 handler is stateless. Identity is verified before
         // anything is forwarded; MCP never receives the raw bearer token.
         const body=method==="GET"?undefined:Readable.toWeb(req);
+        // Internal MCP tools must never receive the original bearer token,
+        // cookies, proxy headers or arbitrary untrusted request metadata.
+        const protocolHeaders={
+          accept:String(req.headers.accept||"application/json, text/event-stream"),
+          ...(req.headers["content-type"]?
+            {"content-type":String(req.headers["content-type"])}:{}),
+          ...(req.headers["mcp-protocol-version"]?
+            {"mcp-protocol-version":String(req.headers["mcp-protocol-version"])}:{}),
+          ...(req.headers["mcp-session-id"]?
+            {"mcp-session-id":String(req.headers["mcp-session-id"])}:{}),
+        };
         const request=new Request(config.publicOrigin+path,{
-          method,headers:req.headers,body,
+          method,headers:protocolHeaders,body,
           ...(body?{duplex:"half"}:{}),
         });
         const answer=await mcp.fetch(request,{authInfo:{
