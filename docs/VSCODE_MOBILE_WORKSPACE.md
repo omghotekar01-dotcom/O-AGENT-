@@ -1,4 +1,4 @@
-# O-AGENT 0.8.0 — real VS Code workspace browser and text editor
+# O-AGENT 0.9.0 — workspace file browser and CRUD operations
 
 ## What is implemented
 
@@ -7,8 +7,8 @@ open supported text source files, edit their text, review a diff preview,
 and request that VS Code save a file back to the laptop.
 
 This is not a GitHub website approximation or a Copilot Chat takeover.
-It requires **both** an updated Windows backend, an updated VS Code 0.3.0
-companion, and the 0.8.0 mobile application.
+It requires **both** an updated Windows backend, an updated VS Code 0.4.0
+companion, and the 0.9.0 mobile application.
 
 ## On the laptop: open the right folder
 
@@ -67,7 +67,9 @@ task database, events or chat history, and expire after 90 seconds.
 - **No unsupported claim**: The extension does not control VS Code Copilot
   Chat, Claude, arbitrary ChatGPT sessions, terminals or all device files.
 - Supports text files up to 48,000 characters, one existing file at a time.
-  It cannot create/delete/rename files or save binary media.
+  It can create new text files, rename existing files within the same folder,
+and request a move to Trash with a second local confirmation.
+It cannot create/delete/rename binary media or arbitrary device folders.
 - Not an RDP editor, syntax-aware merge tool or full Git diff viewer. It
   previews proposed text changes and only saves to VS Code after consent.
 - No arbitrary path traversal, external symlink access or access to hidden
