@@ -14,7 +14,7 @@ The laptop worker can now use the **official Claude Agent SDK** and **GitHub Cop
 
 ## Physical acceptance
 
-1. On your personal machine, sign into the official Claude Code/Copilot CLI account and install its optionally pinned SDK, using the same Windows account as O-AGENT.
+1. On your Windows laptop, stop O-AGENT. Double-click `CONFIGURE-PROJECTS.cmd`, keep your existing project settings and opt in to **Claude Agent SDK** and/or **GitHub Copilot SDK**. Double-click `INSTALL-NATIVE-AGENT-SDKS.cmd`, read the package list, then type `INSTALL` to install the pinned SDK packages locally. Sign in to your official provider account on this same Windows profile; subscriptions or provider usage limits still apply.
 2. Set the enrolled workspace root to the parent of the projects you specifically want to share. Enable each provider capability separately; unrelated directories must stay hidden.
 3. Start O-AGENT and open Android **Remote → Continue native provider sessions**. Existing saved sessions from the enrolled root should appear after successful metadata sync.
 4. Choose a harmless session, enter a read-only prompt, inspect the exact provider, worker, folder and session ID, and approve the run. Confirm the actual provider resumes the same session.
