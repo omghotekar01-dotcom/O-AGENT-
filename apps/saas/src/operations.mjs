@@ -184,9 +184,10 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
     if(prior.rows[0].action_hash!==digest)throw httpError(409,"Idempotency key reused for another run");
     return {runId:prior.rows[0].id,status:prior.rows[0].status,reused:true};
   }
-  // Per-account cap prevents MCP or compromised clients from flooding
-  // approvals and creating unbounded model-provider spend. One OIDC identity
-  // owns one tenant in v1, and withIdentity serializes that subject.
+  // All team members share this tenant's quota. Serialize quota checks
+  // across their distinct OIDC identities to prevent concurrent overspend.
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+    ["oagent.tenant.runquota:"+tenantId]);
   const quota=await client.query(
     "SELECT count(*) FILTER (WHERE status='waiting_for_approval')::int AS pending, count(*) FILTER (WHERE created_at>now()-interval '24 hours')::int AS daily FROM runs");
   if(quota.rows[0].pending>=30)
