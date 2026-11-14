@@ -42,7 +42,11 @@ async function readLocalEnrollment({
   return {url:origin.origin,token};
 }
 
-async function verifyLocalBackend(url,{fetchImpl = fetch}={}) {
+async function verifyLocalBackend(url,{workerToken,fetchImpl = fetch}={}) {
+  if (typeof workerToken !== "string" || workerToken.length < 24 ||
+      /[\u0000-\u001f]/.test(workerToken)) {
+    throw Error("A valid local Windows worker credential is required.");
+  }
   const origin=parseBackendOrigin(url);
   if(origin.hostname!=="127.0.0.1" || origin.protocol!=="http:") {
     throw Error("Automatic setup only supports the loopback backend.");
@@ -61,6 +65,25 @@ async function verifyLocalBackend(url,{fetchImpl = fetch}={}) {
   if(status.service!=="oagent-control-plane" || status.status!=="ok") {
     throw Error("The local port is not serving a verified O-AGENT backend.");
   }
+  // Authenticate the WORKER token without registering a worker or changing
+  // saved VS Code credentials. Never include secrets in errors.
+  let probe;
+  try {
+    probe=await fetchImpl(new URL("/api/workers/credential-check",origin),{
+      method:"GET",redirect:"error",cache:"no-store",
+      headers:{authorization:"Bearer "+workerToken},
+      signal:AbortSignal.timeout(7000),
+    });
+  } catch {
+    throw Error("Could not verify the local worker credential. Restart O-AGENT.cmd and try again.");
+  }
+  if(probe.status===404) throw Error("O-AGENT backend needs the latest update. Restart O-AGENT.cmd with updated files.");
+  if(probe.status===401 || probe.status===403)
+    throw Error("Saved Windows WORKER token does not match the running backend. Restart O-AGENT.cmd with the same Windows account.");
+  if(!probe.ok)throw Error("O-AGENT credential check failed (HTTP "+probe.status+").");
+  const proof=await probe.json().catch(()=>({}));
+  if(proof.authenticated!==true || proof.role!=="worker")
+    throw Error("O-AGENT did not verify the saved worker credential.");
   return true;
 }
 module.exports={readLocalEnrollment,verifyLocalBackend};
