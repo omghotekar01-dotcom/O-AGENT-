@@ -364,7 +364,16 @@ const server = createServer(async (req, res) => {
 
     // A member's private AI token never unlocks owner remote-agent activity.
     if (req.method === "GET" && path === "/api/remote/overview") {
-      return send(res, 200, projectHub.remoteOverview());
+      return send(res, 200, {
+        ...projectHub.remoteOverview(),
+        // Only owner-authenticated readers see the actual consented capture
+        // and paired input state. Never claim that unpaired screen previews
+        // grant desktop control, or that saved chats imply active sessions.
+        screenStreaming: {
+          ...screenShare.status(),
+          input: remoteInput.status(),
+        },
+      });
     }
 
     // Unified, capability-aware project registry: no simulated external work.
