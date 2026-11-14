@@ -6,7 +6,7 @@ import { DomainError } from "./core.mjs";
 const TTL_MS = 90_000;
 const MAX_REQUESTS = 12;
 const MAX_FILE_CHARS = 48_000;
-const MAX_RESPONSE_BYTES = 90_000;
+const MAX_RESPONSE_BYTES = 260_000;
 const OPERATIONS = new Set(["list","read","write","create","rename","delete"]);
 function validPath(path, allowRoot = false) {
   return typeof path === "string" && path.length <= 350 &&
