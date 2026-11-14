@@ -47,3 +47,5 @@ The one-time GitHub Actions private-pilot smoke test uses an explicitly modified
 **Private first-login realm:** the starter now renders an ignored, permission-restricted `.private/oagent-realm.json` from the safe template using the locally generated password and HTTPS origin. Docker mounts this private file, not the committed template. Never commit or share the rendered file. The renderer refuses to overwrite a mismatched existing file and does not reimport/alter existing Keycloak user passwords after the first database initialization.
 
 **Realm mount security:** the first-start secret realm is copied by a one-time isolated, no-network helper into a Docker volume with mode `0400` owned by the non-root Keycloak UID. The private file stays `0600` on the host. This avoids making the generated password world-readable just to satisfy the container's file permissions.
+
+Docker builds explicitly ignore all local `.env.*`, `.private`, and encrypted backup files so container build contexts cannot accidentally package the owner's credential material.
