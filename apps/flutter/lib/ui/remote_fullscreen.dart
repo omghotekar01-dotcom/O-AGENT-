@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/controller.dart';
+import '../core/api_client.dart';
 
 /// Fullscreen viewer for an explicitly shared Windows desktop. Touch input is
 /// DISABLED until a visible local companion is paired with a one-time code.
