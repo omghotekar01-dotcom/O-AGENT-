@@ -25,6 +25,7 @@ test("SaaS config fails closed without HTTPS, explicit OIDC and database",()=>{
   env.DATABASE_URL="postgres://user:pass@localhost/db?sslmode=verify-full";
   assert.equal(readSaasConfig(env).publicOrigin,"https://app.example.com");
   assert.equal(readSaasConfig(env).issuer,"https://id.example.com");
+  assert.equal(readSaasConfig(env).requireVerifiedEmail,true);
   const login={
     ...env,OAGENT_OIDC_WEB_CLIENT_ID:"mobile-prod",
     OAGENT_OIDC_AUTHORIZE_URL:"https://id.example.com/auth",
@@ -63,6 +64,20 @@ test("OIDC validates issuer/audience/algorithms/client audience and scopes",asyn
   assert.equal(options.audience,config.audience);
   assert.deepEqual(options.algorithms,["RS256","ES256","PS256"]);
   await assert.rejects(()=>verifier(token,"oagent-operate"),/Insufficient/);
+  const pseudonymous=createOidcVerifier({...config,requireVerifiedEmail:false},{
+    jwksFactory:()=>({}),verify:async()=>({payload:{
+      sub:"owner-pseudonymous",azp:"mobile-prod",
+      scope:"oagent-read",email_verified:false,
+    }}),
+  });
+  assert.equal((await pseudonymous(token)).subject,"owner-pseudonymous");
+  const strict=createOidcVerifier({...config,requireVerifiedEmail:true},{
+    jwksFactory:()=>({}),verify:async()=>({payload:{
+      sub:"owner-pseudonymous",azp:"mobile-prod",
+      scope:"oagent-read",email_verified:false,
+    }}),
+  });
+  await assert.rejects(()=>strict(token),/not authorized/);
   await assert.rejects(()=>verifier("Bearer short"),/invalid bearer/);
   const invalid=createOidcVerifier(config,{
     jwksFactory:()=>({}),

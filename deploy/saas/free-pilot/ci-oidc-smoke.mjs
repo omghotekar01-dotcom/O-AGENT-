@@ -135,7 +135,9 @@ assert.ok(scopes.has("oagent-read"),"OIDC read scope missing");
 assert.ok(scopes.has("oagent-operate"),"OIDC operate scope missing");
 const access=token.body.access_token;
 const me=await request("/v1/me",{authorization:access});
-assert.equal(me.status,200,"OIDC access token was not accepted by O-AGENT API");
+assert.equal(me.status,200,
+  "OIDC access token rejected by SaaS API (HTTP "+me.status+
+  ", reason: "+String(me.body?.error||"unknown").slice(0,100)+")");
 assert.match(me.body.tenantId,/^[0-9a-f-]{36}$/);
 const audit=await request("/v1/audit",{authorization:access});
 assert.equal(audit.status,200,"Tenant-scoped audit API rejected genuine OIDC token");

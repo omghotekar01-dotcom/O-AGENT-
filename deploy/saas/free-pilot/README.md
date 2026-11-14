@@ -49,3 +49,6 @@ The one-time GitHub Actions private-pilot smoke test uses an explicitly modified
 **Realm mount security:** the first-start secret realm is copied by a one-time isolated, no-network helper into a Docker volume with mode `0400` owned by the non-root Keycloak UID. The private file stays `0600` on the host. This avoids making the generated password world-readable just to satisfy the container's file permissions.
 
 Docker builds explicitly ignore all local `.env.*`, `.private`, and encrypted backup files so container build contexts cannot accidentally package the owner's credential material.
+
+### Verified email policy
+The owner identity for this private pilot is the cryptographically verified OIDC subject, not a user-controlled email string. The pilot can use a pseudonymous owner without falsely marking a placeholder address as verified. Commercial runtime defaults to **requiring an explicitly verified email claim**; this is controlled with `OAGENT_REQUIRE_VERIFIED_EMAIL=1` and should remain enabled for public customer onboarding. This setting never bypasses access-token signature, issuer, audience, client allowlist or permissions.

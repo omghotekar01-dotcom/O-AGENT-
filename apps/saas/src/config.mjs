@@ -24,6 +24,11 @@ export function readSaasConfig(env = process.env) {
   absolute(issuerValue,"OAGENT_OIDC_ISSUER");
   // Explicit personal Tailnet-only mode; NEVER selected in commercial deployments.
   const localPilot=env.OAGENT_LOCAL_PILOT==="1";
+  // Signed subject identity, not a claimed email, is the tenant principal.
+  // Commercial deployments default to requiring email verification; a
+  // tailnet-only personal pilot may onboard a pseudonymous owner account.
+  const requireVerifiedEmail=env.OAGENT_REQUIRE_VERIFIED_EMAIL==="1"||
+    (!localPilot&&env.OAGENT_REQUIRE_VERIFIED_EMAIL!=="0");
   if(localPilot && (!/\.ts\.net$/i.test(publicUrl.hostname) || env.NODE_ENV==="test"))
     throw Error("Private pilot requires a non-test HTTPS Tailscale .ts.net origin");
   const requestedJwks=required(env,"OAGENT_OIDC_JWKS_URL");
@@ -81,7 +86,8 @@ export function readSaasConfig(env = process.env) {
   if (!Number.isSafeInteger(port) || port<1 || port>65535) throw Error("Invalid PORT");
   return Object.freeze({
     publicOrigin:publicUrl.origin, issuer:issuerValue, jwksUrl:jwksValue,
-    audience, clientIds, webAuth, databaseUrl:db.href, localPilot, push,
+    audience, clientIds, webAuth, databaseUrl:db.href, localPilot,
+    requireVerifiedEmail, push,
     host:env.HOST || "127.0.0.1", port,
     mode:env.NODE_ENV || "production",
   });

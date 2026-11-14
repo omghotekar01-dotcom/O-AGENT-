@@ -22,7 +22,8 @@ export function createOidcVerifier(config, {jwksFactory=createRemoteJWKSet,
     const clientId=claims.azp || claims.client_id;
     if(typeof clientId!=="string" || !config.clientIds.includes(clientId) ||
        typeof claims.sub!=="string" || claims.sub.length<1 ||
-       claims.sub.length>255 || claims.email_verified===false)
+       claims.sub.length>255 ||
+       (config.requireVerifiedEmail!==false && claims.email_verified!==true))
       throw Object.assign(Error("Access token client is not authorized"),{status:403});
     const scopes=new Set(typeof claims.scope==="string"?
       claims.scope.split(/\s+/).filter(Boolean):[]);
