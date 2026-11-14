@@ -6,7 +6,7 @@ import {resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {readSaasConfig} from "./config.mjs";
 import {createOidcVerifier} from "./oidc.mjs";
-import {createPool,withIdentity,withTenant} from "./store.mjs";
+import {createPool,withIdentity,withTenant,assertTenantDatabaseSecurity} from "./store.mjs";
 import {verifyDeviceHeaders} from "./device-crypto.mjs";
 import {createMcp} from "./mcp.mjs";
 import {
@@ -227,7 +227,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const config=readSaasConfig();
   const pool=createPool(config);
-  await pool.query("SELECT 1");
+  await assertTenantDatabaseSecurity(pool);
   const app=makeSaasServer({config,pool});
   app.server.listen(config.port,config.host,()=>console.log(
     "O-AGENT isolated SaaS control plane ready on "+config.host+":"+config.port));
