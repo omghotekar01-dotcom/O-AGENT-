@@ -334,7 +334,7 @@ async function connectFromLaptop() {
     });
     // Check that the local socket is a real O-AGENT instance before storing
     // any token. Local credential import never sends it to remote URLs.
-    await verifyLocalBackend(url);
+    await verifyLocalBackend(url,{workerToken:token});
     await contextRef.secrets.store(STORAGE_URL,url);
     await contextRef.secrets.store(STORAGE_TOKEN,token);
     vscode.window.showInformationMessage(
