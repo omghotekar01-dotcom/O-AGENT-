@@ -1,0 +1,56 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const ui=readFileSync(new URL("../public/index.html",import.meta.url),"utf8");
+const script=readFileSync(new URL("../public/app.js",import.meta.url),"utf8");
+const css=readFileSync(new URL("../public/style.css",import.meta.url),"utf8");
+
+test("SaaS command center has unique ids and no broken control references",()=>{
+  const ids=[...ui.matchAll(/id="([^"]+)"/g)].map(x=>x[1]);
+  assert.equal(new Set(ids).size,ids.length);
+  for(const item of script.matchAll(/\$\("([^"]+)"\)/g))
+    assert.ok(ids.includes(item[1]),"Missing "+item[1]);
+  for(const page of ["overview","approvals","runs","devices"]){
+    assert.match(ui,new RegExp('data-panel="'+page+'"'));
+    assert.match(ui,new RegExp('data-view="'+page+'"'));
+  }
+});
+test("provider activity stays sourced from real endpoints, not UI dummy data",()=>{
+  for(const path of ["/v1/me","/v1/devices","/v1/runs","/v1/approvals",
+    "/v1/devices/enrollments/inspect","/v1/devices/enrollments/approve",
+    "/v1/public-config"]){
+    assert.ok(script.includes(path),"Real endpoint missing: "+path);
+  }
+  assert.match(script,/Promise\.all/);
+  assert.match(script,/String\(approvals\.length\)/);
+  assert.doesNotMatch(script,/innerHTML|outerHTML|eval\(|new Function/);
+  assert.match(script,/createElement/);
+  assert.match(css,/prefers-reduced-motion/);
+});
+test("web login is PKCE S256, transient in-memory token, and state protected",()=>{
+  assert.match(script,/crypto\.subtle\.digest/);
+  assert.match(script,/code_challenge_method:"S256"/);
+  assert.match(script,/response_type:"code"/);
+  assert.match(script,/expected!==stateReturned/);
+  assert.match(script,/sessionStorage\.removeItem\("oagent_pkce_verifier"\)/);
+  assert.match(script,/history\.replaceState/);
+  assert.match(script,/accessToken=token\.access_token/);
+  assert.doesNotMatch(script,/localStorage\.setItem/);
+  assert.doesNotMatch(script,/sessionStorage\.setItem\("accessToken"/);
+});
+test("approvals require fresh canonical run detail and exact hashed decisions",()=>{
+  assert.match(script,/const run=await api\("\/v1\/runs\/"/);
+  assert.match(script,/expectedActionHash:item\.action_hash/);
+  assert.match(script,/run\.device_id!==item\.device_id/);
+  assert.match(script,/Date\.parse\(item\.expires_at\)<=Date\.now\(\)/);
+  assert.match(script,/approve:decision/);
+  assert.match(script,/approval recorded|Approval recorded/i);
+  assert.match(ui,/id="reviewDialog"/);
+});
+test("pairing never grants access without verified fingerprint and owner consent",()=>{
+  assert.match(script,/verified\.fingerprint!==button\.dataset\.fingerprint/);
+  assert.match(script,/await reviewExact/);
+  assert.match(script,/expectedFingerprint:verified\.fingerprint/);
+  assert.match(script,/sessionStorage\.removeItem\("oagent_pending_pair"\)/);
+  assert.match(ui,/id="pairPanel"/);
+});
