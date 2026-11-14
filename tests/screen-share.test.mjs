@@ -53,3 +53,20 @@ test("new frame arrives at responsive capture interval, stale frames never reuse
   now+=4001;
   assert.throws(()=>share.frameSince(2),/No fresh/);
 });
+
+
+test("capture source type is validated for direct single-monitor screen touch",()=>{
+  const sharing=new ScreenShare({now:()=>200000});
+  assert.throws(()=>sharing.start({displaySurface:"secret_window"}),
+    /Invalid selected/);
+  assert.throws(()=>sharing.start({displaySurface:"monitor",sourceWidth:20000}),
+    /Invalid selected/);
+  const session=sharing.start({
+    displaySurface:"monitor",sourceWidth:1920,sourceHeight:1080,
+  });
+  assert.equal(session.displaySurface,"monitor");
+  assert.equal(session.sourceWidth,1920);
+  assert.equal(session.sourceHeight,1080);
+  sharing.stop();
+  assert.equal(sharing.start().displaySurface,"unknown");
+});
