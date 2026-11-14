@@ -15,12 +15,14 @@ test("screen capture is disabled until human-enabled owner session and only acce
   assert.throws(()=>share.start(),/already active/);
   assert.throws(()=>share.publish("wrong",frame),/Invalid capture-session/);
   assert.throws(()=>share.publish(started.captureToken,Buffer.alloc(120)),/bounded JPEG/);
-  assert.throws(()=>share.publish(started.captureToken,Buffer.alloc(160001)),/bounded JPEG/);
+  assert.throws(()=>share.publish(started.captureToken,Buffer.alloc(240001)),/bounded JPEG/);
   const accepted=share.publish(started.captureToken,frame);
   assert.equal(accepted.frameSequence,1);
   assert.deepEqual(share.frame().bytes,frame);
+  assert.equal(share.frameSince(1),null, "unchanged frame must return 204 in HTTP API");
+  assert.equal(share.frameSince(0).sequence,1);
   assert.equal(share.status().fresh,true);
-  assert.throws(()=>share.publish(started.captureToken,frame),/Frame rate capped/);
+  assert.throws(()=>share.publish(started.captureToken,frame),/capture rate/);
   clock+=600;
   assert.equal(share.publish(started.captureToken,frame).frameSequence,2);
   clock+=4100;
@@ -36,4 +38,18 @@ test("capture lease expires on server without retaining stale screenshots",()=>{
   assert.equal(share.status().capturing,false);
   assert.throws(()=>share.frame(),/No fresh/);
   const newLease=share.start();assert.notEqual(newLease.captureToken,start.captureToken);
+});
+
+test("new frame arrives at responsive capture interval, stale frames never reused",()=>{
+  let now=100000;
+  const share=new ScreenShare({now:()=>now});
+  const started=share.start();
+  share.publish(started.captureToken,frame);
+  now+=179;
+  assert.throws(()=>share.publish(started.captureToken,frame),/capture rate/);
+  now+=2;
+  assert.equal(share.publish(started.captureToken,frame).frameSequence,2);
+  assert.equal(share.frameSince(2),null);
+  now+=4001;
+  assert.throws(()=>share.frameSince(2),/No fresh/);
 });

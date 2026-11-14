@@ -5,7 +5,7 @@ const PAIR_TTL = 2 * 60 * 1000;
 const CONTROL_TTL = 20 * 60 * 1000;
 const HEARTBEAT_TTL = 6000;
 const MAX_QUEUE = 48;
-const MIN_GAP = 30;
+const MIN_GAP = 18;
 const CODE_PATTERN = /^[0-9]{8}$/;
 
 function validateAction(input) {
@@ -32,6 +32,11 @@ function validateAction(input) {
     if (!["enter", "escape", "backspace", "tab", "up", "down", "left", "right"].includes(input.key))
       throw new DomainError(400, "Unsupported key");
     return { type, key: input.key };
+  }
+  if (type === "shortcut") {
+    if (!["copy","paste","cut","undo","redo","select_all","save","find"].includes(input.name))
+      throw new DomainError(400, "Unsupported keyboard shortcut");
+    return {type,name:input.name};
   }
   if (type === "text") {
     if (typeof input.text !== "string" || !input.text ||
@@ -73,6 +78,8 @@ export class RemoteInput {
       captureFresh: this.captureFresh(),
       requiresLocalPairing: true,
       mode: "explicit_windows_remote_input",
+      queueDepth: s?.queue.length ?? 0,
+      lastInputResult: s?.lastResult ?? null,
     };
   }
   prepare(workerId) {
@@ -86,7 +93,8 @@ export class RemoteInput {
     const now = this.now();
     this.session = { workerId, code, active: false, preparedAt: now,
       expiresAt: now + PAIR_TTL, lastPoll: now, lastAction: 0,
-      failedPairAttempts: 0, queue: [] };
+      failedPairAttempts: 0, queue: [], nextId: 0,
+      dispatched: null, lastResult: null };
     // This code goes ONLY to the worker-token-authenticated LOCAL helper.
     return { pairingCode: code, expiresInSeconds: PAIR_TTL / 1000 };
   }
@@ -110,13 +118,27 @@ export class RemoteInput {
     s.lastPoll = now;
     return this.status();
   }
-  next(workerId) {
+  next(workerId, lastAck = null) {
     const s = this.current();
     if (!s || s.workerId !== workerId)
       throw new DomainError(409, "Remote input is not enabled for this Windows helper");
     s.lastPoll = this.now();
-    if (!s.active || !this.captureFresh()) return { action: null, ...this.status() };
-    return { action: s.queue.shift() ?? null, ...this.status() };
+    // The visible helper piggybacks the previous result on its next poll.
+    // Never store raw key/text contents in the acknowledgment.
+    if (lastAck && s.active && s.dispatched &&
+        lastAck.id === s.dispatched.id &&
+        typeof lastAck.ok === "boolean") {
+      s.lastResult = {
+        id: s.dispatched.id, type: s.dispatched.type, ok:lastAck.ok,
+        at: new Date(this.now()).toISOString(),
+      };
+      s.dispatched = null;
+    }
+    if (!s.active || !this.captureFresh())
+      return { action: null, ...this.status() };
+    const action = s.queue.shift() ?? null;
+    if (action) s.dispatched = {id:action.id,type:action.type};
+    return { action, ...this.status() };
   }
   action(input) {
     const s = this.current();
@@ -125,12 +147,27 @@ export class RemoteInput {
     const now = this.now();
     if (now - s.lastPoll >= HEARTBEAT_TTL)
       throw new DomainError(409, "Windows input helper disconnected");
-    if (now - s.lastAction < MIN_GAP) throw new DomainError(429, "Remote input rate limit");
-    if (s.queue.length >= MAX_QUEUE) throw new DomainError(429, "Windows input queue full");
     const value = validateAction(input);
+    // The phone may generate many small trackpad movements before the visible
+    // Windows helper polls. Merge ONLY adjacent movements: never skip a click,
+    // key or text action between moves, and never reorder inputs.
+    if (value.type === "move" && s.queue.at(-1)?.type === "move") {
+      const previous = s.queue.at(-1);
+      const x = previous.dx + value.dx, y = previous.dy + value.dy;
+      if (Math.abs(x) <= 150 && Math.abs(y) <= 150) {
+        previous.dx = x; previous.dy = y;
+        return { accepted: true, coalesced: true, queueDepth:s.queue.length,
+          actionId:previous.id };
+      }
+    }
+    if (now - s.lastAction < MIN_GAP && value.type !== "move")
+      throw new DomainError(429, "Remote input rate limit");
+    if (s.queue.length >= MAX_QUEUE)
+      throw new DomainError(429, "Windows input queue full");
+    value.id = ++s.nextId;
     s.queue.push(value);
     s.lastAction = now;
-    return { accepted: true };
+    return { accepted: true, queueDepth:s.queue.length, actionId:value.id };
   }
   stop(workerId = null) {
     const s = this.current();

@@ -140,6 +140,25 @@ public static class OAgentUserInput {
     keybd_event(key, 0, 0, UIntPtr.Zero);
     keybd_event(key, 0, 2, UIntPtr.Zero);
   }
+  public static void Shortcut(string name) {
+    byte key=0;
+    switch(name) {
+      case "copy": key=0x43; break;
+      case "paste": key=0x56; break;
+      case "cut": key=0x58; break;
+      case "undo": key=0x5A; break;
+      case "redo": key=0x59; break;
+      case "select_all": key=0x41; break;
+      case "save": key=0x53; break;
+      case "find": key=0x46; break;
+      default: return;
+    }
+    keybd_event(0x11,0,0,UIntPtr.Zero);
+    try {
+      keybd_event(key,0,0,UIntPtr.Zero);
+      keybd_event(key,0,2,UIntPtr.Zero);
+    } finally {keybd_event(0x11,0,2,UIntPtr.Zero);}
+  }
   public static void TypeText(string value) {
     foreach (char ch in value) {
       Input[] events = new Input[2];
@@ -159,13 +178,14 @@ public static class OAgentUserInput {
 function Send-OAgentInputRequest([string]$action, [hashtable]$data) {
     $data['workerId'] = $workerId
     try {
-        return Invoke-RestMethod -Method Post -Uri "$origin/api/workers/remote-input/$action" -Headers $headers -ContentType 'application/json' -Body ($data | ConvertTo-Json -Compress) -TimeoutSec 6
+        return Invoke-RestMethod -Method Post -Uri "$origin/api/workers/remote-input/$action" -Headers $headers -ContentType 'application/json' -Body ($data | ConvertTo-Json -Compress -Depth 5) -TimeoutSec 6
     } catch {
         throw (Get-OAgentInputError $_)
     }
 }
 
 $armed = $false
+$lastAck = $null
 try {
     Assert-OAgentBackendReady
     $pair = Send-OAgentInputRequest 'prepare' @{}
@@ -178,7 +198,8 @@ try {
     Write-Host ''
     while ($true) {
         try {
-            $next = Send-OAgentInputRequest 'next' @{}
+            $next = Send-OAgentInputRequest 'next' @{ lastAck = $lastAck }
+            $lastAck = $null
         } catch {
             Write-Host "Remote input stopped: $($_.Exception.Message)" -ForegroundColor Yellow
             break
@@ -192,12 +213,16 @@ try {
                     'scroll' { [OAgentUserInput]::Scroll([int]$a.steps) }
                     'key' { [OAgentUserInput]::Key([string]$a.key) }
                     'text' { [OAgentUserInput]::TypeText([string]$a.text) }
+                    'shortcut' { [OAgentUserInput]::Shortcut([string]$a.name) }
                 }
+                # Report only action ID/type success, never key content.
+                $lastAck = @{ id = [int]$a.id; ok = $true }
             } catch {
+                $lastAck = @{ id = [int]$a.id; ok = $false }
                 Write-Host 'Windows did not accept an input action; check focus and permissions.' -ForegroundColor Yellow
             }
         }
-        Start-Sleep -Milliseconds 190
+        Start-Sleep -Milliseconds 70
     }
 } catch {
     Write-Host "Could not enable remote input: $($_.Exception.Message)" -ForegroundColor Red

@@ -17,6 +17,7 @@
     <nav class="side-nav" aria-label="Workspace navigation">
       <button class="nav-link selected" data-view="overview" aria-current="page"><span aria-hidden="true">◫</span> Overview</button>
       <button class="nav-link" data-view="files"><span aria-hidden="true">▤</span> Project files</button>
+      <button class="nav-link" data-view="desktop"><span aria-hidden="true">▣</span> Live desktop</button>
       <button class="nav-link" data-view="activity"><span aria-hidden="true">◷</span> Activity & approvals</button>
       <button class="nav-link" data-view="integrations"><span aria-hidden="true">◇</span> Connected tools</button>
     </nav>
@@ -80,6 +81,42 @@
             </section>
           </div>
           <p class="hint">Protected files, credentials, linked directories and binary files are not available. Text edits are version-checked and use a temporary in-memory relay.</p>
+        </section>
+        <section class="view" data-panel="desktop" hidden>
+          <div class="page-heading"><div><p class="eyebrow">CONSENTED REMOTE SESSION</p><h1>Live desktop</h1><p class="muted">View only the display or window selected on your laptop. Mouse and keyboard require a separately paired visible Windows helper.</p></div><button class="button secondary" type="button" id="desktopRefresh">Refresh screen</button></div>
+          <div class="two-col desktop-layout">
+            <section class="panel">
+              <div class="panel-heading"><h2>Laptop screen preview</h2><span class="pill" id="desktopLiveStatus">Not sharing</span></div>
+              <div class="desktop-screen" id="desktopScreen"><img id="desktopImage" alt="Live consented laptop screen preview" hidden><p id="desktopPlaceholder">No live image. Start a screen share from your trusted laptop first.</p></div>
+              <p class="hint" id="desktopMetrics">Frame delivery status will appear here.</p>
+              <div class="actions"><button class="button secondary" type="button" id="desktopCopyCapture">Copy laptop screen-sharing link</button><button class="button danger" type="button" id="desktopStopSharing">Stop screen sharing</button></div>
+              <p class="hint">Keep the capture browser window open. Browser background throttling or a slow network can reduce FPS. Screen images are not stored in task history.</p>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><h2>Pointer & keyboard</h2><span class="pill" id="desktopInputStatus">Not paired</span></div>
+              <p class="hint">On your laptop, start <code>REMOTE-CONTROL.cmd</code>, type ENABLE and keep its window visible. Enter the eight-digit pairing code below. This grants only 20 minutes of supervised input.</p>
+              <div class="desktop-pair"><label for="desktopPairCode">One-time pairing code</label><input id="desktopPairCode" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="8 digits" aria-label="Windows helper pairing code"><button class="button primary" id="desktopPair" type="button">Pair this device</button></div>
+              <p class="hint">Once paired, drag on the touchpad to move the Windows cursor. A tap clicks its current position, not the touched screen pixel.</p>
+              <div id="desktopTrackpad" class="desktop-trackpad" role="group" aria-label="Virtual Windows touchpad" tabindex="0"><span>Drag to move cursor</span><small>Tap to left-click · Scroll below</small></div>
+              <div class="actions desktop-key-row">
+                <button class="button secondary" type="button" data-desktop-action="click:left">Left click</button>
+                <button class="button secondary" type="button" data-desktop-action="click:right">Right click</button>
+                <button class="button secondary" type="button" data-desktop-action="click:double">Double click</button>
+                <button class="button secondary" type="button" data-desktop-action="scroll:1">Scroll up</button>
+                <button class="button secondary" type="button" data-desktop-action="scroll:-1">Scroll down</button>
+                <button class="button secondary" type="button" data-desktop-action="key:enter">Enter</button>
+                <button class="button secondary" type="button" data-desktop-action="key:backspace">Backspace</button>
+                <button class="button secondary" type="button" data-desktop-action="key:escape">Escape</button>
+                <button class="button secondary" type="button" data-desktop-action="shortcut:copy">Copy</button>
+                <button class="button secondary" type="button" data-desktop-action="shortcut:paste">Paste</button>
+                <button class="button secondary" type="button" data-desktop-action="shortcut:undo">Undo</button>
+                <button class="button secondary" type="button" data-desktop-action="shortcut:save">Save</button>
+              </div>
+              <div class="desktop-text-row"><label for="desktopTypeText">Type into focused laptop window</label><textarea id="desktopTypeText" rows="2" maxlength="300" placeholder="Test-only text — never enter passwords, tokens or payment details"></textarea><button class="button primary" id="desktopSendText" type="button">Type on laptop</button></div>
+              <p class="hint" id="desktopInputFeedback">Input unavailable until the laptop is sharing and a visible helper is paired.</p>
+              <button class="button danger full" id="desktopStopInput" type="button">Stop remote input immediately</button>
+            </section>
+          </div>
         </section>
         <section class="view" data-panel="activity" hidden><div class="page-heading"><div><p class="eyebrow">EXECUTION</p><h1>Activity & approvals</h1><p class="muted">A trace of actual backend activity. Every approval is a decision, not a simulation.</p></div></div>
           <div class="two-col"><section class="panel"><div class="panel-heading"><h2>Tasks</h2><span class="subtle">Most recent first</span></div><div id="taskList" class="list-stack"></div></section><section class="panel"><div class="panel-heading"><h2>Event history</h2><span class="subtle">Recent</span></div><div id="eventList" class="list-stack"></div></section></div>

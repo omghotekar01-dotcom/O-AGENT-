@@ -76,7 +76,43 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal((await call("/api/remote/overview", personalToken)).status, 403);
     const remote = await call("/api/remote/overview", apiToken);
     assert.equal(remote.status, 200);
-    assert.equal(remote.payload.screenStreaming.supported, false);
+    assert.equal(remote.payload.screenStreaming.supported, true);
+    assert.equal(remote.payload.screenStreaming.capturing, false);
+    assert.equal(remote.payload.screenStreaming.input.paired, false);
+    assert.equal(remote.payload.screenStreaming.input.requiresLocalPairing, true);
+    assert.equal((await call("/api/screen/frame", personalToken)).status, 403);
+    assert.equal((await call("/api/input/status",personalToken)).status,403);
+    assert.equal((await call("/api/input/action",personalToken,"POST",
+      {type:"click",button:"left"})).status,403);
+    assert.equal((await call("/api/input/action",apiToken,"POST",
+      {type:"click",button:"left"})).status,409);
+    const screenSession = await call("/api/screen/start", apiToken, "POST");
+    assert.equal(screenSession.status, 201);
+    assert.ok(screenSession.payload.captureToken.length > 32);
+    const sampleJpeg = Buffer.concat([
+      Buffer.from([0xff,0xd8]),Buffer.alloc(110,0x22),
+      Buffer.from([0xff,0xd9]),
+    ]);
+    const uploadFrame = await fetch(url + "/api/screen/frame",{
+      method:"POST",headers:{
+        authorization:"Bearer "+apiToken,
+        "content-type":"image/jpeg",
+        "x-oagent-capture-token":screenSession.payload.captureToken,
+      },body:sampleJpeg,
+    });
+    assert.equal(uploadFrame.status, 200);
+    const initialFrame = await fetch(url + "/api/screen/frame?after=0",{
+      headers:{authorization:"Bearer "+apiToken},
+    });
+    assert.equal(initialFrame.status, 200);
+    assert.equal(initialFrame.headers.get("x-oagent-frame-sequence"),"1");
+    assert.deepEqual(Buffer.from(await initialFrame.arrayBuffer()),sampleJpeg);
+    const unchangedFrame = await fetch(url + "/api/screen/frame?after=1",{
+      headers:{authorization:"Bearer "+apiToken},
+    });
+    assert.equal(unchangedFrame.status, 204);
+    assert.equal((await unchangedFrame.arrayBuffer()).byteLength,0);
+    assert.equal((await call("/api/screen/stop",apiToken,"POST")).status,200);
     assert.equal(remote.payload.activeRuns, 0);
     assert.ok(Array.isArray(remote.payload.sources));
     assert.equal((await call("/api/ai/threads", personalToken)).status, 403);

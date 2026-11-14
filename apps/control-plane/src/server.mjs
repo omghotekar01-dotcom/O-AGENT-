@@ -90,7 +90,7 @@ function readBinary(req, maxBytes) {
 }
 function staticFile(res, filename, type) {
   const bytes = readFileSync(join(publicDir, filename));
-  res.writeHead(200, { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'" });
+  res.writeHead(200, { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'self'; connect-src 'self'; img-src 'self' blob:; script-src 'self'; style-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'" });
   res.end(bytes);
 }
 const server = createServer(async (req, res) => {
@@ -161,7 +161,16 @@ const server = createServer(async (req, res) => {
           req.headers["x-oagent-capture-token"], image));
       }
       if (req.method === "GET" && path === "/api/screen/frame") {
-        const image = screenShare.frame();
+        const afterRaw = url.searchParams.get("after");
+        const after = afterRaw != null && /^\d{1,12}$/.test(afterRaw)
+          ? Number(afterRaw) : -1;
+        const image = screenShare.frameSince(after);
+        if (image == null) {
+          res.writeHead(204, { "cache-control": "no-store",
+            "x-content-type-options": "nosniff" });
+          res.end();
+          return;
+        }
         res.writeHead(200, {
           "content-type": "image/jpeg",
           "cache-control": "no-store",
@@ -355,7 +364,16 @@ const server = createServer(async (req, res) => {
 
     // A member's private AI token never unlocks owner remote-agent activity.
     if (req.method === "GET" && path === "/api/remote/overview") {
-      return send(res, 200, projectHub.remoteOverview());
+      return send(res, 200, {
+        ...projectHub.remoteOverview(),
+        // Only owner-authenticated readers see the actual consented capture
+        // and paired input state. Never claim that unpaired screen previews
+        // grant desktop control, or that saved chats imply active sessions.
+        screenStreaming: {
+          ...screenShare.status(),
+          input: remoteInput.status(),
+        },
+      });
     }
 
     // Unified, capability-aware project registry: no simulated external work.
@@ -425,7 +443,7 @@ const server = createServer(async (req, res) => {
       if (req.method === "POST" && path === "/api/workers/remote-input/prepare")
         return send(res, 200, remoteInput.prepare(id));
       if (req.method === "POST" && path === "/api/workers/remote-input/next")
-        return send(res, 200, remoteInput.next(id));
+        return send(res, 200, remoteInput.next(id, body.lastAck));
       if (req.method === "POST" && path === "/api/workers/remote-input/stop")
         return send(res, 200, remoteInput.stop(id));
       throw new DomainError(404, "Unknown Windows input-helper endpoint");

@@ -1,10 +1,10 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { DomainError } from "./core.mjs";
 
-const MAX_FRAME_BYTES = 160000;
+const MAX_FRAME_BYTES = 240000;
 const FRAME_TTL_MS = 4000;
 const LEASE_TTL_MS = 30 * 60 * 1000;
-const FRAME_GAP_MS = 550;
+const FRAME_GAP_MS = 180;
 
 /**
  * Owner-only, consent-driven, ephemeral JPEG screen previews. A human on
@@ -30,6 +30,8 @@ export class ScreenShare {
       lastFrameAt: s.lastFrameAt ? new Date(s.lastFrameAt).toISOString() : null,
       expiresAt: new Date(s.expiresAt).toISOString(),
       frameSequence: s.sequence,
+      estimatedFps: s.averageFrameGapMs != null
+        ? Math.round(10000 / s.averageFrameGapMs) / 10 : null,
       mode: "view_only_consent_screen_frames",
     };
   }
@@ -42,6 +44,7 @@ export class ScreenShare {
     this.active = {
       token, startedAt: now, expiresAt: now + LEASE_TTL_MS,
       lastFrameAt: 0, frame: null, sequence: 0,
+      averageFrameGapMs: null,
     };
     return { captureToken: token, ...this.status() };
   }
@@ -54,6 +57,13 @@ export class ScreenShare {
     if (!status.capturing || !status.fresh)
       throw new DomainError(404, "No fresh, consented screen frame available");
     return { bytes: this.active.frame, sequence: this.active.sequence };
+  }
+  // Returns null only when a client already has the newest live frame.
+  // Never treats a stale frame as available, even if sequence matches.
+  frameSince(sequence) {
+    const frame = this.frame();
+    return Number.isSafeInteger(sequence) && sequence >= 0 &&
+      sequence === frame.sequence ? null : frame;
   }
   publish(token, bytes) {
     const status = this.status();
@@ -68,7 +78,12 @@ export class ScreenShare {
       throw new DomainError(400, "Expected a bounded JPEG image");
     const now = this.now();
     if (now - this.active.lastFrameAt < FRAME_GAP_MS)
-      throw new DomainError(429, "Frame rate capped at one image per 550 ms");
+      throw new DomainError(429, "Screen updates are arriving faster than the supported capture rate (180 ms minimum)");
+    if (this.active.lastFrameAt > 0) {
+      const interval = now - this.active.lastFrameAt;
+      this.active.averageFrameGapMs = this.active.averageFrameGapMs == null
+        ? interval : this.active.averageFrameGapMs * .7 + interval * .3;
+    }
     this.active.frame = Buffer.from(bytes);
     this.active.lastFrameAt = now;
     this.active.sequence += 1;

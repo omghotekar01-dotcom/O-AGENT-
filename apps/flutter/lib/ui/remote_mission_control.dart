@@ -12,6 +12,7 @@ import 'cursor_cloud.dart';
 import 'ios_components.dart';
 import 'projects.dart';
 import 'free_ai_hub.dart';
+import 'account_workspace.dart';
 
 Map<String, dynamic> remoteMap(Object? v) => v is Map
   ? Map<String, dynamic>.from(v) : <String, dynamic>{};
@@ -134,6 +135,23 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
       ProjectHubScreen(controller: widget.controller)));
   void _openAiApps() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) => const FreeAiHubScreen()));
+  void _openOwnedChats() => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      AccountWorkspaceScreen(controller: widget.controller)));
+
+  String _runTitle(Map<String, dynamic> run) {
+    final title = run['sessionTitle']?.toString() ??
+      run['projectTitle']?.toString();
+    if (title != null && title.trim().isNotEmpty) return title;
+    switch (run['kind']?.toString()) {
+      case 'codex_cli_turn': return 'Codex CLI turn';
+      case 'codex_cloud_submit': return 'Codex Cloud task';
+      case 'claude_agent_turn': return 'Claude Agent SDK run';
+      case 'copilot_sdk_turn': return 'GitHub Copilot SDK run';
+      case 'vscode_open_file': return 'VS Code file request';
+      default: return 'O-AGENT supervised task';
+    }
+  }
 
   Widget _statCard(IconData icon, String count, String label, Color tint) =>
     OSurface(padding: const EdgeInsets.all(15), child: Row(children: [
@@ -169,10 +187,7 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
             const Icon(CupertinoIcons.chevron_left_slash_chevron_right,
               size: 20, color: OVisual.primary),
             const SizedBox(width: 11),
-            Expanded(child: Text(run['sessionTitle']?.toString() ??
-                run['projectTitle']?.toString() ??
-                (run['kind'] == 'codex_cli_turn'
-                  ? 'Codex CLI supervised turn' : 'Codex Cloud task'),
+            Expanded(child: Text(_runTitle(run),
               maxLines: 2, overflow: TextOverflow.ellipsis,
               style: TextStyle(color: OVisual.label(context),
                 fontSize: 15, fontWeight: FontWeight.w800))),
@@ -289,8 +304,8 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
               const OScreenTitle(
                 eyebrow: 'Your control center',
                 title: 'Your projects.\nIn your pocket.',
-                subtitle: 'See your saved Codex conversations, send instructions '
-                  'and review approvals from anywhere.'),
+                subtitle: 'Review supervised coding runs, real provider '
+                  'conversations, workspace changes, and approvals.'),
               const SizedBox(height: 19),
               LayoutBuilder(builder: (context, constraints) {
                 final wide = constraints.maxWidth >= 300;
@@ -321,6 +336,30 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                         color: Color(0xFFB34E52), fontSize: 12)),
                       TextButton(onPressed: _refresh, child: const Text('Retry')),
                     ]))),
+              OSectionTitle('Live desktop connection',
+                action: 'View screen', onAction: _openScreen),
+              OSurface(child: Row(children: [
+                Icon(CupertinoIcons.desktopcomputer,
+                  color: OVisual.primary, size: 23),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment:
+                  CrossAxisAlignment.start, children: [
+                    Text(remoteMap(data?['screenStreaming'])['fresh'] == true
+                      ? 'Receiving laptop frames'
+                      : 'Screen is not currently sharing live frames',
+                      style: TextStyle(fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: OVisual.label(context))),
+                    const SizedBox(height: 5),
+                    Text(remoteMap(remoteMap(data?['screenStreaming'])['input'])['paired'] == true
+                      ? 'Windows pointer and keyboard paired'
+                      : 'Desktop input is not paired',
+                      style: TextStyle(fontSize: 12,
+                        color: OVisual.muted(context))),
+                  ])),
+                IconButton(onPressed: _openScreen,
+                  icon: const Icon(CupertinoIcons.arrow_up_right_square)),
+              ])),
               const OSectionTitle('My Codex conversations'),
               if (sessions.isEmpty && data != null)
                 const OEmptyState(icon: CupertinoIcons.square_stack,
@@ -336,6 +375,13 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                   label: Text('Browse all ${sessions.length} conversations'),
                 )),
 
+              const OSectionTitle('Real AI conversations'),
+              OIconTile(icon: CupertinoIcons.chat_bubble_2_fill,
+                title: 'O-AGENT provider chats',
+                subtitle: 'Open conversations generated through your own '
+                  'OpenAI, Anthropic or Gemini API connections. This does '
+                  'not import private ChatGPT or other website chats.',
+                onTap: _openOwnedChats, color: OVisual.mint),
               const OSectionTitle('Start here'),
               OIconTile(icon: CupertinoIcons.folder_fill,
                 title: 'My projects',
@@ -394,7 +440,7 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                     subtitle: (machine['id']?.toString() ?? '') + ' · ' +
                       (machine['status']?.toString() ?? ''),
                     trailing: OStatePill(machine['status']?.toString() ?? 'offline'))),
-              OSectionTitle('Codex activity',
+              OSectionTitle('Supervised coding agent activity',
                 action: 'Refresh', onAction: _refresh),
               Padding(padding: const EdgeInsets.only(bottom: 12),
                 child: CupertinoSlidingSegmentedControl<String>(
@@ -417,18 +463,18 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                     : CupertinoIcons.waveform_path,
                   title: filter == 'approvals'
                     ? 'No pending approvals'
-                    : filter == 'active' ? 'No active runs' : 'No recent Codex runs',
+                    : filter == 'active' ? 'No active runs' : 'No recent coding agent runs',
                   message: 'Only actual O-AGENT-supervised runs appear here. '
                     'Open a saved session to submit an explicit, approval-gated turn.'),
               for (final r in cards) _runCard(r, sessions),
               ExpansionTile(
-                title: const Text('Technical connection details',
+                title: const Text('Provider connection status',
                   style: TextStyle(fontWeight: FontWeight.w600)),
                 initiallyExpanded: false,
                 children: [
               OSurface(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Source capabilities',
+                  Text('Verified provider capabilities',
                     style: TextStyle(fontWeight: FontWeight.w800,
                       color: OVisual.label(context), fontSize: 15)),
                   const SizedBox(height: 7),
@@ -438,7 +484,8 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                   const SizedBox(height: 10),
                   for (final source in sources.where((s) => const {
                     'codex_cli','codex_cloud','copilot_sdk','claude_code',
-                    'cursor','vscode','chatgpt_work',
+                    'cursor','vscode','chatgpt_work','openai_api',
+                    'anthropic_api','gemini_api',
                   }.contains(s['id']))) ...[
                     const Divider(height: 18),
                     Row(children: [

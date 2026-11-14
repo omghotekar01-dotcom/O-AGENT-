@@ -12,7 +12,7 @@ test("web workspace has no broken ID references or inert section links",()=>{
     assert.ok(ids.includes(match[1]),"JS references missing element #"+match[1]);
   }
   const views=[...html.matchAll(/data-panel="([^"]+)"/g)].map(m=>m[1]);
-  assert.deepEqual(views,["overview","files","activity","integrations","setup"]);
+  assert.deepEqual(views,["overview","files","desktop","activity","integrations","setup"]);
   for(const view of views)
     assert.match(html,new RegExp('data-view="'+view+'"'),"Missing navigation for "+view);
 });
@@ -27,6 +27,16 @@ test("dashboard protects credentials and renders untrusted source as text",()=>{
   assert.match(html,/id="confirmDialog"/);
   assert.match(html,/id="inputDialog"/);
   assert.match(css,/\[hidden\]\{display:none!important\}/);
+  assert.match(html,/id="desktopTrackpad"/);
+  assert.match(html,/id="desktopPairCode"/);
+  assert.match(html,/id="desktopStopInput"/);
+  assert.match(js,/api\("\/api\/input\/pair"/);
+  assert.match(js,/api\("\/api\/input\/action"/);
+  assert.match(js,/api\("\/api\/screen\/stop"/);
+  assert.match(js,/\/api\/screen\/frame\?after=/);
+  assert.match(js,/desktopQueue\.length=0/);
+  assert.doesNotMatch(js,/new WebSocket\(/);
+  assert.match(css,/touch-action:none/);
 });
 
 test("connected tool statuses remain backend-derived, not fabricated",()=>{
