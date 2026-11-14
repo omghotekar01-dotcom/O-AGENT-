@@ -47,6 +47,12 @@ test("real PostgreSQL: OIDC team roles, one-time invites, selected workspaces an
     assert.equal(owner.status,200);
     assert.equal(owner.data.role,"owner");
     const home=owner.data.tenantId;
+    const billing=await call("/v1/billing/usage");
+    assert.equal(billing.status,200);
+    assert.equal(billing.data.billingStatus,"not_configured");
+    assert.equal(billing.data.paidSubscriptionActive,false);
+    assert.equal(billing.data.providerCostsSeparate,true);
+    assert.equal(billing.data.usage.requests_this_month,0);
     const rename=await call("/v1/team/settings",{
       method:"POST",body:{name:"Engineering squad"}});
     assert.equal(rename.status,200);
@@ -71,6 +77,7 @@ test("real PostgreSQL: OIDC team roles, one-time invites, selected workspaces an
     const selected=await call("/v1/me",{actor:"viewer",workspace:home});
     assert.equal(selected.status,200);
     assert.equal(selected.data.role,"viewer");
+    assert.equal((await call("/v1/billing/usage",{actor:"viewer",workspace:home})).status,403);
     const workspaces=await call("/v1/team/workspaces",{actor:"viewer"});
     assert.equal(workspaces.status,200);
     assert.ok(workspaces.data.workspaces.some(x=>x.tenant_id===home&&x.role==="viewer"));
