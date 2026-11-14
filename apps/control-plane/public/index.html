@@ -94,8 +94,12 @@
             </section>
             <section class="panel">
               <div class="panel-heading"><h2>Pointer & keyboard</h2><span class="pill" id="desktopInputStatus">Not paired</span></div>
-              <p class="hint">On your laptop, start <code>REMOTE-CONTROL.cmd</code>, type ENABLE and keep its window visible. Enter the eight-digit pairing code below. This grants only 20 minutes of supervised input.</p>
-              <div class="desktop-pair"><label for="desktopPairCode">One-time pairing code</label><input id="desktopPairCode" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="8 digits" aria-label="Windows helper pairing code"><button class="button primary" id="desktopPair" type="button">Pair this device</button></div>
+              <p class="hint">One-time laptop permission starts a visible companion with O-AGENT. When your selected screen is sharing, press Control this laptop. Each session lasts up to 20 minutes and can be stopped from either device.</p>
+              <button class="button primary full" id="desktopActivate" type="button" disabled>Control this laptop</button>
+              <p class="hint" id="desktopSetupHint">For one-tap control, enable trusted phone control on this laptop once using ENABLE-ONE-TAP-CONTROL.cmd and restart O-AGENT. A visible Windows companion starts automatically.</p>
+              <details id="desktopLegacyPair"><summary>Advanced: temporary manual pairing</summary>
+                <div class="desktop-pair"><label for="desktopPairCode">Temporary eight-digit code</label><input id="desktopPairCode" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="8 digits" aria-label="Windows helper pairing code"><button class="button secondary" id="desktopPair" type="button">Pair temporarily</button></div>
+              </details>
               <p class="hint">Once paired, drag on the touchpad to move the Windows cursor. A tap clicks its current position, not the touched screen pixel.</p>
               <div id="desktopTrackpad" class="desktop-trackpad" role="group" aria-label="Virtual Windows touchpad" tabindex="0"><span>Drag to move cursor</span><small>Tap to left-click · Scroll below</small></div>
               <div class="actions desktop-key-row">
