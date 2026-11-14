@@ -29,7 +29,7 @@ services:
     network_mode: none
     security_opt: ["no-new-privileges:true"]
     cap_drop: ["ALL"]
-    cap_add: ["CHOWN"]
+    cap_add: ["CHOWN","DAC_OVERRIDE"]
     command: ["sh","-ec","cp /incoming/realm.json /out/oagent-realm.json && chown 1000:0 /out/oagent-realm.json && chmod 0400 /out/oagent-realm.json"]
     volumes:
       - ./.private/oagent-realm.json:/incoming/realm.json:ro
