@@ -83,8 +83,8 @@ services:
       OAGENT_OIDC_JWKS_URL: http://identity:8080/auth/realms/oagent/protocol/openid-connect/certs
       OAGENT_OIDC_AUDIENCE: oagent-api
       OAGENT_OIDC_CLIENT_IDS: oagent-web
-      OAGENT_VAPID_PUBLIC_KEY: ${"$"}{OAGENT_VAPID_PUBLIC_KEY:?Missing browser push key}
-      OAGENT_VAPID_PRIVATE_KEY: ${"$"}{OAGENT_VAPID_PRIVATE_KEY:?Missing browser push key}
+      OAGENT_VAPID_PUBLIC_KEY: ${OAGENT_VAPID_PUBLIC_KEY:?Missing browser push key}
+      OAGENT_VAPID_PRIVATE_KEY: ${OAGENT_VAPID_PRIVATE_KEY:?Missing browser push key}
       OAGENT_OIDC_WEB_CLIENT_ID: oagent-web
       OAGENT_OIDC_AUTHORIZE_URL: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent/protocol/openid-connect/auth
       OAGENT_OIDC_TOKEN_URL: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent/protocol/openid-connect/token
