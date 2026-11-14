@@ -57,6 +57,7 @@ function action(container,label,fn,style="secondary"){
   return btn;
 }
 function navigate(view){
+  if(currentView==="desktop" && view!=="desktop")desktopQueue.length=0;
   currentView=view;
   for(const section of document.querySelectorAll("[data-panel]"))section.hidden=section.dataset.panel!==view;
   for(const button of document.querySelectorAll(".nav-link")){
@@ -86,7 +87,11 @@ function connectedUi(value){
   $("connectionBadge").classList.toggle("connected",value);
   $("sideDot").classList.toggle("online",value);
   $("sideStatus").textContent=value?"Backend connected":"Not connected";
-  if(!value) clearDesktopPreview();
+  if(!value) {
+    desktopQueue.length=0;
+    desktopState=null; desktopInput=null;
+    clearDesktopPreview();
+  }
 }
 function machinesView(){
   const workers=$("workerList");
@@ -560,7 +565,8 @@ async function desktopRefresh(){
   }finally{desktopBusy=false;}
 }
 function queueDesktopAction(actionData){
-  if(!connected||desktopInput?.paired!==true||desktopState?.fresh!==true){
+  if(!connected||currentView!=="desktop"||
+      desktopInput?.paired!==true||desktopState?.fresh!==true){
     notice("Pair the visible Windows helper and share a fresh screen first.");
     return;
   }
@@ -578,7 +584,8 @@ function queueDesktopAction(actionData){
 async function drainDesktopQueue(){
   desktopSending=true;
   try{
-    while(desktopQueue.length&&connected&&desktopInput?.paired&&desktopState?.fresh){
+    while(desktopQueue.length&&connected&&currentView==="desktop"&&
+      desktopInput?.paired&&desktopState?.fresh){
       const action=desktopQueue.shift();
       try{
         await api("/api/input/action",{method:"POST",body:action});
