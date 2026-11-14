@@ -35,6 +35,8 @@ test("dashboard protects credentials and renders untrusted source as text",()=>{
   assert.match(js,/navigator\.mediaDevices\.getDisplayMedia/);
   assert.match(js,/status===429/);
   assert.match(js,/type:"tap"/);
+  assert.match(html,/id="desktopImageFile"/);
+  assert.match(js,/fetch\("\/api\/input\/image"/);
   assert.doesNotMatch(js,/innerHTML=/);
   assert.match(html,/id="desktopStopInput"/);
   assert.match(js,/api\("\/api\/input\/pair"/);
