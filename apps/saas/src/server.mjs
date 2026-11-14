@@ -13,7 +13,7 @@ import {
   httpError,startEnrollment,approveEnrollment,listDevices,revokeDevice,
   updateCapabilities,heartbeat,createRun,listRuns,runDetail,
   listApprovals,decideApproval,claimRun,renewLease,finishRun,
-  requestToolApproval,toolApprovalStatus,isUUID,
+  requestToolApproval,toolApprovalStatus,appendRunEvent,listRunEvents,isUUID,
 } from "./operations.mjs";
 
 const reply=(res,status,value)=>{
@@ -69,7 +69,8 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         return reply(res,200,{status:"ready",database:"connected"});
       }
       expectedHost(config,req);
-      if(parsed.search)throw httpError(400,"Unexpected query parameters");
+      if(parsed.search&&!/^\/v1\/runs\/[0-9a-f-]{36}\/events$/i.test(path))
+        throw httpError(400,"Unexpected query parameters");
       if(path==="/mcp"){
         if(!["GET","POST","DELETE"].includes(method))
           throw httpError(405,"Unsupported MCP method");
@@ -123,7 +124,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         if(method==="POST"&&path==="/v1/device/claim")
           return reply(res,200,await call((c,t)=>claimRun(c,t,device.deviceId)));
         const runLease=capturePath(path,
-          /^\/v1\/device\/runs\/([0-9a-f-]{36})\/(renew|complete|approvals)$/i);
+          /^\/v1\/device\/runs\/([0-9a-f-]{36})\/(renew|complete|approvals|events)$/i);
         if(method==="POST"&&runLease){
           const id=runLease[1],op=runLease[2];
           if(op==="renew")return reply(res,200,
@@ -132,6 +133,8 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
             await call((c,t)=>finishRun(c,t,device.deviceId,id,data)));
           if(op==="approvals")return reply(res,201,
             await call((c,t)=>requestToolApproval(c,t,device.deviceId,id,data)));
+          if(op==="events")return reply(res,201,
+            await call((c,t)=>appendRunEvent(c,t,device.deviceId,id,data)));
         }
         const approvalStatus=capturePath(path,
           /^\/v1\/device\/approvals\/([0-9a-f-]{36})$/i);
@@ -172,6 +175,15 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
       const run=capturePath(path,/^\/v1\/runs\/([0-9a-f-]{36})$/i);
       if(method==="GET"&&run)return reply(res,200,
         await asTenant(c=>runDetail(c,run[1])));
+      const eventRoute=capturePath(path,/^\/v1\/runs\/([0-9a-f-]{36})\/events$/i);
+      if(method==="GET"&&eventRoute){
+        const cursor=parsed.searchParams.get("after");
+        if([...parsed.searchParams.keys()].some(k=>k!=="after")||
+           (cursor!=null&&!/^\d{1,15}$/.test(cursor)))
+          throw httpError(400,"Invalid event cursor");
+        return reply(res,200,await asTenant(c=>listRunEvents(
+          c,eventRoute[1],cursor==null?0:Number(cursor))));
+      }
       if(method==="GET"&&path==="/v1/approvals")
         return reply(res,200,{approvals:await asTenant(c=>listApprovals(c))});
       const decision=capturePath(path,
