@@ -97,6 +97,7 @@ public static class OAgentUserInput {
   private struct Point { public int X; public int Y; }
   [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point p);
   [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
   [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
   [DllImport("user32.dll")] private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
   [StructLayout(LayoutKind.Sequential)] private struct Input {
@@ -118,6 +119,22 @@ public static class OAgentUserInput {
   public static int InputStructSize() { return Marshal.SizeOf(typeof(Input)); }
   public static void Move(int dx, int dy) {
     Point p; if (GetCursorPos(out p)) SetCursorPos(p.X + dx, p.Y + dy);
+  }
+  public static void Tap(int normX, int normY, string kind) {
+    if (normX < 0 || normX > 10000 || normY < 0 || normY > 10000)
+      throw new ArgumentOutOfRangeException("Normalized cursor coordinates");
+    // A captured window/tab or secondary monitor may be positioned
+    // anywhere. Never guess and click an unrelated part of the desktop.
+    if (GetSystemMetrics(80) != 1)
+      throw new InvalidOperationException("Tap-to-click supports a single display only. Use trackpad.");
+    int width=GetSystemMetrics(0), height=GetSystemMetrics(1);
+    if (width <= 0 || height <= 0)
+      throw new InvalidOperationException("Could not read display dimensions.");
+    int px=(int)Math.Round((width-1)*(normX/10000.0));
+    int py=(int)Math.Round((height-1)*(normY/10000.0));
+    if (!SetCursorPos(px,py))
+      throw new InvalidOperationException("Windows rejected pointer positioning.");
+    Click(kind);
   }
   public static void Click(string kind) {
     uint down = kind == "right" ? 8u : 2u;
@@ -227,6 +244,7 @@ try {
                 switch ([string]$a.type) {
                     'move' { [OAgentUserInput]::Move([int]$a.dx, [int]$a.dy) }
                     'click' { [OAgentUserInput]::Click([string]$a.button) }
+                    'tap' { [OAgentUserInput]::Tap([int]$a.x, [int]$a.y, [string]$a.button) }
                     'scroll' { [OAgentUserInput]::Scroll([int]$a.steps) }
                     'key' { [OAgentUserInput]::Key([string]$a.key) }
                     'text' { [OAgentUserInput]::TypeText([string]$a.text) }
