@@ -76,7 +76,11 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal((await call("/api/remote/overview", personalToken)).status, 403);
     const remote = await call("/api/remote/overview", apiToken);
     assert.equal(remote.status, 200);
-    assert.equal(remote.payload.screenStreaming.supported, false);
+    assert.equal(remote.payload.screenStreaming.supported, true);
+    assert.equal(remote.payload.screenStreaming.capturing, false);
+    assert.equal(remote.payload.screenStreaming.input.paired, false);
+    assert.equal(remote.payload.screenStreaming.input.requiresLocalPairing, true);
+    assert.equal((await call("/api/screen/frame", personalToken)).status, 403);
     assert.equal(remote.payload.activeRuns, 0);
     assert.ok(Array.isArray(remote.payload.sources));
     assert.equal((await call("/api/ai/threads", personalToken)).status, 403);
