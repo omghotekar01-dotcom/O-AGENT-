@@ -134,6 +134,22 @@ const scopes=new Set((token.body.scope||"").split(" "));
 assert.ok(scopes.has("oagent-read"),"OIDC read scope missing");
 assert.ok(scopes.has("oagent-operate"),"OIDC operate scope missing");
 const access=token.body.access_token;
+// The following checks display ONLY booleans for known authentication
+// requirements, never JWT contents, user ID, email, keys or account tokens.
+const header=access.split(".")[1];
+const payload=JSON.parse(Buffer.from(header,"base64url").toString("utf8"));
+const allowedClients=["oagent-web"];
+console.log("CI identity claim compatibility: "+JSON.stringify({
+  signedSubject:typeof payload.sub==="string"&&payload.sub.length>0,
+  knownClient:allowedClients.includes(payload.azp||payload.client_id),
+  azpPresent:typeof payload.azp==="string",
+  clientIdPresent:typeof payload.client_id==="string",
+  emailVerified:payload.email_verified===true,
+  emailClaimPresent:typeof payload.email==="string",
+  resourceAudience:([].concat(payload.aud||[])).includes("oagent-api"),
+  scopeRead:scopes.has("oagent-read"),
+  scopeOperate:scopes.has("oagent-operate"),
+}));
 const me=await request("/v1/me",{authorization:access});
 assert.equal(me.status,200,
   "OIDC access token rejected by SaaS API (HTTP "+me.status+
