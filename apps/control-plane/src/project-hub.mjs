@@ -82,6 +82,12 @@ export class ProjectHub {
         limitation: "Saved CLI/IDE threads support newly approved Codex turns and event updates, with controlled permission requests. This does not inject into an independent running CLI window or mirror ChatGPT browser screens.",
       },
       {
+        id: "openai_api", label: "OpenAI API", status: apiStatus("openai"),
+        capabilities: ai?.provider === "openai" && ai?.configured
+          ? ["send_prompt_in_oagent", "view_oagent_conversations", "improve_prompt"] : [],
+        limitation: "O-AGENT-owned API conversations only. Does not mirror private ChatGPT Projects, Work browser sessions or existing Codex IDE chats. Requires an independently billed API key and quota.",
+      },
+      {
         id: "gemini_api", label: "Google Gemini API", status: apiStatus("gemini"),
         capabilities: ai?.provider === "gemini" && ai?.configured
           ? ["send_prompt_in_oagent", "view_oagent_conversations", "improve_prompt"] : [],
@@ -113,11 +119,17 @@ export class ProjectHub {
         limitation: "Cursor has an official CLI with headless and session operations; O-AGENT does not yet own or control a Cursor CLI session or active IDE tab.",
       },
       {
-        id: "vscode", label: "VS Code",
-        status: hasCapability("vscode_open_file") ? "configured_unverified" : "requires_setup",
-        capabilities: hasCapability("vscode_open_file")
-          ? ["workspace_inventory","request_approved_open_file","local_confirm_open_file"] : [],
-        limitation: "The VS Code extension API can expose workspace state through an explicitly installed extension. No IDE extension or screen-control bridge is currently installed.",
+        id: "vscode", label: "VS Code Workspace Companion",
+        status: hasCapability("vscode_workspace_files") ? "connected" :
+          hasCapability("vscode_open_file") ? "configured_unverified" : "requires_setup",
+        capabilities: hasCapability("vscode_workspace_files")
+          ? ["browse_enrolled_workspace", "read_allowed_text_files", "create_text_file",
+             "rename_text_file", "move_to_trash", "review_and_save_changes",
+             "monitor_git_and_unsaved_names", "request_approved_open_file"]
+          : hasCapability("vscode_open_file")
+            ? ["workspace_inventory","request_approved_open_file","local_confirm_open_file"]
+            : [],
+        limitation: "Only an explicitly enrolled VS Code folder is accessible. File modifications require a 30-minute permission locally plus phone/web approval. Does not control native Copilot Chat, Claude extension chats, or arbitrary other IDEs.",
       },
       {
         id: "chatgpt_work", label: "ChatGPT Work / website", status: "unsupported",

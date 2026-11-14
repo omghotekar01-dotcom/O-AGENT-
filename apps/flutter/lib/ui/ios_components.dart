@@ -4,21 +4,21 @@ import 'package:flutter/material.dart';
 /// A small original, cross-platform iOS-inspired UI language for O-AGENT.
 /// Uses semantic text and theme colors rather than copying a template's assets.
 class OVisual {
-  static const primary = Color(0xFF5850A9);
-  static const ink = Color(0xFF1C1C21);
-  static const secondary = Color(0xFF747680);
-  static const mint = Color(0xFF15785E);
+  static const primary = Color(0xFF1B5966);
+  static const ink = Color(0xFF20323D);
+  static const secondary = Color(0xFF6F858F);
+  static const mint = Color(0xFF218566);
   static const gold = Color(0xFF9B641C);
   static const rose = Color(0xFFB54F59);
 
   static Color canvas(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark
-      ? const Color(0xFF111116) : const Color(0xFFF6F6F8);
+      ? const Color(0xFF101F29) : const Color(0xFFF7F9FB);
   static Color surface(BuildContext context) =>
     Theme.of(context).colorScheme.surface;
   static Color border(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark
-      ? const Color(0xFF30303C) : const Color(0xFFE8E8EC);
+      ? const Color(0xFF374852) : const Color(0xFFDCE6E9);
   static Color label(BuildContext context) =>
     Theme.of(context).colorScheme.onSurface;
   static Color muted(BuildContext context) =>
@@ -50,10 +50,10 @@ class OSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final box = DecoratedBox(decoration: BoxDecoration(
       color: tint ?? OVisual.surface(context),
-      borderRadius: BorderRadius.circular(23),
+      borderRadius: BorderRadius.circular(15),
       border: Border.all(color: OVisual.border(context)),
       boxShadow: Theme.of(context).brightness == Brightness.light ? const [
-        BoxShadow(color: Color(0x070A0A30), blurRadius: 16, offset: Offset(0, 5)),
+        BoxShadow(color: Color(0x050A2630), blurRadius: 12, offset: Offset(0, 3)),
       ] : [],
     ), child: Padding(padding: padding, child: child));
     if (onTap == null) return box;

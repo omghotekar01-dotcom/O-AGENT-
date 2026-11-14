@@ -229,11 +229,12 @@ class AgentApi {
   /// No source file contents are persisted in backend tasks or activity.
   Future<Map<String, dynamic>> vscodeFileRequest({
     required String workerId, required String op, String path = '',
-    String? content, String? expectedHash,
+    String? content, String? expectedHash, String? newPath,
   }) => _request('/api/vscode/files/request',method:'POST',body:{
     'workerId':workerId,'op':op,'path':path,
     if(content!=null)'content':content,
     if(expectedHash!=null)'expectedHash':expectedHash,
+    if(newPath!=null)'newPath':newPath,
   });
 
   Future<Map<String, dynamic>> vscodeFileResult(String id) =>
