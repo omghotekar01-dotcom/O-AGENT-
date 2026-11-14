@@ -234,7 +234,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
       const requiredRole=path.startsWith("/v1/team/")||
         path.startsWith("/v1/account/")||
         path.startsWith("/v1/devices/enrollments/")||
-        /^\\/v1\\/devices\\/[0-9a-f-]{36}\\/revoke$/i.test(path)
+        (path.startsWith("/v1/devices/") && path.endsWith("/revoke"))
           ?"owner":path==="/v1/audit"?"operator":
           write?"operator":"viewer";
       const asTenant=(fn,role=requiredRole)=>withIdentity(pool,identity,fn,{
