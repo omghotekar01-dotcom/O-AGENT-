@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS identities (
 CREATE TABLE IF NOT EXISTS pending_devices (
   id uuid PRIMARY KEY, name varchar(80) NOT NULL, public_key bytea NOT NULL,
   token_hash bytea UNIQUE NOT NULL, source_hash bytea NOT NULL,
+  approved_device_id uuid,
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL
 );
