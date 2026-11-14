@@ -88,3 +88,54 @@ The existing `docs/PRODUCT_RELEASE_GATES.md` remains authoritative:
 per-tenant device identity and authorization, a real hosted backend, signing
 keys, signed store release, privacy/terms and real-device QA are still needed.
 The CI-generated debug APK must never be labeled a signed market release.
+
+
+## One-time trusted mobile control (private preview)
+
+1. On your own trusted Windows laptop, run
+   `ENABLE-ONE-TAP-CONTROL.cmd` **once**, read the local warnings, and type
+   `ENABLE`. Choosing `DISABLE` later revokes the setting and stops the
+   locally enrolled visible helper. New installations may opt in during setup.
+2. Restart `O-AGENT.cmd` once. Its Windows helper starts visibly and waits
+   for owner activation; **no code is generated or requested on each session**.
+3. On the **laptop**, open the authenticated O-AGENT dashboard → Live desktop,
+   choose **Share this computer's screen** and select the exact display or
+   window through Chrome/Edge's native picker. The screen cannot be silently
+   captured by the phone; browser consent is a real platform limitation.
+4. On the owner phone, open Remote → **Control laptop screen** (fullscreen).
+   Press **Control**. A live picture and active visible helper are required;
+   owner authentication is checked at the backend. After enabling, use touch
+   to point/click, keyboard to type or **Send prompt** to type the exact text
+   and press Enter in the currently focused application.
+5. Press **Stop input** from the phone for view-only mode, or stop screen
+   sharing/end the Windows helper to revoke local capabilities. Owner
+   control expires after 20 minutes even if the phone stays open.
+6. Temporary eight-digit pairing remains available only under the
+   advanced/legacy setup path, not the default owner flow.
+
+**Why a one-time laptop setup remains mandatory:** The app must not
+grant arbitrary Windows mouse/keyboard permissions solely because a remote
+user knows an API token. A visible, revocable local enrollment plus a
+browser-selected capture and authenticated phone activation are the
+private-preview consent boundaries. This is not yet device-attested,
+per-user multi-tenant commercial authentication.
+
+**Where screen taps work:** A shared **full display** on a Windows computer
+with **one monitor** supports normalized tap-to-click (the Windows helper
+independently checks the monitor count). Multi-monitor or tab/window share
+uses the relative drag/click trackpad because screen-window coordinates
+cannot be safely inferred from the picture. Windows secure desktop, UAC
+and elevated app controls are excluded.
+
+**HTTP 429:** Both the standalone browser capture page and embedded web
+dashboard now back off and retry throttled frame uploads without destroying
+the browser's ongoing screen permission. If the live frame becomes stale,
+remote input pauses; network improvements are not a bypass of consent.
+
+**ChatGPT and other AI apps:** The phone can interact with their *visible
+laptop UI* through the explicitly shared desktop and human-driven input.
+O-AGENT does not automatically retrieve existing private ChatGPT/Grok/
+Claude/Copilot consumer chat histories or internal approvals unless
+authorized provider APIs and adapters support them. Attaching photos/files
+from the phone to an unrelated provider website has not been implemented
+by this control-only change.
