@@ -233,6 +233,10 @@ class AgentApi {
     _request('/api/input/status');
   Future<Map<String, dynamic>> pairRemoteInput(String code) =>
     _request('/api/input/pair', method: 'POST', body: {'code': code});
+  /// A locally enrolled/visible Windows companion must already be connected.
+  /// The phone still makes an explicit owner-authenticated activation request.
+  Future<Map<String, dynamic>> activateTrustedRemoteInput() =>
+    _request('/api/input/activate', method: 'POST');
   Future<Map<String, dynamic>> sendRemoteInput(Map<String, dynamic> action) =>
     _request('/api/input/action', method: 'POST', body: action);
   Future<Map<String, dynamic>> stopRemoteInput() =>
