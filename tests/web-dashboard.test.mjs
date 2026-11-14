@@ -54,3 +54,17 @@ test("connected tool statuses remain backend-derived, not fabricated",()=>{
   assert.match(js,/api\("\/api\/state"\)/);
   assert.match(js,/api\("\/api\/projects"\)/);
 });
+
+test("web action inbox uses authenticated exact-request review and never fakes empty state",()=>{
+  assert.match(html,/id="approvalInboxList"/);
+  assert.match(html,/id="approvalInboxCount"/);
+  assert.match(html,/id="refreshApprovals"/);
+  assert.match(js,/api\("\/api\/remote\/overview"\)/);
+  assert.match(js,/async function reviewInboxDecision/);
+  assert.match(js,/const task=await api\(path\)/);
+  assert.match(js,/item\.state!=="pending"/);
+  assert.match(js,/await confirmAction\("Review exact "/);
+  assert.match(js,/ownerOverview\.error\?"Unavailable"/);
+  assert.doesNotMatch(js,/Approve this exact task\?/);
+  assert.match(css,/approval-inbox/);
+});
