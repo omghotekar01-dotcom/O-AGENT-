@@ -228,7 +228,8 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
                 SegmentedButton<String>(segments: const [
                   ButtonSegment(value: 'claude_agent_turn', label: Text('Claude')),
                   ButtonSegment(value: 'copilot_sdk_turn', label: Text('Copilot')),
-                ], selected: {provider}, onSelectionChanged: (v) =>
+                ], selected: {provider},
+                  onSelectionChanged: widget.resumeSession != null ? null : (v) =>
                     setState(() { provider = v.first; worker = null; })),
                 const SizedBox(height: 12),
                 if (enrolled.isEmpty) const Text('No enrolled online worker. '
@@ -249,13 +250,16 @@ class _SdkBridgeState extends State<AgentSdkBridgeScreen> {
                   items: enrolled.map((w) => DropdownMenuItem(
                     value: bridgeText(w['id']),
                     child: Text(bridgeText(w['name'])))).toList(),
-                  onChanged: (v) => setState(() => worker = v)),
+                  onChanged: widget.resumeSession != null ? null :
+                    (v) => setState(() => worker = v)),
                 const SizedBox(height: 12),
                 TextField(controller: cwd, decoration: const InputDecoration(
                   labelText: 'Existing enrolled workspace folder')),
                 const SizedBox(height: 10),
-                TextField(controller: resume, decoration: const InputDecoration(
-                  labelText: 'SDK session ID to resume (optional)')),
+                TextField(controller: resume,
+                  readOnly: widget.resumeSession != null,
+                  decoration: const InputDecoration(
+                    labelText: 'SDK session ID to resume (optional)')),
                 const SizedBox(height: 10),
                 TextField(controller: prompt, maxLength: 4000, minLines: 3,
                   maxLines: 6, decoration: const InputDecoration(
