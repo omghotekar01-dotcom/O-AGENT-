@@ -31,13 +31,29 @@ export function readSaasConfig(env = process.env) {
     throw Error("Production DATABASE_URL must use sslmode=verify-full");
   const clientIds = required(env,"OAGENT_OIDC_CLIENT_IDS").split(",").map(s=>s.trim()).filter(Boolean);
   if (!clientIds.length || clientIds.some(s=>s.length>250)) throw Error("Invalid OIDC client allowlist");
+  let webAuth=null;
+  const webKeys=["OAGENT_OIDC_WEB_CLIENT_ID","OAGENT_OIDC_AUTHORIZE_URL",
+    "OAGENT_OIDC_TOKEN_URL"];
+  if(webKeys.every(k=>typeof env[k]==="string"&&env[k].trim())){
+    const clientId=required(env,"OAGENT_OIDC_WEB_CLIENT_ID");
+    if(!clientIds.includes(clientId))
+      throw Error("OIDC web client must be present in OIDC client allowlist");
+    const authorize=absolute(required(env,"OAGENT_OIDC_AUTHORIZE_URL"),
+      "OAGENT_OIDC_AUTHORIZE_URL");
+    const token=absolute(required(env,"OAGENT_OIDC_TOKEN_URL"),
+      "OAGENT_OIDC_TOKEN_URL");
+    webAuth={clientId,authorizationEndpoint:authorize.href,
+      tokenEndpoint:token.href,redirectUri:publicUrl.origin+"/"};
+  } else if(webKeys.some(k=>typeof env[k]==="string"&&env[k].trim())){
+    throw Error("Configure all three OIDC web login settings, or none");
+  }
   const audience = required(env,"OAGENT_OIDC_AUDIENCE");
   if (audience.length > 500) throw Error("OIDC audience too long");
   const port = Number(env.PORT || 8790);
   if (!Number.isSafeInteger(port) || port<1 || port>65535) throw Error("Invalid PORT");
   return Object.freeze({
     publicOrigin:publicUrl.origin, issuer:issuerValue, jwksUrl:jwks.href,
-    audience, clientIds, databaseUrl:db.href,
+    audience, clientIds, webAuth, databaseUrl:db.href,
     host:env.HOST || "127.0.0.1", port,
     mode:env.NODE_ENV || "production",
   });
