@@ -437,6 +437,16 @@ export async function deleteOwnAccount(client,tenantId,subject,body){
   if(body?.confirmation!=="DELETE_MY_OAGENT_WORKSPACE" ||
      body?.acknowledgeLocalData!==true)
     throw httpError(400,"Account deletion requires typed confirmation and local-data acknowledgement");
+  const members=await client.query(
+    "SELECT count(*)::int AS n FROM tenant_members WHERE tenant_id=$1",[tenantId]);
+  if(members.rows[0].n!==1)
+    throw httpError(409,"Remove all other team members before deleting this workspace");
+  const joined=await client.query(
+    "SELECT count(*)::int AS n FROM tenant_members WHERE issuer=current_setting('oagent.identity_issuer',true) AND subject=current_setting('oagent.identity_subject',true)");
+  if(joined.rows[0].n>1)
+    throw httpError(409,"Leave other team workspaces before deleting your account");
+  await client.query("DELETE FROM pending_team_invites WHERE tenant_id=$1",[tenantId]);
+  await client.query("DELETE FROM tenant_members WHERE tenant_id=$1",[tenantId]);
   await client.query("SELECT id FROM devices WHERE tenant_id=$1 FOR UPDATE",[tenantId]);
   await client.query(
     "DELETE FROM pending_devices WHERE approved_device_id IN (SELECT id FROM devices WHERE tenant_id=$1)",
