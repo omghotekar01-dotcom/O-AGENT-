@@ -88,6 +88,7 @@ services:
       OAGENT_OIDC_WEB_CLIENT_ID: oagent-web
       OAGENT_OIDC_AUTHORIZE_URL: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent/protocol/openid-connect/auth
       OAGENT_OIDC_TOKEN_URL: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent/protocol/openid-connect/token
+      OAGENT_OIDC_LOGOUT_URL: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent/protocol/openid-connect/logout
       DATABASE_URL: postgresql://oagent_runtime:${OAGENT_RUNTIME_PASSWORD:?Missing runtime secret}@db:5432/oagent?sslmode=disable
     depends_on:
       migrate: {condition: service_completed_successfully}

@@ -52,9 +52,18 @@ export function readSaasConfig(env = process.env) {
       "OAGENT_OIDC_AUTHORIZE_URL");
     const token=absolute(required(env,"OAGENT_OIDC_TOKEN_URL"),
       "OAGENT_OIDC_TOKEN_URL");
+    const logoutValue=env.OAGENT_OIDC_LOGOUT_URL?.trim();
+    let logoutEndpoint=null;
+    if(logoutValue){
+      const logout=absolute(logoutValue,"OAGENT_OIDC_LOGOUT_URL");
+      if(logout.origin!==authorize.origin)
+        throw Error("OIDC logout endpoint must match the authorization server origin");
+      logoutEndpoint=logout.href;
+    }
     webAuth={clientId,authorizationEndpoint:authorize.href,
-      tokenEndpoint:token.href,redirectUri:publicUrl.origin+"/"};
-  } else if(webKeys.some(k=>typeof env[k]==="string"&&env[k].trim())){
+      tokenEndpoint:token.href,redirectUri:publicUrl.origin+"/",logoutEndpoint};
+  } else if(webKeys.some(k=>typeof env[k]==="string"&&env[k].trim())||
+      env.OAGENT_OIDC_LOGOUT_URL?.trim()){
     throw Error("Configure all three OIDC web login settings, or none");
   }
   const audience = required(env,"OAGENT_OIDC_AUDIENCE");

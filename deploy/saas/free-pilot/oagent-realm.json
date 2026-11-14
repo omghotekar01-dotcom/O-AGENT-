@@ -46,7 +46,8 @@
         "${OAGENT_ORIGIN}"
       ],
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${OAGENT_ORIGIN}/"
       },
       "defaultClientScopes": [
         "profile",

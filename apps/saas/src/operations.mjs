@@ -97,6 +97,14 @@ export async function revokeDevice(client,tenantId,subject,id) {
   if(!deleted.rowCount)throw httpError(404,"Device not found");
   await client.query("UPDATE device_auth_keys SET revoked_at=now() WHERE device_id=$1 AND tenant_id=$2",
     [id,tenantId]);
+  // Revoke queued jobs and outstanding permissions. Never replay an in-flight
+  // provider turn automatically after its signing key has been revoked.
+  await client.query(
+    "UPDATE runs SET status=CASE WHEN status IN ('waiting_for_approval','queued') THEN 'cancelled' ELSE 'needs_recovery' END,lease_token=NULL,lease_expires_at=NULL,updated_at=now(),error='Worker revoked by owner' WHERE device_id=$1 AND status IN ('waiting_for_approval','queued','running','waiting_for_tool')",
+    [id]);
+  await client.query(
+    "UPDATE approvals SET status='denied',decided_at=now(),decided_by=$1 WHERE device_id=$2 AND status='pending'",
+    [subject,id]);
   await audit(client,tenantId,subject,"device.revoked",id);
   return {revoked:true};
 }
@@ -411,4 +419,35 @@ export async function resolveInterruptedRun(client,tenantId,subject,id,body){
   await audit(client,tenantId,subject,"run.recovery.acknowledged",id,
     {replayed:false});
   return {runId:id,status:"failed",replayed:false};
+}
+
+
+/** Privacy-safe owner audit view (not the raw provider prompt). */
+export async function listAuditEvents(client){
+  const {rows}=await client.query(
+    "SELECT id,actor,action,target_id,created_at FROM audit_events ORDER BY id DESC LIMIT 75");
+  return rows;
+}
+
+/** Erase all server-side records for the verified owner's personal tenant.
+ * Does NOT erase provider accounts, local machine files or external backups.
+ * The signed worker sees missing device authorization at its next operation.
+ */
+export async function deleteOwnAccount(client,tenantId,subject,body){
+  if(body?.confirmation!=="DELETE_MY_OAGENT_WORKSPACE" ||
+     body?.acknowledgeLocalData!==true)
+    throw httpError(400,"Account deletion requires typed confirmation and local-data acknowledgement");
+  await client.query("SELECT id FROM devices WHERE tenant_id=$1 FOR UPDATE",[tenantId]);
+  await client.query(
+    "DELETE FROM pending_devices WHERE approved_device_id IN (SELECT id FROM devices WHERE tenant_id=$1)",
+    [tenantId]);
+  for(const name of ["run_events","approvals","audit_events",
+      "push_subscriptions","runs","device_auth_keys","devices"]){
+    await client.query("DELETE FROM "+name+" WHERE tenant_id=$1",[tenantId]);
+  }
+  await client.query("DELETE FROM identities WHERE tenant_id=$1",[tenantId]);
+  const result=await client.query("DELETE FROM tenants WHERE id=$1 RETURNING id",[tenantId]);
+  if(result.rowCount!==1)throw httpError(409,"Account has already been deleted");
+  return {deleted:true,providerAccountsDeleted:false,localFilesDeleted:false,
+    encryptedBackupsDeleted:false};
 }

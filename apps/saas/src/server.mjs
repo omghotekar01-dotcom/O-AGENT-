@@ -16,7 +16,7 @@ import {
   updateCapabilities,heartbeat,createRun,listRuns,runDetail,
   listApprovals,decideApproval,claimRun,renewLease,finishRun,
   requestToolApproval,toolApprovalStatus,appendRunEvent,listRunEvents,
-  cancelRun,resolveInterruptedRun,isUUID,
+  cancelRun,resolveInterruptedRun,listAuditEvents,deleteOwnAccount,isUUID,
 } from "./operations.mjs";
 
 const reply=(res,status,value)=>{
@@ -104,6 +104,7 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           authorizationEndpoint:config.webAuth?.authorizationEndpoint??null,
           tokenEndpoint:config.webAuth?.tokenEndpoint??null,
           redirectUri:config.webAuth?.redirectUri??null,
+          logoutEndpoint:config.webAuth?.logoutEndpoint??null,
           audience:config.audience,
           scope:"openid profile oagent:read oagent:operate",
         });
@@ -233,6 +234,14 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           ]})));
       if(method==="GET"&&path==="/v1/devices")
         return reply(res,200,{devices:await asTenant(c=>listDevices(c))});
+      if(method==="GET"&&path==="/v1/audit")
+        return reply(res,200,{events:await asTenant(c=>listAuditEvents(c))});
+      if(method==="POST"&&path==="/v1/account/delete"){
+        assertJson(req);
+        const body=objectJson(await bytes(req,1200));
+        return reply(res,200,await asTenant((c,t)=>
+          deleteOwnAccount(c,t,identity.subject,body)));
+      }
       if(method==="GET"&&path==="/v1/push/config")
         return reply(res,200,{enabled:!!config.push,
           vapidPublicKey:config.push?.publicKey??null});

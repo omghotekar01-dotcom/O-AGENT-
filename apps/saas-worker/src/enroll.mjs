@@ -48,9 +48,11 @@ export async function enrollCloudWorker({
 }){
   const endpoint=publicOrigin(origin);
   let identity=await readIdentity(path);
+  if(identity && identity.enrolledOrigin!==endpoint)
+    throw Error("This device key belongs to another O-AGENT server (or a legacy enrollment without an origin). Revoke the previous device and explicitly re-enroll with a new local key.");
   if(identity?.deviceId) return {deviceId:identity.deviceId,alreadyEnrolled:true};
   if(!identity){
-    identity={...generateDeviceKeys(),createdAt:now()};
+    identity={...generateDeviceKeys(),enrolledOrigin:endpoint,createdAt:now()};
   }
   if(!identity.pairingToken||identity.pairingExpiresAt<=now()){
     const response=await fetchImpl(endpoint+"/v1/devices/enrollments",{

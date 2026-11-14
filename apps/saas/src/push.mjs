@@ -37,9 +37,16 @@ export async function registerPush(client,tenantId,body){
     if(count.rows[0].count>=5)
       throw httpError(429,"Maximum five phone/browser subscriptions per account");
   }
-  const saved=await client.query(
-    "INSERT INTO push_subscriptions(tenant_id,endpoint_hash,endpoint,auth_key,p256dh_key) VALUES($1,$2,$3,$4,$5) ON CONFLICT (tenant_id,endpoint_hash) DO UPDATE SET auth_key=EXCLUDED.auth_key,p256dh_key=EXCLUDED.p256dh_key RETURNING tenant_id",
-    [tenantId,digest,data.endpoint,data.keys.auth,data.keys.p256dh]);
+  let saved;
+  try{
+    saved=await client.query(
+      "INSERT INTO push_subscriptions(tenant_id,endpoint_hash,endpoint,auth_key,p256dh_key) VALUES($1,$2,$3,$4,$5) ON CONFLICT (tenant_id,endpoint_hash) DO UPDATE SET auth_key=EXCLUDED.auth_key,p256dh_key=EXCLUDED.p256dh_key RETURNING tenant_id",
+      [tenantId,digest,data.endpoint,data.keys.auth,data.keys.p256dh]);
+  }catch(error){
+    if(error.code==="23505")
+      throw httpError(409,"This browser alert is already linked to another account. Remove its old browser subscription before registering again.");
+    throw error;
+  }
   if(!saved.rowCount)throw httpError(409,"Push subscription could not be saved");
   return {subscribed:true};
 }
