@@ -84,6 +84,14 @@ test("real HTTP + PostgreSQL: OIDC owner, exact fingerprint pairing, signed work
     assert.equal(reused.status,404);
     const strangerDevices=await request("/v1/devices",{token:"other-user"});
     assert.deepEqual(strangerDevices.data.devices,[]);
+    const ownerAudit=await request("/v1/audit",{token:"owner-user"});
+    assert.equal(ownerAudit.status,200);
+    assert.ok(ownerAudit.data.events.some(x=>x.action==="device.enrolled"));
+    assert.ok(ownerAudit.data.events.every(x=>!Object.hasOwn(x,"detail")));
+    const otherAudit=await request("/v1/audit",{token:"other-user"});
+    assert.equal(otherAudit.status,200);
+    assert.deepEqual(otherAudit.data.events,[]);
+    assert.equal((await request("/v1/audit")).status,401);
     async function signed(path,body,method="POST"){
       const raw=method==="GET"?Buffer.alloc(0):Buffer.from(JSON.stringify(body));
       const proof=deviceHeaders(keys.privateKeyPem,{
@@ -147,6 +155,22 @@ test("real HTTP + PostgreSQL: OIDC owner, exact fingerprint pairing, signed work
     });
     assert.equal(revoked.status,200);
     assert.equal((await signed("/v1/device/heartbeat",{})).status,401);
+    assert.equal((await request("/v1/account/delete",{
+      method:"POST",token:"owner-user",body:{confirmation:"DELETE"},
+    })).status,400);
+    const erased=await request("/v1/account/delete",{
+      method:"POST",token:"owner-user",
+      body:{confirmation:"DELETE_MY_OAGENT_WORKSPACE",
+        acknowledgeLocalData:true},
+    });
+    assert.equal(erased.status,200);
+    assert.equal(erased.data.deleted,true);
+    assert.equal(erased.data.providerAccountsDeleted,false);
+    assert.equal(erased.data.localFilesDeleted,false);
+    const remaining=await request("/v1/audit",{token:"owner-user"});
+    assert.deepEqual(remaining.data.events,[]);
+    const otherStill=await request("/v1/me",{token:"other-user"});
+    assert.equal(otherStill.status,200);
   }finally{
     if(app)await app.close();
     if(pool)await pool.end();

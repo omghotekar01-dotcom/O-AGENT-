@@ -72,3 +72,10 @@ test("gateway strips upstream file capabilities instead of removing security san
   assert.match(dockerfile,/setcap -r \/usr\/bin\/caddy/);
   assert.match(dockerfile,/EXPOSE 8081/);
 });
+
+test("Keycloak private realm has exact sign-out redirect",()=>{
+  const realm=JSON.parse(read("oagent-realm.json"));
+  const web=realm.clients.find(x=>x.clientId==="oagent-web");
+  assert.equal(web.attributes["post.logout.redirect.uris"],"$"+"{OAGENT_ORIGIN}/");
+  assert.match(read("compose.yaml"),/OAGENT_OIDC_LOGOUT_URL:/);
+});

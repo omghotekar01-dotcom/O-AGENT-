@@ -150,6 +150,12 @@ test("owner-approved free worker enrolls automatically and securely reuses its l
       origin:"https://laptop.example.ts.net",path,fetchImpl,
     });
     assert.equal(repeated.alreadyEnrolled,true);
+    assert.equal((await readIdentity(path)).enrolledOrigin,
+      "https://laptop.example.ts.net");
+    await assert.rejects(()=>enrollCloudWorker({
+      origin:"https://different-server.example.ts.net",
+      path,fetchImpl,
+    }),/belongs to another O-AGENT server/);
     assert.equal(requests.length,2);
   }finally{await rm(folder,{recursive:true,force:true});}
 });

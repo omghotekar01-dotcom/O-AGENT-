@@ -25,6 +25,20 @@ test("SaaS config fails closed without HTTPS, explicit OIDC and database",()=>{
   env.DATABASE_URL="postgres://user:pass@localhost/db?sslmode=verify-full";
   assert.equal(readSaasConfig(env).publicOrigin,"https://app.example.com");
   assert.equal(readSaasConfig(env).issuer,"https://id.example.com");
+  const login={
+    ...env,OAGENT_OIDC_WEB_CLIENT_ID:"mobile-prod",
+    OAGENT_OIDC_AUTHORIZE_URL:"https://id.example.com/auth",
+    OAGENT_OIDC_TOKEN_URL:"https://id.example.com/token",
+    OAGENT_OIDC_LOGOUT_URL:"https://id.example.com/logout",
+  };
+  assert.equal(readSaasConfig(login).webAuth.logoutEndpoint,
+    "https://id.example.com/logout");
+  assert.throws(()=>readSaasConfig({...login,
+    OAGENT_OIDC_LOGOUT_URL:"https://unexpected.example/logout"}),
+    /match the authorization server/);
+  assert.throws(()=>readSaasConfig({...env,
+    OAGENT_OIDC_LOGOUT_URL:"https://id.example.com/logout"}),
+    /Configure all three/);
   assert.throws(()=>readSaasConfig({...env,OAGENT_LOCAL_PILOT:"1"}),
     /Private pilot requires/);
   assert.throws(()=>readSaasConfig({...env,DATABASE_URL:

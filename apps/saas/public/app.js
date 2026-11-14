@@ -468,7 +468,7 @@ async function refresh(){
     };
     render();pillConnection(true);showAuth(true);
     if(navigator.setAppBadge){
-      void navigator.setAppBadge(approvals.length).catch(()=>{});
+      void navigator.setAppBadge(state.approvals.length).catch(()=>{});
     }
   }catch(error){
     pillConnection(false);

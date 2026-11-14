@@ -11,7 +11,7 @@ test("SaaS command center has unique ids and no broken control references",()=>{
   assert.equal(new Set(ids).size,ids.length);
   for(const item of script.matchAll(/\$\("([^"]+)"\)/g))
     assert.ok(ids.includes(item[1]),"Missing "+item[1]);
-  for(const page of ["overview","approvals","runs","devices"]){
+  for(const page of ["overview","approvals","runs","devices","audit"]){
     assert.match(ui,new RegExp('data-panel="'+page+'"'));
     assert.match(ui,new RegExp('data-view="'+page+'"'));
   }
@@ -92,4 +92,18 @@ test("interrupted provider runs cannot be auto-replayed and owners can cancel qu
   assert.match(script,/resolve-interrupted/);
   assert.match(script,/Cancel pending run/);
   assert.match(script,/No replay was performed/);
+});
+
+test("security view uses RLS audit, typed deletion, safe logout and consent labels",()=>{
+  assert.match(script,/api\("\/v1\/audit"\)/);
+  assert.match(ui,/id="auditList"/);
+  assert.match(ui,/data-view="audit"/);
+  assert.match(ui,/id="deletePhrase"/);
+  assert.match(ui,/id="ackLocalData"/);
+  assert.match(script,/DELETE_MY_OAGENT_WORKSPACE/);
+  assert.match(script,/logoutEndpoint/);
+  assert.match(script,/disableAlerts/);
+  assert.match(script,/confirmLabel:"Enroll this device"/);
+  assert.match(script,/confirmLabel:"Request approval"/);
+  assert.doesNotMatch(script,/setAppBadge\(approvals\.length\)/);
 });

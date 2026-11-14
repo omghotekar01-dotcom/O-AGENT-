@@ -6,7 +6,7 @@ import {migrate,withIdentity,withTenant,audit,assertTenantDatabaseSecurity,prune
 import {startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,updateCapabilities,
   heartbeat,createRun,listRuns,runDetail,listApprovals,decideApproval,claimRun,
   finishRun,requestToolApproval,toolApprovalStatus,cancelRun,
-  resolveInterruptedRun} from "../src/operations.mjs";
+  resolveInterruptedRun,listAuditEvents,deleteOwnAccount} from "../src/operations.mjs";
 import {generateDeviceKeys,sha256,deviceHeaders,verifyDeviceHeaders} from "../src/device-crypto.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "../src/push.mjs";
 
@@ -156,6 +156,9 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
         await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>registerPush(
           c,t,{...subscription,endpoint:"https://127.0.0.1/internal"})),
           /Invalid push subscription|Unsupported browser push service/);
+        await assert.rejects(()=>withIdentity(pool,stranger,(c,t)=>
+          registerPush(c,t,subscription)),error=>
+          error.status===409&&/another account/.test(error.message));
         await withIdentity(pool,owner,c=>unregisterPush(c,subscription.endpoint));
         assert.equal((await withIdentity(pool,owner,pushStatus)).subscribedDevices,0);
         const pending=await withIdentity(pool,owner,(c,t)=>
@@ -205,8 +208,18 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
         const direct=await pool.query("SELECT count(*)::int AS count FROM runs");
         assert.equal(direct.rows[0].count,0,
           "FORCE RLS without a scoped transaction denies all tenant runs");
+        const pendingOnRevoke=await withIdentity(pool,owner,(c,t)=>
+          createRun(c,t,owner.subject,payload,randomUUID()+"_revoke"));
+        const auditsBefore=await withIdentity(pool,owner,c=>listAuditEvents(c));
+        assert.ok(auditsBefore.some(x=>x.action==="run.requested"));
+        assert.equal((await withIdentity(pool,stranger,c=>listAuditEvents(c)))
+          .some(x=>x.target_id===pendingOnRevoke.runId),false);
         await withIdentity(pool,owner,(c,t)=>revokeDevice(
           c,t,owner.subject,device.deviceId));
+        assert.equal((await withIdentity(pool,owner,c=>
+          runDetail(c,pendingOnRevoke.runId))).status,"cancelled");
+        assert.ok(!(await withIdentity(pool,owner,c=>listApprovals(c)))
+          .some(x=>x.run_id===pendingOnRevoke.runId));
         const replay=deviceHeaders(keys.privateKeyPem,{
           deviceId:device.deviceId,method:"POST",path:"/v1/device/heartbeat",
           rawBody:Buffer.from("{}"),
@@ -215,6 +228,23 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
           headers:replay,method:"POST",path:"/v1/device/heartbeat",
           rawBody:Buffer.from("{}"),
         }),/Device authentication failed/);
+        await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>
+          deleteOwnAccount(c,t,owner.subject,{
+            confirmation:"DELETE",acknowledgeLocalData:true,
+          })),/typed confirmation/);
+        assert.equal((await withIdentity(pool,owner,(c,t)=>
+          deleteOwnAccount(c,t,owner.subject,{
+            confirmation:"DELETE_MY_OAGENT_WORKSPACE",
+            acknowledgeLocalData:true,
+          }))).deleted,true);
+        assert.equal((await admin.query(
+          "SELECT count(*)::int AS n FROM identities WHERE tenant_id=$1",
+          [tenantA])).rows[0].n,0);
+        assert.equal((await admin.query(
+          "SELECT count(*)::int AS n FROM device_auth_keys WHERE device_id=$1",
+          [device.deviceId])).rows[0].n,0);
+        assert.equal((await withIdentity(pool,stranger,(_c,t)=>t)),tenantB);
+        assert.notEqual((await withIdentity(pool,owner,(_c,t)=>t)),tenantA);
       }finally{await pool.end();}
     }finally{await admin.end();}
 });
