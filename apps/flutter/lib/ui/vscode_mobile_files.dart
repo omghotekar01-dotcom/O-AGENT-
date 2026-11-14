@@ -75,26 +75,24 @@ class _VsCodeFilesState extends State<VsCodeFilesScreen> {
 
   Future<void> _create() async {
     if(_busy)return;
-    final controller=TextEditingController();
+    String input='';
     final name=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
       title:const Text('Create a text file'),
       content:Column(mainAxisSize:MainAxisSize.min,
         crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text('Folder: ${_folder.isEmpty?"Project root":_folder}'),
           const SizedBox(height:12),
-          TextField(controller:controller,autofocus:true,
+          TextField(autofocus:true,onChanged:(value)=>input=value,
             decoration:const InputDecoration(labelText:'Filename',
               hintText:'notes.md'),
             onSubmitted:(value)=>Navigator.pop(ctx,value)),
         ]),
       actions:[
         TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),
-        FilledButton(onPressed:()=>Navigator.pop(ctx,controller.text),
+        FilledButton(onPressed:()=>Navigator.pop(ctx,input),
           child:const Text('Create file')),
       ]));
-    // The input field is no longer mounted after the dialog is closed.
-    controller.dispose();
-    if(!mounted||name==null)return;
+     if(!mounted||name==null)return;
     final clean=name.trim();
     if(clean.isEmpty||clean.startsWith('.')||
        !RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,119}
@@ -270,19 +268,18 @@ class _MobileSourceEditorState extends State<_MobileSourceEditor> {
     final name=widget.path.split('/').last;
     String? destination;
     if(action=='rename') {
-      final controller=TextEditingController(text:name);
+      String input=name;
       destination=await showDialog<String>(context:context,builder:(ctx)=>AlertDialog(
         title:const Text('Rename file'),
-        content:TextField(controller:controller,autofocus:true,
-          decoration:const InputDecoration(labelText:'New filename'),
+        content:TextField(autofocus:true,onChanged:(v)=>input=v,
+          decoration:InputDecoration(labelText:'New filename',hintText:name),
           onSubmitted:(v)=>Navigator.pop(ctx,v)),
         actions:[
           TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),
-          FilledButton(onPressed:()=>Navigator.pop(ctx,controller.text),
+          FilledButton(onPressed:()=>Navigator.pop(ctx,input),
             child:const Text('Continue')),
         ]));
-      controller.dispose();
-      if(destination==null||!mounted)return;
+       if(destination==null||!mounted)return;
       destination=destination.trim();
       if(!RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,119}
         IconButton(tooltip:'Read or edit',onPressed:widget.readOnly?null:()=>
