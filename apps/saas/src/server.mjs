@@ -69,12 +69,31 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         return reply(res,200,{status:"ready",database:"connected"});
       }
       expectedHost(config,req);
+      if(method==="GET"&&path==="/.well-known/oauth-protected-resource")
+        return reply(res,200,{
+          resource:config.publicOrigin+"/mcp",
+          authorization_servers:[config.issuer],
+          scopes_supported:["oagent:read","oagent:operate"],
+          bearer_methods_supported:["header"],
+        });
       if(parsed.search&&!/^\/v1\/runs\/[0-9a-f-]{36}\/events$/i.test(path))
         throw httpError(400,"Unexpected query parameters");
       if(path==="/mcp"){
         if(!["GET","POST","DELETE"].includes(method))
           throw httpError(405,"Unsupported MCP method");
-        const identity=await verifier(req.headers.authorization,"oagent:read");
+        let identity;
+        try {identity=await verifier(req.headers.authorization,"oagent:read");}
+        catch(error){
+          if(error.status===401){
+            res.writeHead(401,{"content-type":"application/json",
+              "cache-control":"no-store",
+              "www-authenticate":'Bearer resource_metadata="'+
+                config.publicOrigin+'/.well-known/oauth-protected-resource"'});
+            res.end(JSON.stringify({error:"MCP requires an authorized bearer token"}));
+            return;
+          }
+          throw error;
+        }
         // The official v2 handler is stateless. Identity is verified before
         // anything is forwarded; MCP never receives the raw bearer token.
         const body=method==="GET"?undefined:Readable.toWeb(req);
