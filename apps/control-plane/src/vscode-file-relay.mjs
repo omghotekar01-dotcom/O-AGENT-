@@ -7,6 +7,13 @@ const TTL_MS = 90_000;
 const MAX_REQUESTS = 12;
 const MAX_FILE_CHARS = 48_000;
 const MAX_RESPONSE_BYTES = 90_000;
+const OPERATIONS = new Set(["list","read","write","create","rename","delete"]);
+function validPath(path, allowRoot = false) {
+  return typeof path === "string" && path.length <= 350 &&
+    (allowRoot || path.length > 0) && !/[\u0000-\u001f]/.test(path) &&
+    !path.startsWith("/") && !/^[A-Za-z]:/.test(path) &&
+    (!path || path.split(/[\\/]/).every(x => x && x !== "." && x !== ".."));
+}
 const WORKER_IDLE_MS = 30_000;
 
 export class VscodeFileRelay {
@@ -35,28 +42,31 @@ export class VscodeFileRelay {
     if (typeof workerId !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(workerId) ||
         !this.online(workerId))
       throw new DomainError(409, "VS Code workspace companion is not online. Reopen the trusted folder and start it.");
-    if (!["list", "read", "write"].includes(op))
+    if (!OPERATIONS.has(op))
       throw new DomainError(400, "Unsupported VS Code operation");
     const path = value.path ?? "";
-    if (typeof path !== "string" || path.length > 350 ||
-        /[\u0000-\u001f]/.test(path) ||
-        (path && (path.startsWith("/") || /^[A-Za-z]:/.test(path) ||
-          path.split(/[\\/]/).some(x => !x || x === "." || x === ".."))))
+    if (!validPath(path, op === "list"))
       throw new DomainError(400, "Invalid workspace-relative path");
-    if (op !== "list" && !path)
-      throw new DomainError(400, "Choose an existing file");
-    if (op === "write" && (typeof value.content !== "string" ||
-        value.content.length > MAX_FILE_CHARS ||
-        typeof value.expectedHash !== "string" ||
-        !/^[a-f0-9]{64}$/.test(value.expectedHash)))
-      throw new DomainError(400, "Edited text or expected file version is invalid");
+    if (op === "rename" && !validPath(value.newPath))
+      throw new DomainError(400, "Invalid new workspace-relative file path");
+    if (["write","rename","delete"].includes(op) &&
+        (typeof value.expectedHash !== "string" || !/^[a-f0-9]{64}$/.test(value.expectedHash)))
+      throw new DomainError(400, "Original file hash required to prevent overwriting a changed file");
+    if (["write","create"].includes(op) &&
+        (typeof value.content !== "string" || value.content.length > MAX_FILE_CHARS ||
+         value.content.includes("\0")))
+      throw new DomainError(400, "Only text files up to 48,000 characters may be edited");
+    if (op === "rename" && path === value.newPath)
+      throw new DomainError(400, "Choose a different file name");
     if ([...this.requests.values()].filter(r => r.workerId === workerId).length >= MAX_REQUESTS)
       throw new DomainError(429, "Too many pending workspace file requests");
     const id = randomUUID();
     const request = {
       id, workerId, op, path, state: "queued", at: this.now(),
       // The original file hash is bound to the single edited version.
-      ...(op === "write" ? {content:value.content,expectedHash:value.expectedHash} : {}),
+      ...(op === "write" || op === "create" ? {content:value.content} : {}),
+      ...(["write","rename","delete"].includes(op) ? {expectedHash:value.expectedHash} : {}),
+      ...(op === "rename" ? {newPath:value.newPath} : {}),
     };
     this.requests.set(id, request);
     return {id, state:request.state, op, path};
@@ -69,7 +79,10 @@ export class VscodeFileRelay {
     request.state = "running";
     return {request:{
       id:request.id,op:request.op,path:request.path,
-      ...(request.op === "write" ? {content:request.content,expectedHash:request.expectedHash} : {}),
+      ...(request.op === "write" || request.op === "create" ? {content:request.content} : {}),
+      ...(["write","rename","delete"].includes(request.op) ?
+        {expectedHash:request.expectedHash} : {}),
+      ...(request.op === "rename" ? {newPath:request.newPath} : {}),
     }};
   }
   finish(workerId,value) {
@@ -92,6 +105,7 @@ export class VscodeFileRelay {
     r.result=result; r.error=error;
     delete r.content;
     delete r.expectedHash;
+    delete r.newPath;
     return {ok:true};
   }
   status(id) {
