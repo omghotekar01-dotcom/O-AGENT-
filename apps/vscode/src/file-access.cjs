@@ -83,7 +83,8 @@ async function writeWorkspaceText(root,relative,content,expectedHash,vscode) {
   if (meta.size > MAX_TEXT * 4) throw Error("File too large to edit");
   const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path));
   if (doc.isDirty) throw Error("File has unsaved local edits. Save or discard them in VS Code before remote editing.");
-  if (hash(doc.getText()) !== expectedHash)
+  if (hash(doc.getText()) !== expectedHash ||
+      hash(await fs.readFile(path,"utf8")) !== expectedHash)
     throw Error("File changed since it was loaded on your phone. Refresh before saving.");
   const edit = new vscode.WorkspaceEdit();
   const end = doc.positionAt(doc.getText().length);
@@ -103,7 +104,8 @@ async function verifyUnchanged(root,relative,expectedHash,vscode) {
   const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(entry.path));
   if(doc.isDirty)
     throw Error("Local VS Code has unsaved changes. Save or discard them before continuing.");
-  if(hash(doc.getText())!==expectedHash)
+  if(hash(doc.getText())!==expectedHash ||
+      hash(await fs.readFile(entry.path,"utf8"))!==expectedHash)
     throw Error("File changed on the laptop. Refresh it on the phone before modifying.");
   return entry;
 }
@@ -146,6 +148,9 @@ async function deleteWorkspaceFile(root,relative,expectedHash,vscode) {
       relative+". This may not be undoable. Continue?",
     {modal:true},"Move to Trash","Cancel");
   if(choice!=="Move to Trash") throw Error("File deletion rejected in local VS Code");
+  // The user might leave the confirmation open while another editor changes
+  // the file. Verify AGAIN immediately before the destructive request.
+  await verifyUnchanged(root,relative,expectedHash,vscode);
   // Explicitly request the system Trash. If the filesystem provider cannot
   // support this operation it must report an error rather than fall back.
   await vscode.workspace.fs.delete(vscode.Uri.file(original.path),
