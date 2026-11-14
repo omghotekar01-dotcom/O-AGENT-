@@ -107,19 +107,18 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
       constraints:const BoxConstraints(maxWidth:720),
       child:ListView(padding:const EdgeInsets.fromLTRB(19,14,19,34),
         children:[
-          const OScreenTitle(eyebrow:'Opt-in editor connection',
-            title:'Your editor.\nWith permission.',
-            subtitle:'Inspect actual Git/unsaved file status from an '
-              'explicitly enrolled editor. Opening a file requires owner '
-              'approval and a second local confirmation.'),
+          const OScreenTitle(eyebrow:'Connected workspace',
+            title:'VS Code projects',
+            subtitle:'Browse project files, review changes, and make '
+              'approved edits in the exact folder you enrolled.'),
           if(error!=null)Padding(padding:const EdgeInsets.only(top:12),
             child:OSurface(child:Text(error!,
               style:const TextStyle(color:OVisual.rose)))),
-          const OSectionTitle('Browse project files'),
+          const OSectionTitle('Project browser'),
           const OSurface(child:Text(
-            'Tap through real folders, preview supported source files, '
-            'review text changes and save to the laptop after permission. '
-            'This does not read Copilot Chat or protected credentials.',
+            'Choose a connected folder. View allowed source files, '
+            'create or rename files, edit text and request a move to Trash. '
+            'Changes require time-limited permission in VS Code.',
             style:TextStyle(fontSize:12))),
           for(final workspace in workspaces) Padding(
             padding:const EdgeInsets.only(bottom:10),
@@ -131,9 +130,9 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
                   workspace:vsText(workspace['workspace']),
                 ))),
               icon:const Icon(Icons.folder_open),
-              label:const Text('Browse project files'),
+              label:Text('Open files in ${vsText(workspace['workspace']).split(RegExp(r'[\\/]')).last}'),
             )),
-          const OSectionTitle('Live workspace changes'),
+          const OSectionTitle('Recent file changes'),
           if(workspaces.isEmpty) const OSurface(child:Text(
             'No opted-in VS Code file feed is online yet. Install and start '
             'the O-AGENT VS Code companion in a trusted project to see Git '
@@ -167,7 +166,12 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
                 const Text('Showing 50 changed paths. Open VS Code for more.',
                   style:TextStyle(fontSize:11)),
             ]))),
-          const OSectionTitle('Remote file navigation'),
+          ExpansionTile(
+            title:const Text('Advanced: open file in laptop editor',
+              style:TextStyle(fontWeight:FontWeight.w700)),
+            subtitle:const Text('Only needed when you already know its relative path',
+              style:TextStyle(fontSize:12)),
+            children:[
           if(taskId==null)OSurface(child:Column(
             crossAxisAlignment:CrossAxisAlignment.start,children:[
               if(machines.isEmpty)const Text('No active VS Code companion. '
@@ -216,13 +220,32 @@ class _VsCodeRemoteState extends State<VsCodeRemoteScreen> {
                 if(task?['error']!=null)Text(vsText(task?['error']),
                   style:const TextStyle(color:OVisual.rose)),
               ])),
+            ],
+          ),
+          ExpansionTile(
+            title:const Text('First time connecting VS Code?',
+              style:TextStyle(fontWeight:FontWeight.w700)),
+            subtitle:const Text('Four steps to connect a trusted project',
+              style:TextStyle(fontSize:12)),
+            children:[const Padding(
+              padding:EdgeInsets.all(15),
+              child:Text('1. Start O-AGENT on your laptop.\n'
+                '2. Open the exact project folder in VS Code.\n'
+                '3. Install the O-AGENT Workspace Companion VSIX and '
+                'configure the local backend once.\n'
+                '4. Run O-AGENT: Start Remote Workspace Companion from '
+                'Ctrl+Shift+P and select Enable.\n\n'
+                'For edits, enable O-AGENT: Enable Mobile File Editing '
+                '(30 minutes) in the VS Code Command Palette.',
+                style:TextStyle(fontSize:13,height:1.6))),
+            ]),
           const OSectionTitle('Safety boundary'),
           const OIconTile(icon:CupertinoIcons.shield_lefthalf_fill,
-            title:'Scoped project file access',
-            subtitle:'View project files only after local enrollment. '
-              'Each edit requires phone confirmation and a separate local '
-              '30-minute permission. Protected files and Copilot chats '
-              'are outside this companion.'),
+            title:'Workspace access you control',
+            subtitle:'Each change needs phone confirmation and a separate '
+              '30-minute permission in VS Code. Renames reject overwrites; '
+              'deleting requests the laptop Trash and local confirmation. '
+              'Copilot Chat is not exposed by this extension.'),
         ],
       ),
     ))),
