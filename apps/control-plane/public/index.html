@@ -86,16 +86,21 @@
           <div class="page-heading"><div><p class="eyebrow">CONSENTED REMOTE SESSION</p><h1>Live desktop</h1><p class="muted">View only the display or window selected on your laptop. Mouse and keyboard require a separately paired visible Windows helper.</p></div><button class="button secondary" type="button" id="desktopRefresh">Refresh screen</button></div>
           <div class="two-col desktop-layout">
             <section class="panel">
-              <div class="panel-heading"><h2>Laptop screen preview</h2><span class="pill" id="desktopLiveStatus">Not sharing</span></div>
+              <div class="panel-heading"><h2>Laptop screen preview</h2><div class="inline-actions"><span class="pill" id="desktopLiveStatus">Not sharing</span><button class="icon-button" type="button" id="desktopFullscreen" aria-label="Make laptop screen fullscreen" title="Fullscreen screen">⛶</button></div></div>
               <div class="desktop-screen" id="desktopScreen"><img id="desktopImage" alt="Live consented laptop screen preview" hidden><p id="desktopPlaceholder">No live image. Start a screen share from your trusted laptop first.</p></div>
               <p class="hint" id="desktopMetrics">Frame delivery status will appear here.</p>
-              <div class="actions"><button class="button secondary" type="button" id="desktopCopyCapture">Copy laptop screen-sharing link</button><button class="button danger" type="button" id="desktopStopSharing">Stop screen sharing</button></div>
+              <div class="actions"><button class="button primary" type="button" id="desktopChooseScreen">Share this computer's screen</button><button class="button secondary" type="button" id="desktopCopyCapture">Alternative sharing link</button><button class="button danger" type="button" id="desktopStopSharing">Stop sharing</button></div>
+              <p class="hint" id="desktopCaptureHint">On the laptop, click Share this computer's screen and choose the exact window/display in the browser picker. No second token form or separate tab is needed. Browsers always require local screen-selection consent.</p>
               <p class="hint">Keep the capture browser window open. Browser background throttling or a slow network can reduce FPS. Screen images are not stored in task history.</p>
             </section>
             <section class="panel">
               <div class="panel-heading"><h2>Pointer & keyboard</h2><span class="pill" id="desktopInputStatus">Not paired</span></div>
-              <p class="hint">On your laptop, start <code>REMOTE-CONTROL.cmd</code>, type ENABLE and keep its window visible. Enter the eight-digit pairing code below. This grants only 20 minutes of supervised input.</p>
-              <div class="desktop-pair"><label for="desktopPairCode">One-time pairing code</label><input id="desktopPairCode" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="8 digits" aria-label="Windows helper pairing code"><button class="button primary" id="desktopPair" type="button">Pair this device</button></div>
+              <p class="hint">One-time laptop permission starts a visible companion with O-AGENT. When your selected screen is sharing, press Control this laptop. Each session lasts up to 20 minutes and can be stopped from either device.</p>
+              <button class="button primary full" id="desktopActivate" type="button" disabled>Control this laptop</button>
+              <p class="hint" id="desktopSetupHint">For one-tap control, enable trusted phone control on this laptop once using ENABLE-ONE-TAP-CONTROL.cmd and restart O-AGENT. A visible Windows companion starts automatically.</p>
+              <details id="desktopLegacyPair"><summary>Advanced: temporary manual pairing</summary>
+                <div class="desktop-pair"><label for="desktopPairCode">Temporary eight-digit code</label><input id="desktopPairCode" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="8 digits" aria-label="Windows helper pairing code"><button class="button secondary" id="desktopPair" type="button">Pair temporarily</button></div>
+              </details>
               <p class="hint">Once paired, drag on the touchpad to move the Windows cursor. A tap clicks its current position, not the touched screen pixel.</p>
               <div id="desktopTrackpad" class="desktop-trackpad" role="group" aria-label="Virtual Windows touchpad" tabindex="0"><span>Drag to move cursor</span><small>Tap to left-click · Scroll below</small></div>
               <div class="actions desktop-key-row">
@@ -113,6 +118,12 @@
                 <button class="button secondary" type="button" data-desktop-action="shortcut:save">Save</button>
               </div>
               <div class="desktop-text-row"><label for="desktopTypeText">Type into focused laptop window</label><textarea id="desktopTypeText" rows="2" maxlength="300" placeholder="Test-only text — never enter passwords, tokens or payment details"></textarea><button class="button primary" id="desktopSendText" type="button">Type on laptop</button></div>
+              <div class="desktop-text-row">
+                <label for="desktopImageFile">Paste a selected phone/computer screenshot into the focused laptop app</label>
+                <input id="desktopImageFile" type="file" accept="image/png,image/jpeg" aria-label="Select an image for laptop paste">
+                <button class="button secondary" id="desktopPasteImage" type="button">Paste selected image</button>
+                <p class="hint">PNG or JPEG, up to 1.5 MB. The Windows clipboard is cleared after the paste unless you copied something else.</p>
+              </div>
               <p class="hint" id="desktopInputFeedback">Input unavailable until the laptop is sharing and a visible helper is paired.</p>
               <button class="button danger full" id="desktopStopInput" type="button">Stop remote input immediately</button>
             </section>

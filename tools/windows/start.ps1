@@ -164,6 +164,29 @@ try {
     if (-not $online) { throw "Worker did not register as online. Check $logDir\worker.stderr.log." }
     Save-OAgentPidState $backendPid $workerPid $port
 
+    # One-time locally approved enrollment: launch a visible companion only
+    # when this Windows user's encrypted configuration explicitly allows it.
+    # No hidden input service or network listener is installed.
+    if (($config.PSObject.Properties.Name -contains 'RemoteControlTrusted') -and
+        $config.RemoteControlTrusted -eq $true -and
+        $env:OAGENT_SKIP_REMOTE_HELPER -ne '1') {
+        try {
+            $helperScript = Join-Path $PSScriptRoot 'remote-control.ps1'
+            $existingHelpers = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $_.CommandLine -and
+                    $_.CommandLine.IndexOf($helperScript, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+                    $_.CommandLine.IndexOf('-Trusted', [StringComparison]::OrdinalIgnoreCase) -ge 0
+                })
+            if ($existingHelpers.Count -eq 0) {
+                Start-Process -FilePath 'powershell.exe' -ArgumentList ('-NoProfile -STA -ExecutionPolicy Bypass -File "' + $helperScript + '" -Trusted') -WorkingDirectory $root -WindowStyle Normal | Out-Null
+            }
+            Write-Host '  Mobile desktop control: trusted companion launched visibly (off until the phone presses Control).' -ForegroundColor Green
+        } catch {
+            Write-Host '  Mobile desktop control companion did not launch; see local Windows permission settings.' -ForegroundColor Yellow
+        }
+    }
+
     Write-Host ""
     Write-Host 'O-AGENT is ONLINE.' -ForegroundColor Green
     Write-Host "  Web dashboard: $baseUrl"

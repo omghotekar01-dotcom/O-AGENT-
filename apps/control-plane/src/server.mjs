@@ -37,7 +37,10 @@ const projectHub = new ProjectHub(core, agentRuntime);
 const accountHub = new AccountHub(core);
 const publicAuth = new PublicAuth(core);
 const screenShare = new ScreenShare();
-const remoteInput = new RemoteInput({ captureFresh: () => screenShare.status().fresh });
+const remoteInput = new RemoteInput({
+  captureFresh: () => screenShare.status().fresh,
+  captureDisplay: () => screenShare.status().displaySurface === "monitor",
+});
 const vscodePresence = new VscodePresence();
 const vscodeFileRelay = new VscodeFileRelay();
 const pushHub = new PushHub(core, accountHub);
@@ -150,7 +153,7 @@ const server = createServer(async (req, res) => {
       if (req.method === "GET" && path === "/api/screen/status")
         return send(res, 200, screenShare.status());
       if (req.method === "POST" && path === "/api/screen/start")
-        return send(res, 201, screenShare.start());
+        return send(res, 201, screenShare.start(await readJson(req, 512)));
       if (req.method === "POST" && path === "/api/screen/stop") {
         remoteInput.stop();
         return send(res, 200, screenShare.stop());
@@ -429,8 +432,15 @@ const server = createServer(async (req, res) => {
         return send(res, 200, remoteInput.status());
       if (req.method === "POST" && path === "/api/input/pair")
         return send(res, 200, remoteInput.pair(await readJson(req, 256)));
+      if (req.method === "POST" && path === "/api/input/activate")
+        return send(res, 200, remoteInput.activateTrusted());
       if (req.method === "POST" && path === "/api/input/action")
         return send(res, 200, remoteInput.action(await readJson(req, 2048)));
+      if (req.method === "POST" && path === "/api/input/image") {
+        const mime = String(req.headers["content-type"] || "").split(";")[0].toLowerCase();
+        const bytes = await readBinary(req, RemoteInput.maxImageBytes);
+        return send(res, 200, remoteInput.image(bytes, mime));
+      }
       if (req.method === "POST" && path === "/api/input/stop")
         return send(res, 200, remoteInput.stop());
       throw new DomainError(404, "Unknown remote input endpoint");
@@ -441,7 +451,9 @@ const server = createServer(async (req, res) => {
       const known = core.snapshot().workers.some(w => w.id === id && w.status === "online");
       if (!known) throw new DomainError(409, "Enrolled Windows worker is not online");
       if (req.method === "POST" && path === "/api/workers/remote-input/prepare")
-        return send(res, 200, remoteInput.prepare(id));
+        return send(res, 200, remoteInput.prepare(id, {
+          trusted: body.trusted === true,
+        }));
       if (req.method === "POST" && path === "/api/workers/remote-input/next")
         return send(res, 200, remoteInput.next(id, body.lastAck));
       if (req.method === "POST" && path === "/api/workers/remote-input/stop")

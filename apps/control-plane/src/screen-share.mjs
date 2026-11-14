@@ -27,6 +27,9 @@ export class ScreenShare {
       supported: true, capturing: true,
       fresh: !!s.frame && this.now() - s.lastFrameAt < FRAME_TTL_MS,
       startedAt: new Date(s.startedAt).toISOString(),
+      displaySurface: s.displaySurface,
+      sourceWidth: s.sourceWidth,
+      sourceHeight: s.sourceHeight,
       lastFrameAt: s.lastFrameAt ? new Date(s.lastFrameAt).toISOString() : null,
       expiresAt: new Date(s.expiresAt).toISOString(),
       frameSequence: s.sequence,
@@ -35,7 +38,13 @@ export class ScreenShare {
       mode: "view_only_consent_screen_frames",
     };
   }
-  start() {
+  start({displaySurface = "unknown", sourceWidth = 0, sourceHeight = 0} = {}) {
+    if (!["monitor", "window", "browser", "unknown"].includes(displaySurface) ||
+      !Number.isSafeInteger(sourceWidth) || !Number.isSafeInteger(sourceHeight) ||
+      sourceWidth < 0 || sourceWidth > 16000 ||
+      sourceHeight < 0 || sourceHeight > 16000) {
+      throw new DomainError(400, "Invalid selected screen metadata");
+    }
     this.status(); // prune expired streams
     if (this.active) throw new DomainError(409,
       "A screen-sharing session is already active. Stop it before starting another.");
@@ -44,6 +53,7 @@ export class ScreenShare {
     this.active = {
       token, startedAt: now, expiresAt: now + LEASE_TTL_MS,
       lastFrameAt: 0, frame: null, sequence: 0,
+      displaySurface, sourceWidth, sourceHeight,
       averageFrameGapMs: null,
     };
     return { captureToken: token, ...this.status() };

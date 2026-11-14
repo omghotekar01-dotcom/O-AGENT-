@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([switch]$Trusted)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\common.ps1"
 
@@ -7,6 +7,9 @@ $ErrorActionPreference = 'Stop'
 # It is never auto-started by O-AGENT.cmd, does not create a network listener,
 # and stops accepting input when its terminal closes or the short lease expires.
 $config = Read-OAgentConfig
+if ($Trusted -and -not (($config.PSObject.Properties.Name -contains 'RemoteControlTrusted') -and $config.RemoteControlTrusted -eq $true)) {
+    throw 'One-tap remote control was not enabled by the local Windows user.'
+}
 $workerId = [string]$config.WorkerId
 $secret = Unlock-OAgentSecret $config.WorkerTokenEncrypted
 # Follow the actual port saved by O-AGENT.cmd, even when this companion
@@ -77,8 +80,14 @@ Write-Host 'Never type passwords, payment details or private tokens using remote
 Write-Host 'Elevated apps, Windows sign-in and secure desktop cannot be controlled.'
 Write-Host 'Leave this window visibly open. Close it or press Ctrl+C to stop.'
 Write-Host ''
-$confirmation = Read-Host 'Type ENABLE to opt in (anything else cancels)'
-if ($confirmation -cne 'ENABLE') { Write-Host 'No remote control enabled.'; exit 0 }
+if ($Trusted) {
+    Write-Host 'One-tap control was explicitly enabled on this Windows account.' -ForegroundColor Green
+    Write-Host 'Your owner phone must still press Control, while the chosen screen is shared.'
+    Write-Host 'Close THIS VISIBLE window to revoke the local helper immediately.'
+} else {
+    $confirmation = Read-Host 'Type ENABLE to opt in (anything else cancels)'
+    if ($confirmation -cne 'ENABLE') { Write-Host 'No remote control enabled.'; exit 0 }
+}
 
 Add-Type -TypeDefinition @'
 using System;
@@ -88,6 +97,9 @@ public static class OAgentUserInput {
   private struct Point { public int X; public int Y; }
   [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point p);
   [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
+  [DllImport("user32.dll")] private static extern uint GetClipboardSequenceNumber();
+  public static uint ClipboardVersion() { return GetClipboardSequenceNumber(); }
   [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
   [DllImport("user32.dll")] private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
   [StructLayout(LayoutKind.Sequential)] private struct Input {
@@ -109,6 +121,22 @@ public static class OAgentUserInput {
   public static int InputStructSize() { return Marshal.SizeOf(typeof(Input)); }
   public static void Move(int dx, int dy) {
     Point p; if (GetCursorPos(out p)) SetCursorPos(p.X + dx, p.Y + dy);
+  }
+  public static void Tap(int normX, int normY, string kind) {
+    if (normX < 0 || normX > 10000 || normY < 0 || normY > 10000)
+      throw new ArgumentOutOfRangeException("Normalized cursor coordinates");
+    // A captured window/tab or secondary monitor may be positioned
+    // anywhere. Never guess and click an unrelated part of the desktop.
+    if (GetSystemMetrics(80) != 1)
+      throw new InvalidOperationException("Tap-to-click supports a single display only. Use trackpad.");
+    int width=GetSystemMetrics(0), height=GetSystemMetrics(1);
+    if (width <= 0 || height <= 0)
+      throw new InvalidOperationException("Could not read display dimensions.");
+    int px=(int)Math.Round((width-1)*(normX/10000.0));
+    int py=(int)Math.Round((height-1)*(normY/10000.0));
+    if (!SetCursorPos(px,py))
+      throw new InvalidOperationException("Windows rejected pointer positioning.");
+    Click(kind);
   }
   public static void Click(string kind) {
     uint down = kind == "right" ? 8u : 2u;
@@ -188,13 +216,21 @@ $armed = $false
 $lastAck = $null
 try {
     Assert-OAgentBackendReady
-    $pair = Send-OAgentInputRequest 'prepare' @{}
+    # Trusted enrollment is explicit and stored only in the local Windows
+    # config. No reusable pairing code is sent to the phone.
+    $pair = Send-OAgentInputRequest 'prepare' @{ trusted = [bool]$Trusted }
     $armed = $true
     Write-Host ''
-    Write-Host "Pairing code: $($pair.pairingCode)" -ForegroundColor Yellow
-    Write-Host 'On your phone: Remote > See my laptop > Full screen > Pair Windows control.'
-    Write-Host 'Code expires after 2 minutes; once paired, remote control lasts 20 minutes.'
-    Write-Host 'Stop sharing your screen or close this window to revoke control.'
+    if ($Trusted) {
+        Write-Host 'Laptop READY. Press Control on your owner phone when needed.' -ForegroundColor Green
+        Write-Host 'Each mobile control window lasts up to 20 minutes and can be stopped instantly.'
+        Write-Host 'The selected screen must still be actively shared before any input is permitted.'
+    } else {
+        Write-Host "Pairing code: $($pair.pairingCode)" -ForegroundColor Yellow
+        Write-Host 'On your phone: Remote > See my laptop > Full screen > Pair Windows control.'
+        Write-Host 'Code expires after 2 minutes; once paired, remote control lasts 20 minutes.'
+    }
+    Write-Host 'Close this window or stop O-AGENT to revoke the local helper.'
     Write-Host ''
     while ($true) {
         try {
@@ -210,9 +246,43 @@ try {
                 switch ([string]$a.type) {
                     'move' { [OAgentUserInput]::Move([int]$a.dx, [int]$a.dy) }
                     'click' { [OAgentUserInput]::Click([string]$a.button) }
+                    'tap' { [OAgentUserInput]::Tap([int]$a.x, [int]$a.y, [string]$a.button) }
                     'scroll' { [OAgentUserInput]::Scroll([int]$a.steps) }
                     'key' { [OAgentUserInput]::Key([string]$a.key) }
                     'text' { [OAgentUserInput]::TypeText([string]$a.text) }
+                    'paste_image' {
+                        # User-selected, ephemeral image. The backend already
+                        # validates the JPEG/PNG header and a strict size cap.
+                        # Do not print or write these bytes to disk.
+                        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+                        Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+                        $imageBytes = [Convert]::FromBase64String([string]$a.base64)
+                        $stream = New-Object System.IO.MemoryStream -ArgumentList (,$imageBytes)
+                        $image = $null
+                        $clipboardVersion = $null
+                        try {
+                            $image = [System.Drawing.Image]::FromStream($stream)
+                            [System.Windows.Forms.Clipboard]::SetImage($image)
+                            $clipboardVersion = [OAgentUserInput]::ClipboardVersion()
+                            [OAgentUserInput]::Shortcut('paste')
+                            # Let the target application process its paste.
+                            Start-Sleep -Milliseconds 2500
+                        } finally {
+                            # Only clear if the clipboard still contains our
+                            # content. Do not wipe something copied meanwhile.
+                            if ($null -ne $clipboardVersion) {
+                                try {
+                                    if ([OAgentUserInput]::ClipboardVersion() -eq $clipboardVersion) {
+                                        [System.Windows.Forms.Clipboard]::Clear()
+                                    }
+                                } catch { }
+                            }
+                            if ($image) { $image.Dispose() }
+                            $stream.Dispose()
+                            [Array]::Clear($imageBytes, 0, $imageBytes.Length)
+                            $imageBytes = $null
+                        }
+                    }
                     'shortcut' { [OAgentUserInput]::Shortcut([string]$a.name) }
                 }
                 # Report only action ID/type success, never key content.

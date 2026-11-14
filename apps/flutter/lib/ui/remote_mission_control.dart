@@ -6,6 +6,7 @@ import '../core/api_client.dart';
 import 'codex_session.dart';
 import 'agent_sdk_bridge.dart';
 import 'screen_preview.dart';
+import 'remote_fullscreen.dart';
 import 'push_devices.dart';
 import 'vscode_remote.dart';
 import 'cursor_cloud.dart';
@@ -124,7 +125,12 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   void _openPush() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       PushDeviceScreen(controller: widget.controller)));
+  // One tap from Remote opens the actual live console instead of requiring
+  // a separate preview page, then an extra Full screen / trackpad button.
   void _openScreen() => Navigator.push(context,
+    MaterialPageRoute<void>(builder: (_) =>
+      RemoteFullscreenScreen(controller: widget.controller)));
+  void _openScreenSetup() => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       ScreenPreviewScreen(controller: widget.controller)));
   void _openCursor() => Navigator.push(context,
@@ -389,10 +395,17 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                 onTap: _openProjects, color: OVisual.mint),
               const SizedBox(height: 10),
               OIconTile(icon: CupertinoIcons.desktopcomputer,
-                title: 'Live laptop view & trackpad',
-                subtitle: 'Fullscreen selected screen. Optional Windows pointer and '
-                  'keyboard control requires a visible helper and one-time pairing.',
+                title: 'Control laptop screen',
+                subtitle: 'Open the live desktop directly. Once the laptop '
+                  'has been trusted locally, tap Control to type, click '
+                  'and send prompts from your phone.',
                 onTap: _openScreen, color: OVisual.primary),
+              const SizedBox(height: 9),
+              OIconTile(icon: CupertinoIcons.settings,
+                title: 'Screen-sharing setup & stop',
+                subtitle: 'Select what the laptop shares, inspect capture '
+                  'status or revoke screen sharing.',
+                onTap: _openScreenSetup, color: OVisual.mint),
               const SizedBox(height: 10),
               OIconTile(icon: CupertinoIcons.square_stack_3d_up,
                 title: 'VS Code live file changes',

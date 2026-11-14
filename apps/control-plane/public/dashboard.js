@@ -57,7 +57,13 @@ function action(container,label,fn,style="secondary"){
   return btn;
 }
 function navigate(view){
-  if(currentView==="desktop" && view!=="desktop")desktopQueue.length=0;
+  if(currentView==="desktop" && view!=="desktop") {
+    desktopQueue.length=0;
+    if(connected&&desktopInput?.paired)
+      void api("/api/input/stop",{method:"POST"}).catch(()=>{});
+    desktopInput=null;
+  }
+  if(view==="desktop")desktopTick=2;
   currentView=view;
   for(const section of document.querySelectorAll("[data-panel]"))section.hidden=section.dataset.panel!==view;
   for(const button of document.querySelectorAll(".nav-link")){
@@ -502,15 +508,25 @@ function updateDesktopControls(){
   const paired=desktopInput?.paired===true && desktopInput?.helperOnline===true;
   $("desktopLiveStatus").textContent=fresh?"Receiving frames":
     desktopState?.capturing?"Waiting for fresh frame":"Not sharing";
-  $("desktopInputStatus").textContent=paired?"Pointer paired":"Not paired";
+  $("desktopInputStatus").textContent=paired?"Control active":
+    desktopInput?.trustedReady?"One-tap ready":"Not paired";
+  const trusted=desktopInput?.trustedMode===true;
+  const trustedReady=desktopInput?.trustedReady===true;
+  $("desktopActivate").disabled=!fresh||!trustedReady||!connected;
+  $("desktopActivate").hidden=!trusted;
+  $("desktopSetupHint").hidden=trusted;
+  $("desktopLegacyPair").hidden=trusted;
   $("desktopPair").disabled=!fresh||paired;
   $("desktopPairCode").disabled=!fresh||paired;
   const canControl=fresh&&paired&&connected;
   for(const btn of document.querySelectorAll("[data-desktop-action]"))btn.disabled=!canControl;
   $("desktopSendText").disabled=!canControl;
+  $("desktopPasteImage").disabled=!canControl;
   $("desktopStopInput").disabled=!paired;
   $("desktopStopSharing").disabled=!desktopState?.capturing;
   $("desktopTrackpad").style.opacity=canControl?"1":".45";
+  $("desktopImage").style.cursor=canControl&&
+    desktopState?.displaySurface==="monitor"?"crosshair":"default";
   $("desktopMetrics").textContent=desktopState?.capturing
     ? "Measured capture: "+(desktopState.estimatedFps??"measuring")+
       " fps · Queued mouse/keyboard actions: "+(desktopInput?.queueDepth??0)
@@ -521,7 +537,9 @@ function updateDesktopControls(){
       : "Windows rejected your last "+ack.type+" action. Check the focused window and permissions.")
     : canControl
       ? "Paired for this laptop. Use the touchpad below; never type secrets remotely."
-      : "Input unavailable until the laptop is sharing and its visible helper is paired.";
+      : desktopInput?.trustedReady
+      ? "Laptop ready. Press Control this laptop to enable a temporary session."
+      : "Set up this laptop once, then Control activates directly from your phone.";
 }
 async function desktopRefresh(){
   if(!connected||currentView!=="desktop"||document.hidden||desktopBusy)return;
@@ -637,6 +655,155 @@ trackpad.addEventListener("keydown",event=>{
     queueDesktopAction({type:"click",button:"left"});
   }
 });
+
+// Screen capture starts only after a click on the owner's LAPTOP browser.
+// getDisplayMedia cannot be triggered silently from the phone/backend.
+let localCapture=null,localVideo=null,localCanvas=null,localCaptureLease="";
+let localCaptureTimer=null,localCaptureBusy=false,localRetryAt=0,localThrottles=0;
+function cleanupLocalCapture({revoke=false}={}){
+  if(localCaptureTimer)clearInterval(localCaptureTimer);
+  localCaptureTimer=null;
+  const lease=localCaptureLease;
+  localCaptureLease="";
+  for(const track of localCapture?.getTracks()??[])track.stop();
+  localCapture=null;
+  if(localVideo)localVideo.srcObject=null;
+  localVideo=null;
+  localCaptureBusy=false;
+  $("desktopChooseScreen").disabled=false;
+  if(revoke&&lease&&connected)void api("/api/screen/stop",{method:"POST"})
+    .catch(()=>{});
+}
+async function localFrameTick(){
+  if(!localCapture||!localCaptureLease||localCaptureBusy||
+      performance.now()<localRetryAt)return;
+  const track=localCapture.getVideoTracks()[0];
+  if(!track||track.readyState!=="live"){
+    cleanupLocalCapture({revoke:true});
+    $("desktopCaptureHint").textContent="The browser screen picker was stopped.";
+    return;
+  }
+  if(!localVideo?.videoWidth||!localVideo?.videoHeight)return;
+  localCaptureBusy=true;
+  try{
+    const width=localVideo.videoWidth,height=localVideo.videoHeight;
+    const scale=Math.min(1,1080/width,720/height);
+    localCanvas.width=Math.max(1,Math.floor(width*scale));
+    localCanvas.height=Math.max(1,Math.floor(height*scale));
+    localCanvas.getContext("2d").drawImage(localVideo,0,0,
+      localCanvas.width,localCanvas.height);
+    const blob=await new Promise(resolve=>localCanvas.toBlob(resolve,"image/jpeg",.50));
+    if(!blob)throw Error("Browser failed to encode shared screen");
+    if(blob.size>230000){localRetryAt=performance.now()+400;return;}
+    const res=await fetch("/api/screen/frame",{
+      method:"POST",cache:"no-store",credentials:"omit",redirect:"error",
+      headers:{authorization:"Bearer "+token,"content-type":"image/jpeg",
+        "x-oagent-capture-token":localCaptureLease},
+      body:blob,
+    });
+    if(res.status===429){
+      const retryAfter=Number(res.headers.get("retry-after"));
+      localThrottles+=1;
+      const ms=Number.isFinite(retryAfter)&&retryAfter>0
+        ? Math.min(5000,retryAfter*1000)
+        : Math.min(4000,650*(2**Math.min(3,localThrottles-1)));
+      localRetryAt=performance.now()+ms;
+      $("desktopCaptureHint").textContent=
+        "Frame rate is temporarily limited (429); recovering in "+
+        Math.ceil(ms/1000)+"s without losing screen permission.";
+      return;
+    }
+    if(res.status===502||res.status===503||res.status===504){
+      localRetryAt=performance.now()+1000;return;
+    }
+    if(!res.ok)throw Error("Backend rejected screen frame (HTTP "+res.status+")");
+    localThrottles=0;
+    localRetryAt=performance.now()+260;
+    $("desktopCaptureHint").textContent=
+      "Sharing the selected screen from this laptop; press Stop or use the browser indicator to revoke it.";
+  }catch(error){
+    if(error.name==="TypeError"){
+      localRetryAt=performance.now()+1500;
+      $("desktopCaptureHint").textContent="Screen network interrupted; retrying.";
+    }else{
+      $("desktopCaptureHint").textContent="Capture stopped: "+error.message;
+      cleanupLocalCapture({revoke:true});
+    }
+  }finally{localCaptureBusy=false;}
+}
+$("desktopFullscreen").addEventListener("click",async()=>{
+  try{
+    const panel=$("desktopScreen");
+    if(document.fullscreenElement)await document.exitFullscreen();
+    else await panel.requestFullscreen();
+  }catch(error){notice("Fullscreen unavailable: "+error.message);}
+});
+$("desktopChooseScreen").addEventListener("click",async()=>{
+  if(localCapture)return;
+  if(!navigator.mediaDevices?.getDisplayMedia){
+    notice("Screen picking is unavailable. Open this dashboard on the actual laptop, using Chrome/Edge over localhost or HTTPS.");
+    return;
+  }
+  try{
+    // Call directly inside this click handler: browsers require user gesture.
+    const media=await navigator.mediaDevices.getDisplayMedia({
+      video:{frameRate:{ideal:6,max:8}},audio:false,
+    });
+    localCapture=media;
+    localVideo=document.createElement("video");
+    localVideo.muted=true;
+    localVideo.playsInline=true;
+    localVideo.srcObject=media;
+    media.getVideoTracks()[0]?.addEventListener("ended",()=>{
+      cleanupLocalCapture({revoke:true});
+    });
+    await localVideo.play();
+    const surface=media.getVideoTracks()[0]?.getSettings?.().displaySurface;
+    const selected=["monitor","window","browser"].includes(surface)?surface:"unknown";
+    const start=await api("/api/screen/start",{method:"POST",body:{
+      displaySurface:selected,
+      sourceWidth:localVideo.videoWidth,sourceHeight:localVideo.videoHeight,
+    }});
+    localCaptureLease=start.captureToken;
+    localCanvas=document.createElement("canvas");
+    localRetryAt=0;localThrottles=0;
+    $("desktopChooseScreen").disabled=true;
+    localCaptureTimer=setInterval(()=>{void localFrameTick();},280);
+    void localFrameTick();
+    desktopTick=2;void desktopRefresh();
+  }catch(error){
+    cleanupLocalCapture();
+    notice("Screen not shared: "+error.message);
+  }
+});
+$("desktopImage").addEventListener("click",event=>{
+  if(!desktopInput?.paired||!desktopState?.fresh||
+      desktopState.displaySurface!=="monitor")return;
+  const sourceW=desktopState.sourceWidth,sourceH=desktopState.sourceHeight;
+  const rect=$("desktopImage").getBoundingClientRect();
+  if(!sourceW||!sourceH||!rect.width||!rect.height)return;
+  const scale=Math.min(rect.width/sourceW,rect.height/sourceH);
+  const drawnW=sourceW*scale,drawnH=sourceH*scale;
+  const left=(rect.width-drawnW)/2,top=(rect.height-drawnH)/2;
+  const x=event.clientX-rect.left-left,y=event.clientY-rect.top-top;
+  if(x<0||x>drawnW||y<0||y>drawnH)return;
+  queueDesktopAction({type:"tap",
+    x:Math.max(0,Math.min(10000,Math.round(x/drawnW*10000))),
+    y:Math.max(0,Math.min(10000,Math.round(y/drawnH*10000))),
+    button:"left"});
+});
+window.addEventListener("pagehide",()=>{cleanupLocalCapture({revoke:true});});
+
+$("desktopActivate").addEventListener("click",async()=>{
+  try{
+    desktopInput=await api("/api/input/activate",{method:"POST"});
+    desktopTick=2;
+    updateDesktopControls();
+    notice(desktopInput.paired
+      ? "Remote control active for up to 20 minutes. Stop it anytime."
+      : "Windows helper did not confirm activation.");
+  }catch(error){notice(error.message);}
+});
 $("desktopPair").addEventListener("click",async()=>{
   const code=$("desktopPairCode").value.trim();
   if(!/^\d{8}$/.test(code)){notice("Enter the exact 8-digit code displayed on the laptop.");return;}
@@ -666,6 +833,7 @@ $("desktopStopSharing").addEventListener("click",async()=>{
   if(!await confirmAction("Stop laptop screen sharing?",
     "This revokes the capture lease and any paired input. The laptop browser's sharing indicator will stop.","Stop sharing"))return;
   try{
+    cleanupLocalCapture();
     await api("/api/screen/stop",{method:"POST"});
     desktopQueue.length=0;
     desktopState=null;desktopInput=null;
@@ -679,6 +847,36 @@ $("desktopCopyCapture").addEventListener("click",async()=>{
     notice("Laptop screen picker URL copied. Open on your trusted computer.");
   }catch{notice("Browser denied clipboard access. Open /screen-capture on your laptop.");}
 });
+$("desktopPasteImage").addEventListener("click",async()=>{
+  if(!desktopInput?.paired||!desktopState?.fresh)
+    return notice("Start a control session before pasting a screenshot.");
+  const file=$("desktopImageFile").files?.[0];
+  if(!file)return notice("Choose a PNG or JPEG screenshot first.");
+  if(!["image/png","image/jpeg"].includes(file.type)||
+      file.size<64||file.size>1500000)
+    return notice("The selected image must be PNG/JPEG, 1.5 MB or less.");
+  const agreed=await confirmAction("Paste image into focused laptop app?",
+    "Selected: "+file.name+"\n\nPlace the Windows cursor in the intended "
+    +"ChatGPT, VS Code or other image-capable composer before continuing. "
+    +"The temporary clipboard image is cleared after the paste event.",
+    "Paste image");
+  if(!agreed)return;
+  const button=$("desktopPasteImage");
+  button.disabled=true;
+  try{
+    const response=await fetch("/api/input/image",{
+      method:"POST",cache:"no-store",redirect:"error",credentials:"omit",
+      headers:{authorization:"Bearer "+token,"content-type":file.type},
+      body:file,
+    });
+    const result=await response.json().catch(()=>({}));
+    if(!response.ok)throw Error(result.error||("Image upload failed (HTTP "+response.status+")"));
+    notice("Screenshot queued for the focused laptop window. Verify the result on screen.");
+    $("desktopImageFile").value="";
+  }catch(error){notice(error.message,12)}
+  finally{button.disabled=false;}
+});
+
 $("desktopSendText").addEventListener("click",()=>{
   const content=$("desktopTypeText").value;
   if(!content||content.length>300)return notice("Enter up to 300 test-only characters.");

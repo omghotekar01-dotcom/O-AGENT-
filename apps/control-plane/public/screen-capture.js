@@ -10,6 +10,7 @@
   const context = canvas.getContext("2d");
   let media = null, lease = "", timer = null, busy = false, alive = false;
   let maxDimension = 1140, jpegQuality = .54, lastUploadMs = 0;
+  let nextPublishAt = 0, consecutiveThrottles = 0, transientFailures = 0;
   const info = text => { message.textContent = text; };
   const authHeaders = () => ({Authorization: "Bearer " + token.value.trim()});
   async function request(path, method = "GET", headers = {}, body) {
@@ -17,7 +18,14 @@
       method, headers: {...authHeaders(), ...headers}, body, cache: "no-store",
       credentials: "omit", redirect: "error",
     });
-    if (!response.ok) throw Error("Backend returned HTTP " + response.status);
+    if (!response.ok) {
+      const error = new Error("Backend returned HTTP " + response.status);
+      error.status = response.status;
+      const retry = Number(response.headers.get("retry-after"));
+      error.retryAfterMs = Number.isFinite(retry) && retry > 0
+        ? Math.min(5000, retry * 1000) : null;
+      throw error;
+    }
     return response.headers.get("content-type")?.includes("json")
       ? response.json() : null;
   }
@@ -37,7 +45,7 @@
     busy = false;
   }
   async function tick() {
-    if (!alive || busy || !lease || !media) return;
+    if (!alive || busy || !lease || !media || performance.now() < nextPublishAt) return;
     // Screen capture permission remains browser-controlled and visible to the
     // laptop user. Continue publishing while the picker page is backgrounded,
     // e.g. when the user switches to the VS Code window they chose to share.
@@ -69,6 +77,9 @@
       await request("/api/screen/frame", "POST",
         {"Content-Type":"image/jpeg","X-OAGENT-Capture-Token": lease},blob);
       lastUploadMs = performance.now() - sentAt;
+      consecutiveThrottles = 0;
+      transientFailures = 0;
+      nextPublishAt = performance.now() + 260;
       // Adapt to connection RTT rather than accumulating stale frames.
       if (lastUploadMs > 850) {
         maxDimension = Math.max(680, Math.round(maxDimension * .92));
@@ -80,7 +91,29 @@
       info("Sharing selected screen · adaptive preview · upload " +
         Math.round(lastUploadMs) + " ms");
     } catch (err) {
-      info("Screen upload stopped: " + err.message);
+      if (err.status === 429) {
+        // HTTP 429 is a temporary capture-rate throttle, not revoked
+        // consent. Keep the same display track/lease alive; do not prompt
+        // the user to repeat screen selection or expose their token.
+        consecutiveThrottles += 1;
+        const delay = err.retryAfterMs ??
+          Math.min(4000, 700 * (2 ** Math.min(3, consecutiveThrottles - 1)));
+        nextPublishAt = performance.now() + delay;
+        info("Capture briefly throttled (HTTP 429). Retrying automatically in " +
+          Math.ceil(delay / 1000) + "s. Screen permission remains active.");
+        return;
+      }
+      if (err.status === 502 || err.status === 503 ||
+          err.status === 504 || err.name === "TypeError") {
+        transientFailures += 1;
+        const delay = Math.min(5000, 400 * (2 ** Math.min(4, transientFailures - 1)));
+        nextPublishAt = performance.now() + delay;
+        info("Connection interrupted (" + err.message +
+          "). Retrying automatically; remote input will pause if frames go stale.");
+        return;
+      }
+      info("Screen upload stopped: " + err.message +
+        ". Check the server/token, then select a screen again.");
       await cleanup(false);
     } finally { busy = false; }
   }
@@ -99,8 +132,18 @@
         void cleanup(); info("Sharing ended using the browser's controls.");
       });
       await video.play();
-      const entry = await request("/api/screen/start", "POST");
+      const selected = media.getVideoTracks()[0]?.getSettings?.() ?? {};
+      const entry = await request("/api/screen/start", "POST",
+        {"Content-Type":"application/json"}, JSON.stringify({
+          displaySurface: ["monitor","window","browser"].includes(selected.displaySurface)
+            ? selected.displaySurface : "unknown",
+          sourceWidth: video.videoWidth,
+          sourceHeight: video.videoHeight,
+        }));
       lease = entry.captureToken;
+      nextPublishAt = 0;
+      consecutiveThrottles = 0;
+      transientFailures = 0;
       alive = true;
       stop.disabled = false;
       status.textContent = "Sharing selected display";
