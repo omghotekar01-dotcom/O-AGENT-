@@ -79,9 +79,29 @@ const form=new URLSearchParams({
   grant_type:"password",client_id:"oagent-web",username:"pilot-owner",
   password:secret,scope:"openid profile oagent-read oagent-operate",
 });
-const token=await request(
-  "/auth/realms/oagent/protocol/openid-connect/token",
-  {method:"POST",body:form});
+const tokenEndpoint="/auth/realms/oagent/protocol/openid-connect/token";
+const token=await request(tokenEndpoint,{method:"POST",body:form});
+if(token.status!==200){
+  // Diagnostic probes are CI-only. Print only known public scope names,
+  // HTTP statuses, error codes and presence/absence of required scopes.
+  const options=["openid","openid profile","openid oagent-read",
+    "openid oagent-operate"];
+  for(const requested of options){
+    const diagnostic=new URLSearchParams(form);
+    diagnostic.set("scope",requested);
+    const probe=await request(tokenEndpoint,{method:"POST",body:diagnostic});
+    const received=new Set(String(probe.body?.scope||"").split(" "));
+    const allowed=new Set(["invalid_grant","invalid_scope","invalid_request",
+      "invalid_client","unauthorized_client","temporarily_unavailable"]);
+    const code=String(probe.body?.error||"");
+    console.log("CI grant scopes "+requested+
+      ": HTTP "+probe.status+
+      (probe.status===200
+        ?", required scopes present="+
+        ["oagent-read","oagent-operate"].every(x=>received.has(x))
+        :", OAuth error="+(allowed.has(code)?code:"other")));
+  }
+}
 if(token.status!==200){
   // Only reveal Keycloak's public OAuth error CODE, never descriptions/tokens.
   const code=String(token.body?.error||"unknown");
