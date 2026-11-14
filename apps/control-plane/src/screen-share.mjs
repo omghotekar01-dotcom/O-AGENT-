@@ -1,10 +1,10 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { DomainError } from "./core.mjs";
 
-const MAX_FRAME_BYTES = 160000;
+const MAX_FRAME_BYTES = 240000;
 const FRAME_TTL_MS = 4000;
 const LEASE_TTL_MS = 30 * 60 * 1000;
-const FRAME_GAP_MS = 550;
+const FRAME_GAP_MS = 180;
 
 /**
  * Owner-only, consent-driven, ephemeral JPEG screen previews. A human on
@@ -55,6 +55,13 @@ export class ScreenShare {
       throw new DomainError(404, "No fresh, consented screen frame available");
     return { bytes: this.active.frame, sequence: this.active.sequence };
   }
+  // Returns null only when a client already has the newest live frame.
+  // Never treats a stale frame as available, even if sequence matches.
+  frameSince(sequence) {
+    const frame = this.frame();
+    return Number.isSafeInteger(sequence) && sequence >= 0 &&
+      sequence === frame.sequence ? null : frame;
+  }
   publish(token, bytes) {
     const status = this.status();
     if (!status.capturing) throw new DomainError(409, "No active screen capture");
@@ -68,7 +75,7 @@ export class ScreenShare {
       throw new DomainError(400, "Expected a bounded JPEG image");
     const now = this.now();
     if (now - this.active.lastFrameAt < FRAME_GAP_MS)
-      throw new DomainError(429, "Frame rate capped at one image per 550 ms");
+      throw new DomainError(429, "Screen updates are arriving faster than the supported capture rate (180 ms minimum)");
     this.active.frame = Buffer.from(bytes);
     this.active.lastFrameAt = now;
     this.active.sequence += 1;
