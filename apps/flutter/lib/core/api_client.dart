@@ -13,6 +13,14 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+/// A new JPEG frame. A 204 response means the already displayed frame is
+/// still the newest one; the caller need not re-decode it.
+class ScreenFrameUpdate {
+  const ScreenFrameUpdate(this.bytes, this.sequence);
+  final Uint8List bytes;
+  final int sequence;
+}
+
 /// The development API uses a bearer token. Never write it into logs,
 /// shared preferences, Android resources, or iOS bundles.
 class AgentApi {
@@ -184,13 +192,21 @@ class AgentApi {
   Future<Map<String, dynamic>> stopScreenShare() =>
     _request('/api/screen/stop', method: 'POST');
 
-  Future<Uint8List?> screenFrame() async {
-    final request = await _http.getUrl(endpoint.resolve('/api/screen/frame'))
-      .timeout(const Duration(seconds: 10));
+  Future<Uint8List?> screenFrame() async =>
+    (await screenFrameUpdate())?.bytes;
+
+  /// Efficient incremental frame polling. Returns null on HTTP 204 when the
+  /// newest frame is unchanged, or 404 when sharing has stopped. Never stores
+  /// screenshot data on disk.
+  Future<ScreenFrameUpdate?> screenFrameUpdate({int after = -1}) async {
+    final resource = after >= 0
+      ? '/api/screen/frame?after=$after' : '/api/screen/frame';
+    final request = await _http.getUrl(endpoint.resolve(resource))
+      .timeout(const Duration(seconds: 8));
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $_token');
     request.headers.set(HttpHeaders.acceptHeader, 'image/jpeg');
-    final response = await request.close().timeout(const Duration(seconds: 10));
-    if (response.statusCode == 404) {
+    final response = await request.close().timeout(const Duration(seconds: 8));
+    if (response.statusCode == 404 || response.statusCode == 204) {
       await response.drain<void>();
       return null;
     }
@@ -199,14 +215,15 @@ class AgentApi {
       await response.drain<void>();
       throw ApiException('Screen preview not available', response.statusCode);
     }
+    final sequence = int.tryParse(response.headers.value('x-oagent-frame-sequence') ?? '') ?? -1;
     final chunks = BytesBuilder(copy: false);
     await for (final bytes in response) {
       chunks.add(bytes);
-      if (chunks.length > 160000) {
+      if (chunks.length > 240000) {
         throw const ApiException('Invalid oversized screen frame');
       }
     }
-    return chunks.takeBytes();
+    return ScreenFrameUpdate(chunks.takeBytes(), sequence);
   }
 
   /// Remote pointer/keyboard only after a user starts the visible Windows
