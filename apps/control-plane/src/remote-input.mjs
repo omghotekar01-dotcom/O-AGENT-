@@ -3,6 +3,7 @@ import { DomainError } from "./core.mjs";
 
 const PAIR_TTL = 2 * 60 * 1000;
 const CONTROL_TTL = 20 * 60 * 1000;
+const TRUSTED_IDLE_TTL = 12 * 60 * 60 * 1000;
 const HEARTBEAT_TTL = 6000;
 const MAX_QUEUE = 48;
 const MIN_GAP = 18;
@@ -60,47 +61,75 @@ export class RemoteInput {
   current() {
     const s = this.session;
     if (!s) return null;
-    if (this.now() >= s.expiresAt ||
-        (s.active && this.now() - s.lastPoll > HEARTBEAT_TTL)) {
+    const now = this.now();
+    // A trusted laptop must remain locally running and visibly opted in.
+    // Stopping its helper revokes the capability, even when idle.
+    if ((s.trusted || s.active) && now - s.lastPoll > HEARTBEAT_TTL) {
       this.session = null;
       return null;
     }
+    if (now >= s.expiresAt) {
+      if (!s.trusted || !s.active) {
+        this.session = null;
+        return null;
+      }
+      // A 20-minute control lease expires into view-only. The local helper
+      // stays ready for another explicitly requested owner session.
+      this.pause(s);
+      s.expiresAt = now + TRUSTED_IDLE_TTL;
+    }
     return s;
+  }
+  pause(s) {
+    s.active = false;
+    s.queue = [];
+    s.dispatched = null;
+    s.lastResult = null;
+    s.lastAction = 0;
   }
   status() {
     const s = this.current();
     return {
       supported: true, paired: !!s?.active,
-      awaitingPairing: !!s && !s.active,
+      awaitingPairing: !!s && !s.active && !s.trusted,
+      trustedReady: !!s?.trusted && !s.active &&
+        this.now() - s.lastPoll < HEARTBEAT_TTL,
+      trustedMode: !!s?.trusted,
       workerId: s?.workerId ?? null,
       expiresAt: s?.active ? new Date(s.expiresAt).toISOString() : null,
       helperOnline: !!s && this.now() - s.lastPoll < HEARTBEAT_TTL,
       captureFresh: this.captureFresh(),
-      requiresLocalPairing: true,
-      mode: "explicit_windows_remote_input",
+      requiresLocalPairing: !s?.trusted,
+      mode: s?.trusted ? "locally_enrolled_one_tap_input" :
+        "explicit_windows_remote_input",
       queueDepth: s?.queue.length ?? 0,
       lastInputResult: s?.lastResult ?? null,
     };
   }
-  prepare(workerId) {
-    if (!this.captureFresh()) throw new DomainError(409,
+  prepare(workerId, {trusted = false} = {}) {
+    if (typeof trusted !== "boolean") throw new DomainError(400, "Invalid control mode");
+    if (!trusted && !this.captureFresh()) throw new DomainError(409,
       "Start a consented screen share before enabling remote input");
     if (typeof workerId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(workerId))
       throw new DomainError(400, "Invalid worker ID");
     if (this.current()?.active) throw new DomainError(409,
       "A remote control session is already paired. Stop it first");
-    const code = String(randomInt(0, 100000000)).padStart(8, "0");
+    const code = trusted ? null :
+      String(randomInt(0, 100000000)).padStart(8, "0");
     const now = this.now();
-    this.session = { workerId, code, active: false, preparedAt: now,
-      expiresAt: now + PAIR_TTL, lastPoll: now, lastAction: 0,
+    this.session = { workerId, code, trusted, active: false, preparedAt: now,
+      expiresAt: now + (trusted ? TRUSTED_IDLE_TTL : PAIR_TTL),
+      lastPoll: now, lastAction: 0,
       failedPairAttempts: 0, queue: [], nextId: 0,
       dispatched: null, lastResult: null };
     // This code goes ONLY to the worker-token-authenticated LOCAL helper.
-    return { pairingCode: code, expiresInSeconds: PAIR_TTL / 1000 };
+    return trusted
+      ? { ready: true, trustedMode: true, requiresOwnerActivation: true }
+      : { pairingCode: code, expiresInSeconds: PAIR_TTL / 1000 };
   }
   pair(input) {
     const s = this.current();
-    if (!s || s.active) throw new DomainError(409,
+    if (!s || s.active || s.trusted) throw new DomainError(409,
       "No pending Windows pairing request. Start the local remote-control companion");
     const code = input?.code;
     if (typeof code !== "string" || !CODE_PATTERN.test(code) ||
@@ -118,11 +147,31 @@ export class RemoteInput {
     s.lastPoll = now;
     return this.status();
   }
+  activateTrusted() {
+    const s = this.current();
+    if (!s?.trusted) throw new DomainError(409,
+      "One-tap control is not locally enabled. Enable trusted mobile control on the laptop once.");
+    if (!this.captureFresh()) throw new DomainError(409,
+      "Choose a screen on the laptop before starting phone control.");
+    if (this.now() - s.lastPoll >= HEARTBEAT_TTL)
+      throw new DomainError(409, "Windows control companion is no longer running.");
+    if (s.active) return this.status();
+    s.active = true;
+    s.expiresAt = this.now() + CONTROL_TTL;
+    s.lastAction = 0;
+    s.queue = [];
+    return this.status();
+  }
   next(workerId, lastAck = null) {
     const s = this.current();
     if (!s || s.workerId !== workerId)
       throw new DomainError(409, "Remote input is not enabled for this Windows helper");
     s.lastPoll = this.now();
+    if (s.trusted && !s.active) s.expiresAt = this.now() + TRUSTED_IDLE_TTL;
+    if (s.trusted && s.active && !this.captureFresh()) {
+      this.pause(s); // A stale/missing picture cannot authorize hidden input.
+      s.expiresAt = this.now() + TRUSTED_IDLE_TTL;
+    }
     // The visible helper piggybacks the previous result on its next poll.
     // Never store raw key/text contents in the acknowledgment.
     if (lastAck && s.active && s.dispatched &&
@@ -173,7 +222,15 @@ export class RemoteInput {
     const s = this.current();
     if (workerId != null && s && s.workerId !== workerId)
       throw new DomainError(403, "Incorrect Windows helper");
-    this.session = null;
+    if (workerId == null && s?.trusted) {
+      // Mobile Stop revokes input but leaves the locally visible, opted-in
+      // helper online; the owner must explicitly press Control to re-arm.
+      this.pause(s);
+      s.expiresAt = this.now() + TRUSTED_IDLE_TTL;
+    } else {
+      // Closing the local helper or revoking legacy pairing destroys consent.
+      this.session = null;
+    }
     return this.status();
   }
 }
