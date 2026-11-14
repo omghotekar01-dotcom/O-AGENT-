@@ -1,0 +1,20 @@
+{
+  "name": "@o-agent/saas-control-plane",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "migrate": "node src/migrate.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check src/config.mjs && node --check src/oidc.mjs && node --check src/store.mjs && node --check src/device-crypto.mjs && node --check src/server.mjs && node --check src/mcp.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "jose": "6.2.17",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  }
+}
