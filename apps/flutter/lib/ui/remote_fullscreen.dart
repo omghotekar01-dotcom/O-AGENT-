@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import '../core/controller.dart';
 import '../core/api_client.dart';
 
@@ -27,6 +28,7 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
   bool _control = false;
   bool _sending = false;
   bool _connecting = false;
+  bool _pastingImage = false;
   String? _error;
   int _frameSequence = -1;
   int _pollCount = 0;
@@ -294,6 +296,55 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
     );
   }
 
+  Future<void> _pasteImage() async {
+    if (!_control || !_paired || !_fresh || _pastingImage) return;
+    try {
+      final chosen = await FilePicker.pickFile(type: FileType.custom,
+        allowedExtensions: ['png','jpg','jpeg']);
+      if (chosen == null || !mounted) return;
+      final length = chosen.lengthSync() ?? await chosen.length();
+      if (length == null || length < 64 || length > 1500000) {
+        throw const ApiException('Choose a PNG/JPEG image of 1.5 MB or less.');
+      }
+      final ext = chosen.extension?.toLowerCase();
+      final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
+      final allowed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Paste image into laptop?'),
+          content: Text('Selected: ${chosen.name}\n\n'
+            'First tap the image-upload or message field in the visible '
+            'ChatGPT, Copilot, VS Code or other laptop application. '
+            'O-AGENT will temporarily place this picture on the Windows '
+            'clipboard and paste it into that focused app, then clear '
+            'the clipboard. Check the result on the shared screen. '
+            'Do not send private or sensitive images this way.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Paste image')),
+          ],
+        ),
+      );
+      if (allowed != true || !mounted) return;
+      setState(() => _pastingImage = true);
+      final bytes = await chosen.readAsBytes();
+      if (bytes.isEmpty || bytes.length > 1500000) {
+        throw const ApiException('The selected image exceeds the size limit.');
+      }
+      await widget.controller.client?.pasteImageOnLaptop(
+        Uint8List.fromList(bytes), mime);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(
+          'Image queued to the Windows clipboard. Verify the paste on screen.')));
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _pastingImage = false);
+    }
+  }
+
   /// Translate a touch on the letterboxed JPEG into normalized monitor
   /// coordinates. A window/tab share falls back to relative trackpad clicks.
   /// Windows independently rejects absolute clicks on multiple monitors.
@@ -444,6 +495,12 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
                       onPressed: () => _typeOnDesktop(submit: true),
                       icon: const Icon(Icons.send, size: 17),
                       label: const Text('Send prompt')),
+                    TextButton.icon(
+                      onPressed: _pastingImage ? null : _pasteImage,
+                      icon: const Icon(Icons.image_outlined,
+                        color: Colors.white, size: 17),
+                      label: Text(_pastingImage ? 'Pasting...' : 'Paste image',
+                        style: const TextStyle(color: Colors.white))),
                     IconButton(tooltip: 'Type text without Enter',
                       onPressed: () => _typeOnDesktop(),
                       icon: const Icon(Icons.keyboard, color: Colors.white)),
