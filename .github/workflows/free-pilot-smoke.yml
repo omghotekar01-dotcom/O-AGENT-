@@ -26,6 +26,10 @@ jobs:
       - name: Validate Caddy gateway syntax before starting containers
         run: |
           docker run --rm -v "$PWD/deploy/saas/free-pilot/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.9-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null
+      - name: Verify gateway runs without elevated container capabilities
+        run: |
+          docker build -f deploy/saas/free-pilot/Dockerfile.gateway -t oagent/free-pilot-gateway:local .
+          docker run --rm --read-only --security-opt no-new-privileges:true             --cap-drop ALL --entrypoint /usr/bin/caddy             oagent/free-pilot-gateway:local version
       - name: Validate private Compose and build all containers
         run: |
           docker compose --env-file deploy/saas/free-pilot/.env.local \

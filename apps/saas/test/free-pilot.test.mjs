@@ -62,3 +62,13 @@ test("free pilot exposes a single private start command, never Funnel",()=>{
   assert.match(program,/127\.0\.0\.1:8791/);
   assert.doesNotMatch(program,/run\("tailscale",\["funnel"/);
 });
+
+test("gateway strips upstream file capabilities instead of removing security sandboxing",()=>{
+  const compose=read("compose.yaml");
+  const dockerfile=read("Dockerfile.gateway");
+  assert.match(compose,/dockerfile: deploy\/saas\/free-pilot\/Dockerfile.gateway/);
+  assert.match(compose,/cap_drop: \["ALL"\]/);
+  assert.match(compose,/no-new-privileges:true/);
+  assert.match(dockerfile,/setcap -r \/usr\/bin\/caddy/);
+  assert.match(dockerfile,/EXPOSE 8081/);
+});

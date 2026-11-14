@@ -93,7 +93,10 @@ services:
       migrate: {condition: service_completed_successfully}
     networks: [private]
   gateway:
-    image: caddy:2.9-alpine
+    build:
+      context: ../../..
+      dockerfile: deploy/saas/free-pilot/Dockerfile.gateway
+    image: oagent/free-pilot-gateway:local
     restart: unless-stopped
     ports:
       - "127.0.0.1:8791:8081"
