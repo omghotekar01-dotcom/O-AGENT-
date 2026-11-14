@@ -89,3 +89,16 @@ export async function assertTenantDatabaseSecurity(pool) {
     throw Error("Tenant isolation tables have missing or disabled FORCE RLS");
   return {ok:true};
 }
+
+/** Reclaim only expired unscoped ephemeral authentication data. Never delete
+ * run history, provider session IDs, audit records or active approvals.
+ * These two tables intentionally have no tenant RLS because device signatures
+ * must be verified before their tenant identity can be established.
+ */
+export async function pruneEphemeralAuthenticationData(pool){
+  const nonce=await pool.query(
+    "DELETE FROM device_replay_nonces WHERE expires_at<now()");
+  const enrollments=await pool.query(
+    "DELETE FROM pending_devices WHERE expires_at<now()");
+  return {expiredNonces:nonce.rowCount,expiredEnrollmentRequests:enrollments.rowCount};
+}
