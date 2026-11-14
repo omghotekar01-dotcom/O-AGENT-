@@ -317,6 +317,15 @@ class _RemoteFullscreenState extends State<RemoteFullscreenScreen> {
                       child: const Text('⌫', style: TextStyle(color: Colors.white))),
                     TextButton(onPressed: () => _send({'type': 'key', 'key': 'escape'}),
                       child: const Text('Esc', style: TextStyle(color: Colors.white))),
+                    for (final shortcut in const {
+                      'copy':'Copy', 'paste':'Paste', 'undo':'Undo',
+                      'select_all':'Select all', 'save':'Save',
+                    }.entries)
+                      TextButton(
+                        onPressed: () => _send({'type':'shortcut',
+                          'name':shortcut.key}),
+                        child: Text(shortcut.value,
+                          style: const TextStyle(color: Colors.white))),
                     TextButton(onPressed: () => _send({'type': 'key', 'key': 'tab'}),
                       child: const Text('Tab', style: TextStyle(color: Colors.white))),
                     for (final key in const ['left','up','down','right'])
