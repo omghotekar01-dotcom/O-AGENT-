@@ -119,6 +119,13 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   void _openBridge([String? task]) => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       AgentSdkBridgeScreen(controller: widget.controller, taskId: task)));
+  void _resumeNativeSession(Map<String, dynamic> native) =>
+    Navigator.push(context, MaterialPageRoute<void>(builder: (_) =>
+      AgentSdkBridgeScreen(controller: widget.controller,
+        resumeSession: native['sessionId']?.toString(),
+        resumeKind: native['kind']?.toString(),
+        resumeWorkerId: native['workerId']?.toString(),
+        resumeCwd: native['cwd']?.toString())));
   void _openVsCode([String? task]) => Navigator.push(context,
     MaterialPageRoute<void>(builder: (_) =>
       VsCodeRemoteScreen(controller: widget.controller, taskId: task)));
@@ -280,6 +287,7 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
   @override
   Widget build(BuildContext context) {
     final sessions = remoteList(data?['sessions']);
+    final nativeSessions = remoteList(data?['nativeSessions']);
     final runs = remoteList(data?['runs']);
     final active = runs.where((r) => const {
       'waiting_for_approval','queued','running'
@@ -366,6 +374,55 @@ class _RemoteMissionControlState extends State<RemoteMissionControlScreen>
                 IconButton(onPressed: _openScreen,
                   icon: const Icon(CupertinoIcons.arrow_up_right_square)),
               ])),
+              const OSectionTitle('Continue native provider sessions'),
+              if (nativeSessions.isEmpty && data != null)
+                const OEmptyState(icon: CupertinoIcons.square_stack_3d_up,
+                  title: 'No completed SDK sessions yet',
+                  message: 'Run a supervised Claude or Copilot SDK turn first. '
+                    'Only real session IDs returned by a provider appear here.'),
+              for (final native in nativeSessions.take(8))
+                Padding(padding: const EdgeInsets.only(bottom: 10),
+                  child: OSurface(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      const Icon(CupertinoIcons.chevron_left_slash_chevron_right,
+                        color: OVisual.primary),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(
+                        native['label']?.toString() ?? 'Provider session',
+                        style: TextStyle(color: OVisual.label(context),
+                          fontWeight: FontWeight.w700))),
+                      OStatePill(native['resumeEligible'] == true
+                        ? 'online' : 'offline',
+                        label: native['resumeEligible'] == true
+                          ? 'Worker online' : 'Worker unavailable'),
+                    ]),
+                    const SizedBox(height: 7),
+                    Text('Workspace: ' + (native['cwd']?.toString() ?? ''),
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12,
+                        color: OVisual.muted(context))),
+                    const SizedBox(height: 6),
+                    Text('Previous request: ' +
+                      (native['lastPrompt']?.toString() ?? ''),
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12,
+                        color: OVisual.muted(context))),
+                    const SizedBox(height: 11),
+                    SizedBox(width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: native['resumeEligible'] == true
+                          ? () => _resumeNativeSession(native) : null,
+                        icon: const Icon(CupertinoIcons.arrow_right_circle,
+                          size: 17),
+                        label: const Text('Continue via native SDK and approval'))),
+                  ]))),
+              OIconTile(icon: CupertinoIcons.cloud_fill,
+                title: 'Existing Cursor Cloud agents',
+                subtitle: 'Open provider-owned agents, watch runs, steer or '
+                  'send follow-ups through the official Cursor API.',
+                onTap: _openCursor, color: OVisual.primary),
+              const SizedBox(height: 10),
               const OSectionTitle('My Codex conversations'),
               if (sessions.isEmpty && data != null)
                 const OEmptyState(icon: CupertinoIcons.square_stack,
