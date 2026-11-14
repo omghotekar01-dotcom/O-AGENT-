@@ -1,0 +1,204 @@
+import {createServer} from "node:http";
+import {Readable} from "node:stream";
+import {pipeline} from "node:stream/promises";
+import {createHmac,randomBytes} from "node:crypto";
+import {readSaasConfig} from "./config.mjs";
+import {createOidcVerifier} from "./oidc.mjs";
+import {createPool,withIdentity,withTenant} from "./store.mjs";
+import {verifyDeviceHeaders} from "./device-crypto.mjs";
+import {createMcp} from "./mcp.mjs";
+import {
+  httpError,startEnrollment,approveEnrollment,listDevices,revokeDevice,
+  updateCapabilities,heartbeat,createRun,listRuns,runDetail,
+  listApprovals,decideApproval,claimRun,renewLease,finishRun,
+  requestToolApproval,toolApprovalStatus,isUUID,
+} from "./operations.mjs";
+
+const reply=(res,status,value)=>{
+  if(res.headersSent)return;
+  res.writeHead(status,{"content-type":"application/json; charset=utf-8",
+    "cache-control":"no-store","x-content-type-options":"nosniff",
+    "referrer-policy":"no-referrer"});
+  res.end(JSON.stringify(value));
+};
+async function bytes(req,max=16384) {
+  const chunks=[];let len=0;
+  for await (const chunk of req) {
+    len+=chunk.length;
+    if(len>max)throw httpError(413,"Request exceeds maximum size");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+function objectJson(data) {
+  try{
+    const value=data.length?JSON.parse(data.toString("utf8")):{};
+    if(!value||typeof value!=="object"||Array.isArray(value))
+      throw Error();
+    return value;
+  }catch{throw httpError(400,"Expected a JSON object");}
+}
+function expectedHost(config,req) {
+  const host=req.headers.host;
+  // Never trust X-Forwarded-* headers from arbitrary clients.
+  if(typeof host!=="string" || host.toLowerCase()!==new URL(config.publicOrigin).host.toLowerCase())
+    throw httpError(403,"Unexpected hostname");
+  if(req.headers.origin && req.headers.origin!==config.publicOrigin)
+    throw httpError(403,"Cross-origin request rejected");
+}
+function assertJson(req) {
+  if(!/^application\/json(?:;|$)/i.test(String(req.headers["content-type"]||"")))
+    throw httpError(415,"JSON content type required");
+}
+const capturePath=(path,pattern)=>path.match(pattern);
+
+export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
+  const verifier=authenticate||createOidcVerifier(config);
+  const mcp=createMcp({pool,config});
+  const ipSalt=randomBytes(32);
+  const server=createServer(async(req,res)=>{
+    try {
+      const parsed=new URL(req.url||"/",config.publicOrigin);
+      const path=parsed.pathname,method=req.method||"GET";
+      if(method==="GET"&&path==="/health/live")
+        return reply(res,200,{status:"alive"});
+      if(method==="GET"&&path==="/health/ready") {
+        await pool.query("SELECT 1");
+        return reply(res,200,{status:"ready",database:"connected"});
+      }
+      expectedHost(config,req);
+      if(parsed.search)throw httpError(400,"Unexpected query parameters");
+      if(path==="/mcp"){
+        if(!["GET","POST","DELETE"].includes(method))
+          throw httpError(405,"Unsupported MCP method");
+        const identity=await verifier(req.headers.authorization,"oagent:read");
+        // The official v2 handler is stateless. Identity is verified before
+        // anything is forwarded; MCP never receives the raw bearer token.
+        const body=method==="GET"?undefined:Readable.toWeb(req);
+        const request=new Request(config.publicOrigin+path,{
+          method,headers:req.headers,body,
+          ...(body?{duplex:"half"}:{}),
+        });
+        const answer=await mcp.fetch(request,{authInfo:{
+          clientId:identity.subject,token:"validated-externally",
+          scopes:[...identity.scopes],expiresAt:identity.expiresAt,
+        }});
+        res.writeHead(answer.status,Object.fromEntries(answer.headers));
+        if(answer.body)await pipeline(Readable.fromWeb(answer.body),res);
+        else res.end();
+        return;
+      }
+      if(method==="POST"&&path==="/v1/devices/enrollments"){
+        assertJson(req);
+        const data=objectJson(await bytes(req,4096));
+        const source=createHmac("sha256",ipSalt)
+          .update(req.socket.remoteAddress||"unknown").digest();
+        const value=await startEnrollment(pool,data,source);
+        return reply(res,201,value);
+      }
+      if(path.startsWith("/v1/device/")){
+        // Workers cannot use a global shared bearer secret, a user token, or
+        // an unverified device id as authority. Require per-request Ed25519
+        // signature + short timestamp + database-backed replay nonce.
+        if(!["POST","GET"].includes(method))throw httpError(405,"Invalid worker method");
+        const raw=method==="POST"?await bytes(req,20000):Buffer.alloc(0);
+        if(method==="POST")assertJson(req);
+        const device=await verifyDeviceHeaders(pool,{
+          headers:req.headers,method,path,rawBody:raw,now});
+        const data=method==="POST"?objectJson(raw):{};
+        const call=fn=>withTenant(pool,device.tenantId,async(client,tenantId)=>{
+          const scoped=await client.query(
+            "SELECT id FROM devices WHERE id=$1 AND revoked_at IS NULL",
+            [device.deviceId]);
+          if(!scoped.rowCount)throw httpError(403,"Device revoked or unavailable");
+          return fn(client,tenantId);
+        });
+        if(method==="POST"&&path==="/v1/device/heartbeat")
+          return reply(res,200,await call(c=>heartbeat(c,device.deviceId)));
+        if(method==="POST"&&path==="/v1/device/capabilities")
+          return reply(res,200,await call((c,t)=>updateCapabilities(
+            c,t,device.deviceId,data.capabilities)));
+        if(method==="POST"&&path==="/v1/device/claim")
+          return reply(res,200,await call((c,t)=>claimRun(c,t,device.deviceId)));
+        const runLease=capturePath(path,
+          /^\/v1\/device\/runs\/([0-9a-f-]{36})\/(renew|complete|approvals)$/i);
+        if(method==="POST"&&runLease){
+          const id=runLease[1],op=runLease[2];
+          if(op==="renew")return reply(res,200,
+            await call(c=>renewLease(c,device.deviceId,id,data.leaseToken)));
+          if(op==="complete")return reply(res,200,
+            await call((c,t)=>finishRun(c,t,device.deviceId,id,data)));
+          if(op==="approvals")return reply(res,201,
+            await call((c,t)=>requestToolApproval(c,t,device.deviceId,id,data)));
+        }
+        const approvalStatus=capturePath(path,
+          /^\/v1\/device\/approvals\/([0-9a-f-]{36})$/i);
+        if(method==="GET"&&approvalStatus)return reply(res,200,
+          await call(c=>toolApprovalStatus(c,device.deviceId,approvalStatus[1])));
+        throw httpError(404,"Unknown signed-device operation");
+      }
+
+      // Every account request requires a signed OIDC access token scoped to
+      // this API audience. No caller-supplied tenant id or owner token.
+      const write=method!=="GET";
+      const identity=await verifier(req.headers.authorization,
+        write?"oagent:operate":"oagent:read");
+      const asTenant=fn=>withIdentity(pool,identity,fn);
+      if(method==="GET"&&path==="/v1/me")
+        return reply(res,200,await asTenant(async(_c,tenant)=>({
+          tenantId:tenant,subject:identity.subject,capabilities:[
+            "device_enrollment","native_run_approval","scoped_mcp",
+          ]})));
+      if(method==="GET"&&path==="/v1/devices")
+        return reply(res,200,{devices:await asTenant(c=>listDevices(c))});
+      if(method==="POST"&&path==="/v1/devices/enrollments/approve"){
+        assertJson(req);const data=objectJson(await bytes(req,4096));
+        return reply(res,201,await asTenant((c,t)=>approveEnrollment(
+          c,t,identity.subject,data.pairingToken)));
+      }
+      const revoke=capturePath(path,
+        /^\/v1\/devices\/([0-9a-f-]{36})\/revoke$/i);
+      if(method==="POST"&&revoke)return reply(res,200,
+        await asTenant((c,t)=>revokeDevice(c,t,identity.subject,revoke[1])));
+      if(method==="GET"&&path==="/v1/runs")
+        return reply(res,200,{runs:await asTenant(c=>listRuns(c))});
+      if(method==="POST"&&path==="/v1/runs"){
+        assertJson(req);const data=objectJson(await bytes(req,10000));
+        return reply(res,201,await asTenant((c,t)=>createRun(c,t,
+          identity.subject,data,req.headers["idempotency-key"])));
+      }
+      const run=capturePath(path,/^\/v1\/runs\/([0-9a-f-]{36})$/i);
+      if(method==="GET"&&run)return reply(res,200,
+        await asTenant(c=>runDetail(c,run[1])));
+      if(method==="GET"&&path==="/v1/approvals")
+        return reply(res,200,{approvals:await asTenant(c=>listApprovals(c))});
+      const decision=capturePath(path,
+        /^\/v1\/approvals\/([0-9a-f-]{36})\/decision$/i);
+      if(method==="POST"&&decision){
+        assertJson(req);const data=objectJson(await bytes(req,2000));
+        return reply(res,200,await asTenant((c,t)=>decideApproval(
+          c,t,identity.subject,decision[1],data)));
+      }
+      throw httpError(404,"Not found");
+    }catch(error){
+      // Do not leak DB SQL, provider errors, identity headers or stack traces.
+      if(!res.headersSent && !res.destroyed)
+        reply(res,Number.isSafeInteger(error.status)?error.status:500,
+          {error:Number.isSafeInteger(error.status)?
+            error.message:"Internal service error"});
+      if(!error.status)console.error("SaaS request failed:",error.name);
+    }
+  });
+  return {server,close:async()=>{await mcp.close();await new Promise(ok=>server.close(ok));}};
+}
+if(process.argv[1]&&import.meta.url===new URL("file://"+process.argv[1]).href){
+  const config=readSaasConfig();
+  const pool=createPool(config);
+  await pool.query("SELECT 1");
+  const app=makeSaasServer({config,pool});
+  app.server.listen(config.port,config.host,()=>console.log(
+    "O-AGENT isolated SaaS control plane ready on "+config.host+":"+config.port));
+  const shutdown=async()=>{await app.close();await pool.end();};
+  process.once("SIGTERM",()=>void shutdown());
+  process.once("SIGINT",()=>void shutdown());
+}
