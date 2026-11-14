@@ -159,9 +159,8 @@ test("trusted Windows helper allows owner one-tap control only during fresh capt
   fresh=true;
   input.activateTrusted();
   now+=20*60*1000+1;
-  // Simulate the locally running helper heartbeating at lease end.
-  const expired=input.next("my-laptop");
-  assert.equal(expired.action,null);
+  // An absent heartbeat immediately revokes the helper after the time jump.
+  assert.throws(()=>input.next("my-laptop"),/not enabled/);
   assert.equal(input.status().trustedReady,false,
     "A disconnected helper must not stay armed after heartbeat timeout");
   const again=input.prepare("my-laptop",{trusted:true});
