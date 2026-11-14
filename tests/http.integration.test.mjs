@@ -84,6 +84,18 @@ test("HTTP API authenticates, dispatches and persists actual lifecycle", { timeo
     assert.equal((await call("/api/input/status",personalToken)).status,403);
     assert.equal((await call("/api/input/activate",personalToken,"POST")).status,403);
     assert.equal((await call("/api/input/activate",apiToken,"POST")).status,409);
+    const ownerOnlyImage=Buffer.concat([
+      Buffer.from([137,80,78,71,13,10,26,10]),Buffer.alloc(72,0x11),
+    ]);
+    for (const [bearer,expected] of [[personalToken,403],[apiToken,409]]) {
+      const upload=await fetch(url + "/api/input/image",{
+        method:"POST",
+        headers:{authorization:"Bearer "+bearer,"content-type":"image/png"},
+        body:ownerOnlyImage,
+      });
+      assert.equal(upload.status,expected,
+        "Image transfer must fail without owner and active trusted control");
+    }
     assert.equal((await call("/api/input/action",personalToken,"POST",
       {type:"click",button:"left"})).status,403);
     assert.equal((await call("/api/input/action",apiToken,"POST",
