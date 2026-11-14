@@ -117,6 +117,13 @@ $config = [ordered]@{
     WorkerId = $id
     Workspace = $workspace
 }
+Write-Host ''
+Write-Host 'OPTIONAL: trusted one-tap Windows control from your owner phone.'
+Write-Host 'A visible companion will start with O-AGENT and allow input only while'
+Write-Host 'your chosen screen is shared and your owner phone explicitly presses Control.'
+Write-Host 'Do not enable on shared/untrusted PCs; you can revoke it any time.'
+$remoteChoice = Read-Host 'Enable one-tap control on this trusted laptop? Type YES [default NO]'
+$config['RemoteControlTrusted'] = ($remoteChoice -ceq 'YES')
 Save-OAgentConfig $config
 
 # A Windows shortcut resolves even when the repository lives in a OneDrive folder.
