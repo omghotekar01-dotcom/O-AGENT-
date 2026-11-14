@@ -432,6 +432,66 @@ function render(){
   if(!$("cwd").value.trim()&&selected?.workspace_root)
     $("cwd").value=selected.workspace_root;
 }
+
+function switchWorkspace(next){
+  if(!WORKSPACE_ID.test(next)||!state.workspaces.some(w=>w.tenant_id===next))
+    throw Error("Choose an authorized workspace");
+  workspaceId=next;
+  sessionStorage.setItem("oagent_active_workspace",workspaceId);
+  state={...state,devices:[],runs:[],approvals:[],audit:[]};
+  pillConnection(false);
+  void refresh();
+}
+function renderTeam(){
+  const selector=$("workspaceSwitch");
+  const previous=workspaceId||state.tenantId;
+  selector.replaceChildren();
+  for(const item of state.workspaces){
+    const option=create("option",(item.display_name||"Private workspace")+" · "+item.role);
+    option.value=item.tenant_id;selector.append(option);
+  }
+  selector.value=previous;
+  if(!selector.value && state.tenantId)selector.value=state.tenantId;
+  const active=state.workspaces.find(w=>w.tenant_id===state.tenantId);
+  $("teamRole").textContent=(active?.display_name||"Selected workspace")+
+    " · "+state.role.toUpperCase();
+  $("teamAdmin").hidden=state.role!=="owner";
+  $("workspaceName").value=active?.display_name||"";
+  $("deleteAccount").disabled=state.role!=="owner";
+  $("exportAccount").disabled=state.role!=="owner";
+  $("pairApprove").disabled=state.role!=="owner";
+  $("enableAlerts").disabled=state.role==="viewer";
+  for(const element of $("runForm").querySelectorAll("input,select,textarea,button"))
+    element.disabled=state.role==="viewer";
+  for(const button of document.querySelectorAll('[data-view="audit"]'))
+    button.hidden=state.role==="viewer";
+  const people=$("teamMemberList");people.replaceChildren();
+  if(state.role==="owner"){
+    for(const member of state.members){
+      const row=entry(member.subject,member.issuer,member.role);
+      if(member.role!=="owner"){
+        const actions=create("div",undefined,"entry-actions");
+        action(actions,"Remove member",async()=>{
+          const confirmed=await reviewExact({
+            title:"Revoke this member's access?",
+            description:"Their access to this shared workspace ends immediately.",
+            detail:"Signed identity: "+member.issuer+" / "+member.subject+
+              "\nRole: "+member.role,
+            buttons:"confirm",confirmLabel:"Remove team member",
+          });
+          if(!confirmed)return;
+          await api("/v1/team/members/remove",{method:"POST",
+            body:{issuer:member.issuer,subject:member.subject}});
+          notice("Team member access revoked.");await refresh();
+        },"danger");
+        row.append(actions);
+      }
+      people.append(row);
+    }
+    if(!state.members.length)empty(people,"No member records.");
+  }
+}
+
 async function inspectPairing(){
   if(!pendingPair)return;
   if(!/^oen_[A-Za-z0-9_-]{43}$/.test(pendingPair)){
