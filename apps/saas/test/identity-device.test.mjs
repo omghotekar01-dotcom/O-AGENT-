@@ -21,9 +21,10 @@ test("SaaS config fails closed without HTTPS, explicit OIDC and database",()=>{
   assert.throws(()=>readSaasConfig(env),/secure origin/);
   env.OAGENT_SAAS_ORIGIN="https://app.example.com";
   env.DATABASE_URL="postgres://user:pass@localhost/db?sslmode=disable";
-  assert.throws(()=>readSaasConfig(env),/Insecure DATABASE_URL/);
+  assert.throws(()=>readSaasConfig(env),/sslmode=verify-full/);
   env.DATABASE_URL="postgres://user:pass@localhost/db?sslmode=verify-full";
   assert.equal(readSaasConfig(env).publicOrigin,"https://app.example.com");
+  assert.equal(readSaasConfig(env).issuer,"https://id.example.com");
 });
 test("OIDC validates issuer/audience/algorithms/client audience and scopes",async()=>{
   let options;
