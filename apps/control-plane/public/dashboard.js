@@ -57,7 +57,13 @@ function action(container,label,fn,style="secondary"){
   return btn;
 }
 function navigate(view){
-  if(currentView==="desktop" && view!=="desktop")desktopQueue.length=0;
+  if(currentView==="desktop" && view!=="desktop") {
+    desktopQueue.length=0;
+    if(connected&&desktopInput?.paired)
+      void api("/api/input/stop",{method:"POST"}).catch(()=>{});
+    desktopInput=null;
+  }
+  if(view==="desktop")desktopTick=2;
   currentView=view;
   for(const section of document.querySelectorAll("[data-panel]"))section.hidden=section.dataset.panel!==view;
   for(const button of document.querySelectorAll(".nav-link")){
