@@ -66,9 +66,14 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
           headers:signed,method:"POST",path:"/v1/device/capabilities",rawBody:raw,
         }),/Device authentication failed/);
         await withTenant(pool,tenantA,async c=>{
-          await updateCapabilities(c,tenantA,device.deviceId,["claude_agent_turn"]);
+          await updateCapabilities(c,tenantA,device.deviceId,["claude_agent_turn"],"/work");
           await heartbeat(c,device.deviceId);
         });
+        await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>createRun(
+          c,t,owner.subject,{deviceId:device.deviceId,
+            kind:"claude_agent_turn",mode:"read_only",
+            prompt:"Should reject external directory",cwd:"/private/other"},
+          randomUUID()+"_bad")),/outside the enrolled workspace/);
         const key=randomUUID()+"_user";
         const payload={deviceId:device.deviceId,kind:"claude_agent_turn",
           mode:"read_only",prompt:"Explain this test",cwd:"/work/example"};
