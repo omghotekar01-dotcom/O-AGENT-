@@ -47,20 +47,64 @@ test("local enrollment never accepts a remote origin, malformed credentials or e
     return true;
   });
 });
-test("auto-connect checks the actual local O-AGENT service before importing secrets",async()=>{
-  assert.equal(await verifyLocalBackend("http://127.0.0.1:8787",{
+test("auto-connect verifies both the real backend and a valid worker token",async()=>{
+  const secret="w".repeat(64);
+  let checks=0;
+  const result=await verifyLocalBackend("http://127.0.0.1:8787",{
+    workerToken:secret,
     fetchImpl:async(url,opts)=>{
       assert.equal(url.origin,"http://127.0.0.1:8787");
-      assert.equal(opts.redirect,"error");
       assert.equal(opts.method,"GET");
-      return {ok:true,json:async()=>({service:"oagent-control-plane",status:"ok"})};
+      assert.equal(opts.redirect,"error");
+      if(url.pathname==="/health"){
+        checks++;
+        assert.equal(opts.headers,undefined);
+        return {ok:true,status:200,json:async()=>({
+          service:"oagent-control-plane",status:"ok",
+        })};
+      }
+      checks++;
+      assert.equal(url.pathname,"/api/workers/credential-check");
+      assert.equal(opts.headers.authorization,"Bearer "+secret);
+      return {ok:true,status:200,json:async()=>({
+        authenticated:true,role:"worker",
+      })};
     },
-  }),true);
+  });
+  assert.equal(result,true);
+  assert.equal(checks,2);
   await assert.rejects(()=>verifyLocalBackend("http://127.0.0.1:8787",{
+    workerToken:secret,
     fetchImpl:async()=>({ok:true,json:async()=>({service:"untrusted"})}),
   }),/not serving/);
-  await assert.rejects(()=>verifyLocalBackend("https://example.com"),/loopback/);
+  await assert.rejects(()=>verifyLocalBackend("https://example.com",{
+    workerToken:secret,
+  }),/loopback/);
   await assert.rejects(()=>verifyLocalBackend("http://127.0.0.1:8787",{
+    workerToken:secret,
     fetchImpl:async()=>{throw Error("socket failed");},
   }),/Start O-AGENT.cmd/);
+});
+test("bad local worker tokens must not be imported or revealed",async()=>{
+  const secret="w".repeat(64);
+  await assert.rejects(()=>verifyLocalBackend("http://127.0.0.1:8787",{
+    workerToken:secret, fetchImpl:async(url)=>{
+      if(url.pathname==="/health")return {
+        ok:true,status:200,json:async()=>({service:"oagent-control-plane",status:"ok"}),
+      };
+      return {ok:false,status:401};
+    },
+  }),error=>{
+    assert.match(error.message,/does not match the running backend/);
+    assert.doesNotMatch(error.message,/w{24}/);
+    return true;
+  });
+  await assert.rejects(()=>verifyLocalBackend("http://127.0.0.1:8787",{
+    workerToken:secret,fetchImpl:async(url)=>{
+      if(url.pathname==="/health")return {
+        ok:true,status:200,json:async()=>({service:"oagent-control-plane",status:"ok"}),
+      };
+      return {ok:false,status:404};
+    },
+  }),/latest update/);
 });
