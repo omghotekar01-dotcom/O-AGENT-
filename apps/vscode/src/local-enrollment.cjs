@@ -33,7 +33,7 @@ async function readLocalEnrollment({
   try { origin=parseBackendOrigin(data?.origin); }
   catch { throw Error("Windows setup returned an invalid local backend address."); }
   if (origin.protocol !== "http:" || origin.hostname !== "127.0.0.1") {
-    throw Error("Automatic setup may only connect to 127.0.0.1 on this laptop.");
+    throw Error("Automatic local setup may only connect to 127.0.0.1 on this laptop.");
   }
   if (typeof token !== "string" || token.length < 24 || token.length > 512 ||
       /[\u0000-\u001f]/.test(token)) {
