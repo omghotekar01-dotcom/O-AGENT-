@@ -103,9 +103,34 @@ test("real HTTP + PostgreSQL: OIDC owner, exact fingerprint pairing, signed work
       return {status:response.status,data:await response.json()};
     }
     const caps=await signed("/v1/device/capabilities",
-      {capabilities:["workspace_inventory"]});
+      {capabilities:["workspace_inventory"],workspaceRoot:"/trusted/oagent/project"});
     assert.equal(caps.status,200);
     assert.equal((await signed("/v1/device/heartbeat",{})).status,200);
+
+    // Device-signature + OIDC + tenant-RLS session snapshots. The saved
+    // conversation belongs to the enrolled laptop, never another tenant.
+    const savedSession={sessionId:"codex-thread-12345",
+      cwd:"/trusted/oagent/project/subproject",
+      title:"Existing CLI task",preview:"Continue the work",
+      sourceKind:"cli",updatedAt:"2026-11-15T04:00:00Z",
+      messages:[{role:"user",text:"Please finish the existing task"},
+        {role:"assistant",text:"Ready for the next approval"}]};
+    assert.equal((await request("/v1/sessions")).status,401);
+    const malicious=await signed("/v1/device/sessions",{
+      sessions:[{...savedSession,cwd:"/private/another-company"}]});
+    assert.equal(malicious.status,400,JSON.stringify(malicious.data));
+    const published=await signed("/v1/device/sessions",{
+      sessions:[savedSession]});
+    assert.equal(published.status,200,JSON.stringify(published.data));
+    assert.equal(published.data.synced,1);
+    const ownerSessions=await request("/v1/sessions",{token:"owner-user"});
+    assert.equal(ownerSessions.status,200,JSON.stringify(ownerSessions.data));
+    assert.equal(ownerSessions.data.sessions.length,1);
+    assert.equal(ownerSessions.data.sessions[0].sessionId,savedSession.sessionId);
+    assert.deepEqual(ownerSessions.data.sessions[0].messages,savedSession.messages);
+    const otherSessions=await request("/v1/sessions",{token:"other-user"});
+    assert.deepEqual(otherSessions.data.sessions,[]);
+
     const unavailable=await request("/v1/runs",{
       method:"POST",token:"other-user",headers:{"idempotency-key":randomUUID()},
       body:{deviceId,kind:"workspace_inventory",mode:"read_only"},
