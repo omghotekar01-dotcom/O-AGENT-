@@ -72,8 +72,8 @@ export async function discoverStoredCodexSessions({
     ["-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass",
       "-Command","& codex app-server"]:["app-server"];
   return new Promise((resolvePromise,rejectPromise)=>{
-    let child,finished=false,bytes=0,buffer="",rows=[],nextId=3;
-    let pending=0;
+    let child,finished=false,bytes=0,buffer="";
+    let results=[],candidates=[],pending=0;
     const timeout=setTimeout(()=>finish(Error("Local Codex discovery unavailable")),timeoutMs);
     function finish(error){
       if(finished)return;
@@ -82,7 +82,7 @@ export async function discoverStoredCodexSessions({
       try{child?.stdin.end();}catch{}
       try{child?.kill();}catch{}
       if(error)rejectPromise(error);
-      else resolvePromise(rows);
+      else resolvePromise(results.filter(Boolean).slice(0,10));
     }
     function send(id,method,params){
       if(!finished)child.stdin.write(JSON.stringify({id,method,params})+"\n");
@@ -96,24 +96,54 @@ export async function discoverStoredCodexSessions({
           sortDirection:"desc",sourceKinds:["cli","vscode"]});
       }else if(message.id===2){
         if(message.error)return finish(Error("Codex thread listing unavailable"));
-        try{
-          rows=await safeCodexThreads(message.result?.data,canonical,
-            {realpathImpl,max:10});
-        }catch{return finish(Error("Could not verify local session paths"));}
-        pending=Math.min(rows.length,6);
+        candidates=(Array.isArray(message.result?.data)?message.result.data:[])
+          .filter(x=>SESSION_ID.test(x?.id||"")).slice(0,10);
+        pending=candidates.length;
         if(!pending)return finish();
-        // Newest six only; no unbounded history or secret-file scanning.
-        rows.slice(0,pending).forEach((row,index)=>
-          send(nextId+index,"thread/read",{
-            threadId:row.sessionId,includeTurns:true,
-          }));
-      }else if(message.id>=3&&message.id<9){
-        const index=message.id-3;
-        if(rows[index]&&!message.error){
-          rows[index].messages=boundedCodexMessages(message.result?.thread);
+        // Read metadata without resuming a thread. Some Codex versions omit
+        // cwd from thread/list, so check thread/read before accepting it.
+        candidates.forEach((row,index)=>send(3+index,"thread/read",{
+          threadId:row.id,includeTurns:true,
+        }));
+      }else if(message.id>=3&&message.id<13){
+        const index=message.id-3,initial=candidates[index];
+        if(!message.error&&initial&&message.result?.thread){
+          const detail=message.result.thread;
+          try{
+            const verified=await safeCodexThreads([{
+              ...initial,...detail,
+              id:initial.id,
+              cwd:detail.cwd||initial.cwd,
+              source:detail.source||initial.source,
+            }],canonical,{realpathImpl,max:1});
+            if(verified.length){
+              const row=verified[0];
+              row.messages=boundedCodexMessages(detail);
+              results[index]=row;
+              // Modern persisted paginated Codex threads may omit .turns.
+              // The documented experimental turns/list can supply a small
+              // read-only historical page, if supported by this CLI version.
+              if(row.messages.length===0){
+                pending++;
+                send(20+index,"thread/turns/list",{
+                  threadId:initial.id,limit:10,
+                  sortDirection:"desc",itemsView:"full",
+                });
+              }
+            }
+          }catch{/* Bad local session metadata is silently excluded. */}
         }
         pending--;
-        if(pending===0)finish();
+        if(!pending)finish();
+      }else if(message.id>=20&&message.id<30){
+        const index=message.id-20;
+        if(results[index]&&!message.error&&Array.isArray(message.result?.data)){
+          results[index].messages=boundedCodexMessages({
+            turns:message.result.data.slice().reverse(),
+          });
+        }
+        pending--;
+        if(!pending)finish();
       }
     }
     try{
