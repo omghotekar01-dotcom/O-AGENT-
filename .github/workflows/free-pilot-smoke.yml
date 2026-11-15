@@ -39,6 +39,28 @@ jobs:
           JS
       - name: Generate ephemeral local-only pilot secrets and private realm
         run: node deploy/saas/free-pilot/setup.mjs
+      - name: "CI-only: reproduce and fix pre-initialized PostgreSQL missing O-AGENT roles"
+        run: |
+          set -euo pipefail
+          initial="deploy/saas/free-pilot/init-postgres.sh"
+          cp "$initial" "$RUNNER_TEMP/oagent-init-original.sh"
+          restore_original() { cp "$RUNNER_TEMP/oagent-init-original.sh" "$initial"; }
+          trap restore_original EXIT
+          # Simulate a database volume initialized before O-AGENT SQL ever ran.
+          # Only this disposable CI database is used; NEVER change a user volume.
+          printf '#!/bin/sh\\nexit 0\\n' > "$initial"
+          docker compose --env-file deploy/saas/free-pilot/.env.local \\
+            -f deploy/saas/free-pilot/compose.yaml up -d db
+          restore_original
+          trap - EXIT
+          cd deploy/saas/free-pilot
+          node bootstrap-db.mjs
+          node bootstrap-db.mjs --apply
+          node repair-db-auth.mjs
+          docker compose --env-file .env.local -f compose.yaml exec -T db \\
+            psql -U postgres -d postgres -Atc \\
+            "SELECT rolname FROM pg_roles WHERE rolname IN ('oagent_runtime','oagent_migrator','oagent_keycloak') ORDER BY rolname" \\
+            | grep -q 'oagent_migrator'
       - name: Validate Caddy gateway syntax before starting containers
         run: |
           docker run --rm -v "$PWD/deploy/saas/free-pilot/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.9-alpine caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile > /dev/null
