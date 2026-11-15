@@ -13,14 +13,17 @@ void main() {
   final savedCodex=<String,dynamic>{
     'deviceId':'worker-1','sessionId':'saved-codex-1234',
     'sourceKind':'codex_cli','title':'Existing project',
+    'cwd':'C:\\trusted\\project',
+    'syncedAt':timestamp.subtract(const Duration(seconds:10))
+      .toIso8601String(),
   };
   final claude=<String,dynamic>{
     'deviceId':'worker-1','kind':'claude_agent_turn',
-    'sessionId':'real-claude-sdk-thread',
+    'sessionId':'real-claude-sdk-thread','cwd':'C:\\trusted\\project',
   };
   final copilot=<String,dynamic>{
     'deviceId':'worker-1','kind':'copilot_sdk_turn',
-    'sessionId':'real-copilot-sdk-thread',
+    'sessionId':'real-copilot-sdk-thread','cwd':'C:\\trusted\\project',
   };
 
   List<AgentDirectoryEntry> catalog({
@@ -89,6 +92,7 @@ void main() {
       final entry=list.singleWhere((x)=>x.id==id);
       expect(entry.hasVerifiedSession,false);
       expect(entry.status,contains('Sign in'));
+      expect(entry.sessionCount,0);
     }
     expect(list.singleWhere((x)=>x.id=='chatgpt').state,
       AgentState.externalOnly);
@@ -102,4 +106,14 @@ void main() {
     expect(list.singleWhere((x)=>x.id=='claude_sdk').status,
       contains('no verified active session'));
   });
+  test('Codex sync older than five minutes must not be shown as resume-ready',(){
+    final stale={...savedCodex,'syncedAt':
+      timestamp.subtract(const Duration(minutes:6)).toIso8601String()};
+    final list=catalog(workers:[worker],codex:[stale]);
+    final entry=list.singleWhere((x)=>x.id=='codex');
+    expect(entry.state,AgentState.workerEnabled);
+    expect(entry.hasVerifiedSession,false);
+    expect(entry.sessionCount,1);
+  });
+
 }

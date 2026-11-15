@@ -42,15 +42,28 @@ List<AgentDirectoryEntry> buildAgentDirectory({
     (d['capabilities'] is List) &&
     (d['capabilities'] as List).contains(capability));
 
+  final current = now ?? DateTime.now();
+  bool recentCodex(Map<String, dynamic> s) {
+    final synced = DateTime.tryParse(s['syncedAt']?.toString() ?? '');
+    return synced != null &&
+      !synced.isAfter(current.add(const Duration(seconds: 10))) &&
+      current.difference(synced).inMinutes < 5 &&
+      s['sessionId'] is String &&
+      (s['sessionId'] as String).length >= 8 &&
+      s['cwd'] is String &&
+      (s['cwd'] as String).isNotEmpty;
+  }
+
   int readyCodex() => codexSessions.where((s) =>
-    onlineIds.contains(s['deviceId']?.toString()) &&
+    recentCodex(s) && onlineIds.contains(s['deviceId']?.toString()) &&
     online.any((d) => d['id']?.toString() == s['deviceId']?.toString() &&
       (d['capabilities'] is List) &&
       (d['capabilities'] as List).contains('codex_cli_turn'))).length;
 
   List<Map<String, dynamic>> forSdk(String kind) => sdkSessions.where(
     (s) => s['kind'] == kind && s['sessionId'] is String &&
-      (s['sessionId'] as String).isNotEmpty).toList();
+      (s['sessionId'] as String).length >= 8 &&
+      s['cwd'] is String && (s['cwd'] as String).isNotEmpty).toList();
 
   int readySdk(String kind) => forSdk(kind).where((s) =>
     onlineIds.contains(s['deviceId']?.toString()) &&
@@ -70,11 +83,13 @@ List<AgentDirectoryEntry> buildAgentDirectory({
     return AgentDirectoryEntry(
       id: id, name: name, summary: summary,
       status: active ? (ready == 1
-          ? '$ready resumable session' : '$ready resumable sessions')
+          ? '$ready resume-eligible session' : '$ready resume-eligible sessions')
         : configured ? 'Worker enabled · no verified active session'
-        : signedIn && total > 0 ? 'Saved sessions · worker offline'
+        : signedIn && total > 0
+          ? 'Saved sessions · worker offline or adapter unavailable'
         : signedIn ? 'Not enabled on a connected worker' : 'Sign in to discover',
-      state: state, route: AgentRoute.sessions, sessionCount: total,
+      state: state, route: AgentRoute.sessions,
+      sessionCount: signedIn ? total : 0,
     );
   }
 

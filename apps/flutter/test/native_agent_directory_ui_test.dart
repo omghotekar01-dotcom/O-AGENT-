@@ -18,11 +18,10 @@ void main(){
     expect(find.byType(CupertinoSlidingSegmentedControl<String>),findsOneWidget);
     expect(find.byType(CupertinoListSection),findsWidgets);
     expect(find.text('OpenAI Codex CLI / IDE'),findsOneWidget);
-    expect(find.text('ChatGPT'),findsNothing,
-      reason:'The long provider list is lazily rendered; search exposes it.');
+    expect(find.byKey(const ValueKey('agent-codex')),findsOneWidget);
     await tester.enterText(find.byType(CupertinoSearchTextField),'ChatGPT');
     await tester.pumpAndSettle();
-    expect(find.text('ChatGPT'),findsOneWidget);
+    expect(find.byKey(const ValueKey('agent-chatgpt')),findsOneWidget);
     expect(find.text('Official app / website only'),findsOneWidget);
     expect(find.text('OpenAI Codex CLI / IDE'),findsNothing);
     expect(tester.takeException(),isNull);
