@@ -69,3 +69,23 @@ own Codex CLI provider authentication is required; no paid API key is created.
 Only build a batched APK once backend and Flutter tests pass. Physical
 acceptance on the owner's phone and actual Windows VS Code environment
 is required; CI cannot establish full live IDE interoperability.
+
+## Consolidated Android build 0.14.0+16
+
+This release batch adds verified read-only discovery of locally persisted
+Codex/VS Code sessions inside the enrolled project, native saved-thread
+history and prompt composition, exact approval, native cancellation, run
+recovery without replay, Windows/Linux path verification, and Codex-specific
+connection diagnostics. It preserves the OAuth native login, private ports
+and old native workspace. Nothing in this batch grants access to arbitrary
+consumer ChatGPT website tabs or controls another IDE's already-running turn.
+
+After installing the debug APK, check live Windows/Android integration:
+1. Complete PKCE sign-in through Tailscale in the mobile app.
+2. Confirm signed worker online and Codex scan status under Devices.
+3. Open a real existing saved Codex thread under Work.
+4. Send the next prompt from the conversation and review in Inbox.
+5. Approve the exact request, then observe real run progress/results.
+6. Test denial, offline state, stale snapshots, and no-replay recovery.
+
+A green CI and a successful Android build do not replace this physical test.
