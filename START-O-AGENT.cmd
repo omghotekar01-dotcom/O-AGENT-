@@ -1,72 +1,35 @@
 @echo off
-setlocal
-title O-AGENT - Private Pilot
+setlocal EnableExtensions
+title O-AGENT - One Click Mission Control
 cd /d "%~dp0"
-echo ==========================================
-echo       O-AGENT PRIVATE PILOT START
-echo ==========================================
 echo.
-echo This starter runs LOCAL services on your PC.
-echo It never publishes your pilot to the public Internet.
+echo ================================================
+echo   O-AGENT - ONE CLICK PRIVATE MISSION CONTROL
+echo ================================================
 echo.
 where node >nul 2>nul
 if errorlevel 1 (
-  echo [FIX] Node.js 22.12+ is missing. Install Node.js, then retry.
-  goto :failed
+  echo [FIX] Install Node.js 22.12 or newer, then double-click this same file again.
+  goto :end
 )
 node -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a>22||(a===22&&b>=12)?0:1)"
 if errorlevel 1 (
-  echo [FIX] Node.js 22.12 or newer is required.
-  goto :failed
+  echo [FIX] Update Node.js to version 22.12 or newer.
+  goto :end
 )
-where docker >nul 2>nul
+if not exist "scripts\one-click-pilot.mjs" (
+  echo [FIX] Complete project files are missing. Pull the full O-AGENT development branch.
+  goto :end
+)
+node "scripts\one-click-pilot.mjs"
 if errorlevel 1 (
-  echo [FIX] Docker CLI is missing. Install and open Docker Desktop.
-  goto :failed
-)
-docker compose version >nul 2>nul
-if errorlevel 1 (
-  echo [FIX] Docker Compose is not ready. Start Docker Desktop.
-  goto :failed
-)
-where tailscale >nul 2>nul
-if errorlevel 1 (
-  echo [FIX] Tailscale CLI not found. Install Tailscale and sign in.
-  goto :failed
-)
-if not exist "deploy\saas\free-pilot\start.mjs" (
-  echo [FIX] Pilot source is incomplete. Extract the FULL branch ZIP.
-  goto :failed
-)
-pushd "deploy\saas\free-pilot"
-node start.mjs
-set "START_RESULT=%errorlevel%"
-echo.
-echo ==========================================
-echo        O-AGENT DIAGNOSTIC REPORT
-echo ==========================================
-node doctor.mjs
-set "DOCTOR_RESULT=%errorlevel%"
-if "%START_RESULT%"=="0" if "%DOCTOR_RESULT%"=="0" (
   echo.
-  echo [NATIVE] Registering the dedicated Android/iOS OAuth PKCE client...
-  node ensure-native-client.mjs
-  set "NATIVE_RESULT=%errorlevel%"
+  echo [NOT READY] Follow the [FIX] message above.
+  echo Do not delete your Docker data or private .env.local settings.
+) else (
+  echo.
+  echo [INFO] You may run this same file again when your worker is stopped.
 )
-popd
-if not "%START_RESULT%"=="0" goto :failed
-if not "%DOCTOR_RESULT%"=="0" goto :failed
-if not "%NATIVE_RESULT%"=="0" goto :failed
-echo.
-echo [READY] Local prerequisite checks passed.
-echo Open the PRIVATE HTTPS Tailnet address printed above on your phone.
-echo Sign in, change your temporary owner password, and enable MFA.
-echo Next, double-click CONNECT-O-AGENT-WORKER.cmd.
-goto :end
-:failed
-echo.
-echo [NOT READY] Read the [FIX] message. Do not post passwords or logs.
-echo No APK build was requested.
 :end
 echo.
 pause

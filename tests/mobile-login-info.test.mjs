@@ -36,7 +36,7 @@ test("helper never prints sensitive values from local configuration",async()=>{
   assert.equal(address,"https://my-pc.sample.ts.net:8443/");
   assert.match(lines.join("\n"),/Private HTTPS address/);
   assert.doesNotMatch(lines.join("\n"),new RegExp(privateKey));
-  assert.match(lines.join("\n"),/CONNECT-O-AGENT-WORKER\.cmd/);
+  assert.match(lines.join("\n"),/START-O-AGENT\.cmd/);
 });
 
 test("missing initial setup produces a clear and non-secret instruction",async()=>{

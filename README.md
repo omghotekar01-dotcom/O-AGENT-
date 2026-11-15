@@ -1,3 +1,5 @@
+> **Windows private-pilot one-click launcher:** Double-click **[START-O-AGENT.cmd](START-O-AGENT.cmd)** from the complete `feat/saas-secure-control-plane-20261114` branch. It starts and checks the private server, verifies native OAuth, shows the phone address, and starts the trusted worker after one-time project selection. See **[native phone first login](docs/NATIVE_PHONE_FIRST_LOGIN.md)**. Do not use separate setup scripts during normal startup. The owner must still sign in and explicitly verify first-time pairing.
+
 ## v0.4.0 — Remote Codex mission-control staging build
 
 O-AGENT's primary owner workflow is **Remote → Remote agent mission control**,

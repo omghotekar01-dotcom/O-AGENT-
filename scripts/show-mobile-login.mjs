@@ -43,8 +43,8 @@ export async function showMobileLogin({read=readFile,print=console.log}={}){
   print("5. First login: username 'pilot-owner'. The initial password is");
   print("   OAGENT_OWNER_PASSWORD in deploy\\saas\\free-pilot\\.env.local.");
   print("   If you already changed your password, use the NEW password.");
-  print("6. After login, on PC run CONNECT-O-AGENT-WORKER.cmd.");
-  print("7. In the native app > Devices, approve the matching laptop fingerprint.");
+  print("6. Keep START-O-AGENT.cmd open; the trusted worker starts here automatically.");
+  print("7. On first pairing, approve the laptop fingerprint in app > Devices.");
   print("====================================================");
   print("This displays an address, NOT proof the server is online.");
   print("NEVER share passwords, .env.local, login tokens or pairing links.");

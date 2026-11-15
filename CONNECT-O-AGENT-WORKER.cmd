@@ -1,22 +1,23 @@
 @echo off
 setlocal
-title O-AGENT - Trusted Workspace Connection
+title O-AGENT - Advanced: Change Trusted Project Folder
 cd /d "%~dp0"
-echo ==========================================
-echo      O-AGENT TRUSTED WORKSPACE SETUP
-echo ==========================================
+echo ============================================
+echo    O-AGENT ADVANCED WORKER FOLDER SELECTION
+echo ============================================
 echo.
-echo Start the private pilot FIRST, then sign in on your phone.
-echo Choose only a project folder you own and trust.
-echo Pairing requires explicit approval in the signed-in dashboard.
+echo Normal use: double-click START-O-AGENT.cmd ONLY.
+echo This advanced option changes the saved trusted project folder.
+echo Stop your existing O-AGENT worker first before switching folders.
 echo.
 where powershell >nul 2>nul
 if errorlevel 1 (
   echo [FIX] Windows PowerShell is unavailable.
   goto :end
 )
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\select-oagent-workspace.ps1"
-if errorlevel 1 echo [FIX] Worker could not start. Review the message above.
+set "OAGENT_CHANGE_WORKSPACE=1"
+powershell -NoProfile -ExecutionPolicy Bypass -STA -File "%~dp0scripts\select-oagent-workspace.ps1"
+if errorlevel 1 echo [FIX] Worker did not start. Read the message above.
 :end
 echo.
 pause
