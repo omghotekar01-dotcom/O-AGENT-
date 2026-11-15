@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {startFreePilot,verifyPrivateServeAvailability} from "../../../deploy/saas/free-pilot/start.mjs";
+import {migrationRemedies} from "../../../deploy/saas/free-pilot/migrate-port.mjs";
 test("one command starts only private Docker Compose and Tailscale Serve",async()=>{
   const calls=[],messages=[];
   const setup=async()=>({created:true,origin:"https://laptop.tail.ts.net"});
@@ -55,4 +56,13 @@ test("HTTPS 8443 keeps another application on 443 untouched",async()=>{
   assert.throws(()=>verifyPrivateServeAvailability({AllowFunnel:{"host.example.ts.net:8443":true}},8443),/Funnel/);
   assert.throws(()=>verifyPrivateServeAvailability({Web:{
     "host.example.ts.net:8443":{Handlers:{"/":{Proxy:"http://localhost:9999"}}}}},8443),/Another Tailscale/);
+});
+
+test("port migration failure stages are safe and actionable",()=>{
+  for(const stage of ["check Docker Desktop","check existing O-AGENT data",
+    "check Tailscale port 8443","verify private login settings"]){
+    assert.match(migrationRemedies[stage],/\S/);
+    assert.doesNotMatch(migrationRemedies[stage],/OAGENT_OWNER_PASSWORD=|TOKEN=|-----BEGIN/);
+  }
+  assert.match(migrationRemedies["check existing O-AGENT data"],/do not delete/);
 });
