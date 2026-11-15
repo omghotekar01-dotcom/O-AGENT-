@@ -63,7 +63,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CupertinoTabBar),findsOneWidget);
       expect(find.text('Your AI work.\nAnywhere.'),findsOneWidget);
-      expect(find.text('OpenAI Codex CLI / IDE'),findsOneWidget);
+      expect(find.byKey(const ValueKey('native-agent-directory')),findsOneWidget);
       expect(find.text('Sessions'),findsOneWidget);
       expect(find.text('Inbox'),findsOneWidget);
       expect(find.text('Remote'),findsOneWidget);
