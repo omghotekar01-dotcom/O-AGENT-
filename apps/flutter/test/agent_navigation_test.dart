@@ -66,10 +66,11 @@ void main() {
       expect(find.byKey(const ValueKey('native-agent-directory')),findsOneWidget);
       expect(find.text('Sessions'),findsOneWidget);
       expect(find.text('Inbox'),findsOneWidget);
-      expect(find.text('Remote'),findsOneWidget);
+      expect(find.text('Remote'),findsWidgets);
       expect(find.text('Settings'),findsOneWidget);
       expect(tester.takeException(),isNull);
-      await tester.tap(find.text('Remote'));
+      await tester.tap(find.descendant(
+        of:find.byType(CupertinoTabBar),matching:find.text('Remote')).first);
       await tester.pumpAndSettle();
       expect(find.text('Your actual screen.\nOn your phone.'),findsOneWidget);
       expect(find.text('Existing gateway owner token'),findsOneWidget);
