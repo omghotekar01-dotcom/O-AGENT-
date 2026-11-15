@@ -103,7 +103,7 @@ test("real HTTP + PostgreSQL: OIDC owner, exact fingerprint pairing, signed work
       return {status:response.status,data:await response.json()};
     }
     const caps=await signed("/v1/device/capabilities",
-      {capabilities:["workspace_inventory"],workspaceRoot:"/trusted/oagent/project"});
+      {capabilities:["workspace_inventory","codex_cli_turn"],workspaceRoot:"/trusted/oagent/project"});
     assert.equal(caps.status,200);
     assert.equal((await signed("/v1/device/heartbeat",{})).status,200);
 
@@ -130,6 +130,49 @@ test("real HTTP + PostgreSQL: OIDC owner, exact fingerprint pairing, signed work
     assert.deepEqual(ownerSessions.data.sessions[0].messages,savedSession.messages);
     const otherSessions=await request("/v1/sessions",{token:"other-user"});
     assert.deepEqual(otherSessions.data.sessions,[]);
+    const codexRequest={deviceId,kind:"codex_cli_turn",
+      mode:"read_only",prompt:"Continue this exact verified thread",
+      cwd:savedSession.cwd,sessionId:savedSession.sessionId};
+    const forged=await request("/v1/runs",{
+      method:"POST",token:"owner-user",
+      headers:{"idempotency-key":randomUUID()},
+      body:{...codexRequest,sessionId:"another-unguessable-thread-1234"},
+    });
+    assert.equal(forged.status,409,
+      "A valid owner token cannot request an unverified provider session");
+    const wrongFolder=await request("/v1/runs",{
+      method:"POST",token:"owner-user",
+      headers:{"idempotency-key":randomUUID()},
+      body:{...codexRequest,cwd:"/trusted/oagent/project/other"},
+    });
+    assert.equal(wrongFolder.status,409,
+      "An exact saved Codex thread cannot be redirected to another subfolder");
+    const expired=await admin.query(
+      "UPDATE codex_sessions SET synced_at=now()-interval '10 minutes' WHERE session_id=$1",
+      [savedSession.sessionId]);
+    assert.equal(expired.rowCount,1);
+    const stale=await request("/v1/runs",{
+      method:"POST",token:"owner-user",
+      headers:{"idempotency-key":randomUUID()},body:codexRequest,
+    });
+    assert.equal(stale.status,409,"Stale saved-session snapshots cannot execute");
+    assert.equal((await signed("/v1/device/sessions",{
+      sessions:[savedSession]})).status,200);
+    const realCodex=await request("/v1/runs",{
+      method:"POST",token:"owner-user",
+      headers:{"idempotency-key":randomUUID()},body:codexRequest,
+    });
+    assert.equal(realCodex.status,201,JSON.stringify(realCodex.data));
+    assert.equal(realCodex.data.status,"waiting_for_approval");
+    assert.equal((await signed("/v1/device/claim",{})).data.run,null,
+      "Even a verified Codex session cannot execute before phone approval");
+    const deniedCodex=await request(
+      "/v1/approvals/"+realCodex.data.approvalId+"/decision",{
+      method:"POST",token:"owner-user",body:{
+        approve:false,expectedActionHash:realCodex.data.actionHash},
+    });
+    assert.equal(deniedCodex.status,200);
+
     const codexHealth=await signed("/v1/device/codex-health",{status:"available"});
     assert.equal(codexHealth.status,200);
     assert.equal(codexHealth.data.status,"available");
