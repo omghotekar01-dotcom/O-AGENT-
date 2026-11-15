@@ -29,6 +29,7 @@ class _NativePilotShellState extends State<NativePilotShell>{
   late final NativePilotController c=widget.pilot??NativePilotController();
   final endpoint=TextEditingController();
   int tab=0;
+  bool rememberDevice=false;
   @override void initState(){
     super.initState();c.addListener(_changed);
     Future.microtask(c.restore);
@@ -45,7 +46,7 @@ class _NativePilotShellState extends State<NativePilotShell>{
     super.dispose();
   }
   Future<void> _login() async{
-    await c.signIn(endpoint.text);
+    await c.signIn(endpoint.text, rememberDevice: rememberDevice);
     if(mounted&&c.error!=null)_toast(context,c.error!);
   }
   @override Widget build(BuildContext context){
@@ -85,7 +86,18 @@ class _NativePilotShellState extends State<NativePilotShell>{
                   border:OutlineInputBorder(),prefixIcon:Icon(Icons.lock_outline),
                   labelText:'Private HTTPS address',
                   hintText:'https://your-device.ts.net:8443/')),
-              const SizedBox(height:16),
+              const SizedBox(height:12),
+              CheckboxListTile(
+                value: rememberDevice,
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Remember this phone'),
+                subtitle: const Text('Save only the encrypted refresh session '
+                  'in Android Keystore or iOS Keychain.'),
+                onChanged: c.busy ? null
+                  : (v) => setState(() => rememberDevice = v ?? false),
+              ),
+              const SizedBox(height:12),
               FilledButton.icon(onPressed:c.busy?null:_login,
                 icon:c.busy?const SizedBox(width:18,height:18,
                   child:CircularProgressIndicator(strokeWidth:2,
