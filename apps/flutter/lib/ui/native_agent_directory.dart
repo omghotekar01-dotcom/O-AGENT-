@@ -1,6 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'ios_components.dart';
 
 import '../core/agent_directory.dart';
 import '../core/pilot_native.dart';
@@ -29,8 +29,8 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
 
   bool _includes(AgentDirectoryEntry entry) {
     if (filter == 'ready' && !entry.hasVerifiedSession) return false;
-    if (filter == 'other' && entry.state != AgentState.separateWorkspace &&
-        entry.state != AgentState.externalOnly) return false;
+    if (filter == 'other' && entry.route != AgentRoute.legacyWorkspace &&
+        entry.route != AgentRoute.remoteDesktop) return false;
     final term = query.trim().toLowerCase();
     return term.isEmpty ||
       (entry.name + ' ' + entry.summary + ' ' + entry.status)
@@ -77,38 +77,16 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
         }
         return;
       case AgentRoute.legacyWorkspace:
-        await _showInfo('Separate project connector',
-          agent.summary + '\n\n'
-          'This opens the earlier O-AGENT workspace, which uses a separate '
-          'connection. It does not automatically import this private '
-          'account or provide arbitrary third-party session control.',
-          action: 'Open workspace', proceed: widget.onLegacy);
-        return;
-      case AgentRoute.officialService:
-        final url = agent.officialUrl;
-        if (url == null) return;
-        await _showInfo('Official service only',
-          'This opens ' + agent.name + ' in its official web experience. '
-          'O-AGENT cannot read or control your existing consumer chats, '
-          'browser permissions or private account sessions through this link.',
-          action: 'Open official site', proceed: () async {
-            try {
-              final uri = Uri.parse(url);
-              final opened = await launchUrl(uri,
-                mode: LaunchMode.inAppBrowserView);
-              if (!opened) throw StateError('Browser unavailable');
-            } catch (_) {
-              if (!mounted) return;
-              await showCupertinoDialog<void>(context: context,
-                builder: (dialog) => CupertinoAlertDialog(
-                  title: const Text('Cannot open browser'),
-                  content: const Text(
-                    'Check that a compatible browser is installed.'),
-                  actions: [CupertinoDialogAction(
-                    onPressed: () => Navigator.of(dialog).pop(),
-                    child: const Text('OK'))]));
-            }
-          });
+      case AgentRoute.remoteDesktop:
+        // Real screen control and previous projects are now an integrated
+        // destination in this same app. Never open a dead warning-only tile.
+        if (widget.preview) {
+          await _showInfo('Sign in to your workspace',
+            'Connect your private O-AGENT account before opening '
+            'your authenticated remote computer.');
+        } else {
+          widget.onLegacy();
+        }
         return;
     }
   }
@@ -126,55 +104,25 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
     _ => CupertinoIcons.square_grid_2x2,
   };
 
-  Color _statusColor(AgentState state) => switch (state) {
-    AgentState.sessionReady => const Color(0xFF237C60),
-    AgentState.workerEnabled => OTheme.violet,
-    AgentState.offline => const Color(0xFF9E5F29),
-    AgentState.needsSetup => const Color(0xFF687B87),
-    AgentState.separateWorkspace => const Color(0xFF576A7F),
-    AgentState.externalOnly => const Color(0xFF687B87),
-  };
-
-  Widget _tile(AgentDirectoryEntry agent) => CupertinoListTile(
-    key: ValueKey('agent-' + agent.id),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-    backgroundColor: Colors.white,
-    leading: Container(
-      width: 39, height: 39,
-      decoration: BoxDecoration(color: OTheme.lavender,
-        borderRadius: BorderRadius.circular(11)),
-      alignment: Alignment.center,
-      child: Icon(_icon(agent.id), size: 21, color: OTheme.violet),
-    ),
-    title: Text(agent.name, style: const TextStyle(
-      color: OTheme.ink, fontSize: 15, fontWeight: FontWeight.w700)),
-    subtitle: Padding(padding: const EdgeInsets.only(top: 5),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(agent.status,
-            style: TextStyle(fontSize: 12,
-              color: _statusColor(agent.state), fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(agent.summary, maxLines: 3, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: Color(0xFF657781))),
-        ])),
-    trailing: const Icon(CupertinoIcons.chevron_forward,
-      size: 15, color: Color(0xFF87969C)),
-    onTap: () => _open(agent),
-  );
+  Widget _tile(AgentDirectoryEntry agent) =>
+    Padding(padding: const EdgeInsets.only(bottom: 9),
+      child: KeyedSubtree(
+        key: ValueKey('agent-' + agent.id),
+        child: OIconTile(
+          icon: _icon(agent.id), title: agent.name,
+          subtitle: agent.status + '\n' + agent.summary,
+          color: agent.hasVerifiedSession
+            ? OVisual.mint : OVisual.primary,
+          onTap: () => _open(agent))));
 
   Widget _section(String title, List<AgentDirectoryEntry> items) {
     if (items.isEmpty) return const SizedBox.shrink();
-    return CupertinoListSection.insetGrouped(
-      decoration: BoxDecoration(color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFDCE6E9))),
-      header: Text(title, style: const TextStyle(
-        color: OTheme.violet, fontWeight: FontWeight.w800,
-        fontSize: 12, letterSpacing: 0.7)),
-      backgroundColor: const Color(0xFFF5F7F9),
-      children: items.map(_tile).toList(),
-    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        OSectionTitle(title),
+        for (final agent in items) _tile(agent),
+      ]);
   }
 
   @override
@@ -186,6 +134,12 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
       sdkSessions: widget.pilot.providerSessions,
     ).where(_includes).toList();
     final available = entries.where((e) => e.hasVerifiedSession).length;
+    final online = widget.pilot.onlineDevices;
+    final active = widget.pilot.runs.where((run) =>
+      const {'queued','running','waiting_for_approval','waiting_for_tool'}
+        .contains(run['status'])).length;
+    final awaiting = widget.pilot.approvals.where((a) =>
+      a['actionable'] == true).length;
 
     return ColoredBox(
       color: const Color(0xFFF5F7F9),
@@ -193,62 +147,75 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
         onRefresh: widget.preview ? () async {} : widget.pilot.refresh,
         child: ListView(
           key: const ValueKey('native-agent-directory'),
-          padding: const EdgeInsets.only(bottom: 30),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 36),
           children: [
-            Padding(padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('YOUR AI COMMAND CENTER',
-                    style: TextStyle(fontSize: 12, letterSpacing: 1,
-                      fontWeight: FontWeight.w800, color: OTheme.violet)),
-                  const SizedBox(height: 6),
-                  const Text('AI Agents', style: TextStyle(fontSize: 34,
-                    fontWeight: FontWeight.w800, color: OTheme.ink)),
-                  const SizedBox(height: 7),
-                  Text(widget.preview
-                    ? 'Explore providers. Sign in to see your verified sessions.'
-                    : 'Choose an agent or project. Only real provider sessions '
-                      'can be continued or approved.',
-                    style: const TextStyle(fontSize: 14,
-                      color: Color(0xFF64727C), height: 1.4)),
-                  const SizedBox(height: 15),
-                  if (!widget.preview)
-                    Text('$available agent types with a verified live '
-                      'session · ' + widget.pilot.onlineDevices.toString() +
-                      ' online workers',
-                      style: const TextStyle(fontSize: 12,
-                        color: Color(0xFF64727C))),
-                  const SizedBox(height: 16),
-                  CupertinoSearchTextField(
-                    backgroundColor: Colors.white,
-                    style: const TextStyle(color: OTheme.ink, fontSize: 15),
-                    itemColor: OTheme.violet,
-                    placeholder: 'Search agents, sessions, integrations',
-                    onChanged: (value) => setState(() => query = value)),
-                  const SizedBox(height: 15),
-                  SizedBox(width: double.infinity,
-                    child: CupertinoSlidingSegmentedControl<String>(
-                      backgroundColor: const Color(0xFFE8EEF0),
-                      thumbColor: Colors.white,
-                      groupValue: filter,
-                      children: const {
-                        'all': Padding(padding: EdgeInsets.symmetric(
-                          horizontal: 8), child: Text('All')),
-                        'ready': Padding(padding: EdgeInsets.symmetric(
-                          horizontal: 8), child: Text('Ready')),
-                        'other': Padding(padding: EdgeInsets.symmetric(
-                          horizontal: 8), child: Text('More')),
-                      },
-                      onValueChanged: (value) {
-                        if (value != null) setState(() => filter = value);
-                      })),
-                  const SizedBox(height: 6),
-                ])),
-            _section('CODING AGENTS', entries.where((e) =>
+            const OScreenTitle(
+              eyebrow: 'YOUR AI CONTROL CENTER',
+              title: 'Your AI work.\nAnywhere.',
+              subtitle: 'Actual conversations, live desktop and exact '
+                'permission requests from your own devices.'),
+            const SizedBox(height: 18),
+            Row(children: [
+              _MetricCount('Online PCs', online,
+                CupertinoIcons.device_laptop),
+              const SizedBox(width: 9),
+              _MetricCount('Active runs', active,
+                CupertinoIcons.waveform_path_ecg),
+              const SizedBox(width: 9),
+              _MetricCount('Approvals', awaiting,
+                CupertinoIcons.checkmark_shield),
+            ]),
+            const SizedBox(height: 14),
+            OSurface(
+              tint: OTheme.lavender,
+              onTap: widget.onLegacy,
+              child: const Row(children: [
+                Icon(CupertinoIcons.desktopcomputer,
+                  color: OTheme.violet, size: 27),
+                SizedBox(width: 13),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Open live PC screen',
+                      style: TextStyle(fontSize: 16,
+                        fontWeight: FontWeight.w800, color: OTheme.ink)),
+                    SizedBox(height: 4),
+                    Text('Existing remote projects and AI tools',
+                      style: TextStyle(fontSize: 12,
+                        color: OTheme.violet)),
+                  ])),
+                Icon(CupertinoIcons.chevron_right,
+                  color: OTheme.violet),
+              ])),
+            const OSectionTitle('Find an agent'),
+            CupertinoSearchTextField(
+              backgroundColor: Colors.white,
+              style: const TextStyle(color: OTheme.ink),
+              itemColor: OTheme.violet,
+              placeholder: 'Search Codex, ChatGPT, Claude, GitHub…',
+              onChanged: (value) => setState(() => query = value)),
+            const SizedBox(height: 12),
+            SizedBox(width: double.infinity,
+              child: CupertinoSlidingSegmentedControl<String>(
+                backgroundColor: const Color(0xFFE8EEF0),
+                thumbColor: Colors.white,
+                groupValue: filter,
+                children: const {
+                  'all': Padding(padding: EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 7),child: Text('All')),
+                  'ready': Padding(padding: EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 7),child: Text('Ready')),
+                  'other': Padding(padding: EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 7),child: Text('Remote')),
+                },
+                onValueChanged: (value) {
+                  if (value != null) setState(() => filter = value);
+                })),
+            _section('Coding agents', entries.where((e) =>
               const ['codex','claude_sdk','copilot_sdk'].contains(e.id)).toList()),
-            _section('PROJECTS & IDE WORKSPACES', entries.where((e) =>
+            _section('Projects & IDE', entries.where((e) =>
               const ['vscode','github','cursor'].contains(e.id)).toList()),
-            _section('OTHER AI SERVICES', entries.where((e) =>
+            _section('AI apps on your shared screen', entries.where((e) =>
               const ['chatgpt','claude_web','gemini'].contains(e.id)).toList()),
             if (entries.isEmpty)
               const Padding(padding: EdgeInsets.all(25),
@@ -262,10 +229,10 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
                 child: CupertinoButton.filled(
                   onPressed: widget.onSessions,
                   child: const Text('Open real sessions & prompts'))),
-            const Padding(padding: EdgeInsets.fromLTRB(21, 16, 21, 0),
+            const Padding(padding: EdgeInsets.fromLTRB(4, 16, 4, 0),
               child: Text(
-                'Connected means verified through the current authorized '
-                'worker. Website shortcuts do not grant session access.',
+                'Shared-screen control uses visible PC permission. '
+                'Consumer website chats are not copied into O-AGENT.',
                 style: TextStyle(fontSize: 12,
                   color: Color(0xFF687B87), height: 1.5))),
           ],
@@ -273,4 +240,22 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
       ),
     );
   }
+}
+
+class _MetricCount extends StatelessWidget {
+  const _MetricCount(this.label, this.value, this.icon);
+  final String label;
+  final int value;
+  final IconData icon;
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: OSurface(padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: OVisual.primary, size: 20),
+        const SizedBox(height: 8),
+        Text(value.toString(),style: const TextStyle(
+          color: OTheme.ink,fontSize: 25,fontWeight: FontWeight.w800)),
+        Text(label,maxLines: 2,
+          style: const TextStyle(color: OVisual.secondary,fontSize: 11)),
+      ])));
 }
