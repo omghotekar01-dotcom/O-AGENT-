@@ -62,13 +62,20 @@ void main() {
           child:NativePilotShell(legacy:legacy,pilot:pilot))));
       await tester.pumpAndSettle();
       expect(find.byType(CupertinoTabBar),findsOneWidget);
-      expect(find.text('AI Agents'),findsOneWidget);
+      expect(find.text('Your AI work.\nAnywhere.'),findsOneWidget);
       expect(find.text('OpenAI Codex CLI / IDE'),findsOneWidget);
       expect(find.text('Sessions'),findsOneWidget);
       expect(find.text('Inbox'),findsOneWidget);
       expect(find.text('Remote'),findsOneWidget);
       expect(find.text('Settings'),findsOneWidget);
       expect(tester.takeException(),isNull);
+      await tester.tap(find.text('Remote'));
+      await tester.pumpAndSettle();
+      expect(find.text('Your actual screen.\nOn your phone.'),findsOneWidget);
+      expect(find.text('Existing gateway owner token'),findsOneWidget);
+      await tester.tap(find.text('Agents'));
+      await tester.pumpAndSettle();
+      expect(find.text('Your AI work.\nAnywhere.'),findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     }
   });
