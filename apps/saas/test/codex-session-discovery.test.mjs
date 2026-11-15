@@ -84,8 +84,7 @@ test("Codex app-server discovery only sends list/read RPC and never starts work"
       };
       const sessions=await discoverStoredCodexSessions({
         root,isWindows:false,spawnImpl,timeoutMs:2000,env:{PATH:"/usr/bin"}});
-      assert.deepEqual(called,["initialize","initialized","thread/list","thread/read"]
-        .filter(x=>x!=="initialized"));
+      assert.deepEqual(called,["initialize","initialized","thread/list","thread/read"]);
       assert.equal(sessions.length,1);
       assert.equal(sessions[0].sessionId,"saved-codex-1234");
       assert.deepEqual(sessions[0].messages,[
