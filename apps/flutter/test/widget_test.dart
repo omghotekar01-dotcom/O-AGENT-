@@ -24,6 +24,10 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Sign in to native app'), findsOneWidget);
     expect(find.text('Test private connection'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Browse AI agents and integrations'), 160.0,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Browse AI agents and integrations'), findsOneWidget);
   });
 
