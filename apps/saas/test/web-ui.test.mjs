@@ -16,6 +16,18 @@ test("SaaS command center has unique ids and no broken control references",()=>{
     assert.match(ui,new RegExp('data-view="'+page+'"'));
   }
 });
+test("owner can revoke a trusted device without granting viewer controls",()=>{
+  const source=script.match(/function renderDevice\(node,device\)\{([\s\S]*?)\n\}\nfunction renderRun/);
+  assert.ok(source,"Device renderer must exist");
+  assert.match(source[1],/const online=fresh\(device\),deviceStatus=/);
+  assert.match(source[1],/dateText\(device\.last_seen_at\),deviceStatus\)/);
+  assert.match(source[1],/if\(!device\.revoked_at && state\.role==="owner"\)/);
+  assert.match(source[1],/Revoke device/);
+  assert.match(source[1],/reviewExact/);
+  assert.match(source[1],/\/revoke/);
+  assert.doesNotMatch(source[1],/const online=fresh\(device\),state=/);
+});
+
 test("provider activity stays sourced from real endpoints, not UI dummy data",()=>{
   for(const path of ["/v1/me","/v1/devices","/v1/runs","/v1/approvals",
     "/v1/devices/enrollments/inspect","/v1/devices/enrollments/approve",
