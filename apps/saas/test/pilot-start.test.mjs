@@ -88,10 +88,10 @@ test("existing 8443 -> 8787 mapping is reused without mutating Tailscale",async(
 test("Windows guarded repair keeps 8787 route and never resets volumes",()=>{
   const script=readFileSync(new URL("../../../REPAIR-O-AGENT.cmd",import.meta.url),"utf8");
   assert.match(script,/choice \/c YN/i,"explicit consent before role changes");
-  assert.match(script,/node repair-db-auth\\.mjs --apply/);
-  assert.match(script,/node migrate-existing-port\\.mjs 8443 --apply/);
-  assert.match(script,/node start\\.mjs/);
+  assert.match(script,/node repair-db-auth[.]mjs --apply/);
+  assert.match(script,/node migrate-existing-port[.]mjs 8443 --apply/);
+  assert.match(script,/node start[.]mjs/);
   assert.match(script,/localhost:8787/);
   assert.doesNotMatch(script,/docker compose down -v|tailscale serve reset|tailscale funnel/i);
-  assert.doesNotMatch(script,/om-v16\\.tailbb6a8f\\.ts\\.net/);
+  assert.doesNotMatch(script,/om-v16[.]tailbb6a8f[.]ts[.]net/);
 });
