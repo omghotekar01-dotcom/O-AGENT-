@@ -518,9 +518,20 @@ class NativeSavedSessionDetail extends StatefulWidget {
 }
 class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
   final composer=TextEditingController();
+  @override void initState(){
+    super.initState();
+    widget.c.addListener(_onUpdated);
+  }
+  void _onUpdated(){
+    if(mounted)setState((){});
+  }
   String mode='read_only';
   bool sending=false;
-  @override void dispose(){composer.dispose();super.dispose();}
+  @override void dispose(){
+    widget.c.removeListener(_onUpdated);
+    composer.dispose();
+    super.dispose();
+  }
   Future<void> _send() async {
     if(sending||!widget.canContinue)return;
     final message=composer.text.trim();
@@ -560,11 +571,11 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
       composer.clear();
       // A run cannot begin merely by submitting a prompt. Take the user
       // directly to the native exact-action approval inbox.
-      widget.navigate(2);
-      Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content:Text('Prompt saved as a supervised request. '
           'Review it in the native approval inbox.')));
+      widget.navigate(2);
+      Navigator.of(context).pop();
     }catch(error){
       if(mounted)_toast(context,pilotFriendlyError(error));
     }finally{
@@ -572,11 +583,14 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
     }
   }
   @override Widget build(BuildContext context){
-    final messages=(widget.saved['messages'] as List?)??[];
+    final latest=widget.c.sessions.where((x)=>
+      x['deviceId']==widget.saved['deviceId'] &&
+      x['sessionId']==widget.saved['sessionId']).firstOrNull ??widget.saved;
+    final messages=(latest['messages'] as List?)??[];
     return Scaffold(
       appBar:AppBar(title:const Text('Codex conversation')),
       body:SafeArea(child:ListView(padding:const EdgeInsets.all(18),children:[
-        _Heading(_val(widget.saved['title']),
+        _Heading(_val(latest['title']),
           'Real stored CLI/VS Code conversation history, not live screen control.'),
         _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text('Worker: '+_val(widget.saved['deviceName']),
@@ -584,9 +598,9 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
           const SizedBox(height:6),
           SelectableText('Enrolled folder: '+_val(widget.saved['cwd']),
             style:const TextStyle(fontSize:12,color:_muted)),
-          Text('Last activity: '+_date(widget.saved['updatedAt']),
+          Text('Last activity: '+_date(latest['updatedAt']),
             style:const TextStyle(fontSize:12,color:_muted)),
-          Text('Last synchronized: '+_date(widget.saved['syncedAt']),
+          Text('Last synchronized: '+_date(latest['syncedAt']),
             style:const TextStyle(fontSize:12,color:_muted)),
         ])),
         const SizedBox(height:20),
