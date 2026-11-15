@@ -10,6 +10,8 @@ void main() {
   testWidgets('primary experience is native instead of a website', (tester) async {
     await tester.pumpWidget(const OAgentApp());
     expect(find.text('Sign in to native app'), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -550));
+    await tester.pumpAndSettle();
     expect(find.text('Earlier native project workspace'), findsOneWidget);
     expect(find.textContaining('Private HTTPS address'), findsOneWidget);
     expect(find.text('Open secure mobile command center'), findsNothing);
