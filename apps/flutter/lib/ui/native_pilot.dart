@@ -569,6 +569,24 @@ class _Inbox extends StatelessWidget{
 class _Devices extends StatelessWidget{
   const _Devices({required this.c});
   final NativePilotController c;
+  Future<void> _revoke(BuildContext context,Map<String,dynamic> device) async {
+    final confirmed = await showDialog<bool>(context:context,builder:(dialog)=>
+      AlertDialog(title:const Text('Revoke this trusted worker?'),
+        content:SelectableText('Device: '+_val(device['name'])+
+          '\nID: '+_val(device['id'])+
+          '\n\nThis permanently removes its authorization. '
+          'Reconnect using a fresh owner-approved enrollment.'),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialog,false),
+            child:const Text('Cancel')),
+          FilledButton(onPressed:()=>Navigator.pop(dialog,true),
+            child:const Text('Revoke device')),
+        ]));
+    if(confirmed!=true||!context.mounted)return;
+    try{await c.revokeDevice(device);
+      if(context.mounted)_toast(context,'Trusted worker revoked.');
+    }catch(e){if(context.mounted)_toast(context,pilotFriendlyError(e));}
+  }
   @override Widget build(BuildContext context)=>RefreshIndicator(
     onRefresh:c.refresh,child:ListView(padding:const EdgeInsets.all(18),children:[
       const _Heading('Trusted devices',
@@ -597,6 +615,13 @@ class _Devices extends StatelessWidget{
             Text(((d['capabilities'] as List?)??[]).map((x)=>
               pilotCapabilityLabel(x.toString())).join(' · '),
               style:const TextStyle(color:OTheme.violet,fontSize:12)),
+            if(c.me['role']=='owner' && d['revoked_at']==null)...[
+              const SizedBox(height:10),
+              OutlinedButton.icon(
+                onPressed:()=>_revoke(context,d),
+                icon:const Icon(Icons.gpp_bad_outlined),
+                label:const Text('Review device revocation')),
+            ],
           ])),
         const SizedBox(height:10),
       ],
