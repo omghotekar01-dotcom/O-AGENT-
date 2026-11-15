@@ -12,6 +12,18 @@ import {repairDbAuth} from "./repair-db-auth.mjs";
 
 const dir=dirname(fileURLToPath(import.meta.url));
 const compose=["compose","--env-file",".env.local","-f","compose.yaml"];
+let stage="read pilot configuration";
+export const recoveryHints=Object.freeze({
+  "read pilot configuration":"Keep the private .env.local file and first-run Keycloak realm intact.",
+  "verify existing HTTPS route":"Check tailscale serve status: HTTPS 8443 must forward to 127.0.0.1:8787.",
+  "check database role passwords":"Run node repair-db-auth.mjs; use --apply only after confirming encrypted backup safety.",
+  "verify saved Keycloak realm":"Existing local owner realm differs; do not overwrite it.",
+  "authenticate Keycloak admin":"Identity must be running and admin login must match its persistent master realm; do not reset volumes.",
+  "inspect OIDC client":"Check that the existing oagent-web client was imported without custom redirects.",
+  "back up existing databases":"Verify both PostgreSQL databases can be dumped and encrypted before changing any identity settings.",
+  "update Keycloak client":"Keycloak admin client modification failed; keep private backup copies and inspect readiness.",
+  "update local pilot origin":"Windows/OneDrive files could be locked; preserve backup files and verify both origins."
+});
 const exec=(name,args)=>execFileSync(name,args,{
   cwd:dir,encoding:"utf8",timeout:12000,stdio:["ignore","pipe","pipe"]});
 function containerCommand(args,input="",{spawnImpl=spawn}={}){
@@ -51,6 +63,7 @@ export async function migrateExisting({apply=false,read=readFile,
   verify=verifyBackup,checkDb=repairDbAuth,directory=dir,
   keyDirectory=join(homedir(),".oagent-recovery-keys"),
   backupDirectory=join(dir,"backups")}={}){
+  stage="read pilot configuration";
   const configPath=join(directory,".env.local"),realmPath=join(directory,".private","oagent-realm.json");
   const current=await read(configPath,"utf8");
   const oldOrigin=current.match(/^OAGENT_ORIGIN=(https:\/\/[^\r\n]+)$/m)?.[1];
@@ -60,14 +73,17 @@ export async function migrateExisting({apply=false,read=readFile,
     throw Error("Existing pilot origin is not the original private HTTPS host");
   if(oldOrigin!==tailnetOrigin({OAGENT_SERVE_PORT:"443"},run))
     throw Error("Current pilot origin does not belong to this Tailscale machine");
+  stage="verify existing HTTPS route";
   const status=verifyPrivateServeAvailability(run("tailscale",
     ["serve","status","--json"]),8443);
   if(!status.existing)
     throw Error("Expected HTTPS 8443 to already forward to localhost:8787");
   if(!apply)return {status:"ready-to-migrate",target};
+  stage="check database role passwords";
   const db=await checkDb();
   if(db.status!=="already-matched")
     throw Error("First run node repair-db-auth.mjs --apply to reconcile database roles.");
+  stage="verify saved Keycloak realm";
   const password=current.match(/^OAGENT_OWNER_PASSWORD=([a-f0-9]{48})$/m)?.[1];
   if(!password)throw Error("Missing saved owner credential");
   const template=JSON.parse(await read(join(directory,"oagent-realm.json"),"utf8"));
@@ -86,7 +102,9 @@ export async function migrateExisting({apply=false,read=readFile,
     '--realm master --user admin --config '+authPath;
   let originalClient=null,updated=false;
   try{
+    stage="authenticate Keycloak admin";
     await remote(["sh","-c",login]);
+    stage="inspect OIDC client";
     const clients=JSON.parse(await remote([cli,"get","clients","-r","oagent",
       "-q","clientId=oagent-web","--config",authPath]));
     if(!Array.isArray(clients)||clients.length!==1||
@@ -97,6 +115,7 @@ export async function migrateExisting({apply=false,read=readFile,
       "-r","oagent","--config",authPath]));
     const nextClient=planClientOrigin(originalClient,oldOrigin,target);
     // Authenticated, complete and VERIFIED encrypted backups first.
+    stage="back up existing databases";
     const stamp=new Date().toISOString().replace(/[:.]/g,"-");
     const recovery=keyDirectory;
     await mkdir(recovery,{recursive:true,mode:0o700});
@@ -113,6 +132,7 @@ export async function migrateExisting({apply=false,read=readFile,
     await copyFile(realmPath,join(localCopy,"realm.json"));
     await writeFile(join(localCopy,"keycloak-client.json"),
       JSON.stringify(originalClient,null,2)+"\n",{flag:"wx",mode:0o600});
+    stage="update Keycloak client";
     await remote(["sh","-c","umask 077; cat > "+filePath],JSON.stringify(nextClient));
     await remote([cli,"update","clients/"+clientId,"-r","oagent",
       "-f",filePath,"--config",authPath]);
@@ -123,6 +143,7 @@ export async function migrateExisting({apply=false,read=readFile,
        JSON.stringify(checked.webOrigins)!==JSON.stringify(nextClient.webOrigins)||
        checked.attributes?.["post.logout.redirect.uris"]!==target+"/")
       throw Error("Keycloak did not save the new OIDC redirect");
+    stage="update local pilot origin";
     let nextEnv=current.replace("OAGENT_ORIGIN="+oldOrigin+"\n",
       "OAGENT_ORIGIN="+target+"\n");
     if(nextEnv===current)throw Error("Saved pilot origin could not be updated");
@@ -171,7 +192,8 @@ async function main(){
   }
 }
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1])
-  main().catch(()=>{console.error(
-    "[FIX] Existing-port migration stopped. Check Keycloak admin login, " +
-    "database role passwords and private backups. Tailscale routes and volumes were preserved.");
+  main().catch(()=>{
+    console.error("[FIX] Existing-port migration stopped during: "+stage);
+    console.error(recoveryHints[stage]||"Keep the private backups and inspect the pilot.");
+    console.error("No Docker volume or Tailscale route was deleted or reset.");
     process.exitCode=1;});
