@@ -171,10 +171,10 @@ function pillConnection(ok){
   $("sideDot").classList.toggle("online",ok);
 }
 function renderDevice(node,device){
-  const online=fresh(device),state=device.revoked_at?
+  const online=fresh(device),deviceStatus=device.revoked_at?
     "revoked":online?"online":"offline";
   const el=entry(device.name||"Enrolled device",
-    "Device "+device.id+" · Last heartbeat "+dateText(device.last_seen_at),state);
+    "Device "+device.id+" · Last heartbeat "+dateText(device.last_seen_at),deviceStatus);
   const caps=Array.isArray(device.capabilities)?device.capabilities:[];
   el.append(create("p",caps.length?
     caps.map(x=>TOOL_NAMES[x]||x).join(" · "):
