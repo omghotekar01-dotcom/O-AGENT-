@@ -48,13 +48,16 @@ export function planClientOrigin(client,from,to){
 }
 export async function migrateExisting({apply=false,read=readFile,
   run=exec,remote=containerCommand,backup=backupPilot,
-  verify=verifyBackup,checkDb=repairDbAuth}={}){
-  const configPath=join(dir,".env.local"),realmPath=join(dir,".private","oagent-realm.json");
+  verify=verifyBackup,checkDb=repairDbAuth,directory=dir,
+  keyDirectory=join(homedir(),".oagent-recovery-keys"),
+  backupDirectory=join(dir,"backups")}={}){
+  const configPath=join(directory,".env.local"),realmPath=join(directory,".private","oagent-realm.json");
   const current=await read(configPath,"utf8");
   const oldOrigin=current.match(/^OAGENT_ORIGIN=(https:\/\/[^\r\n]+)$/m)?.[1];
+  const target=tailnetOrigin({OAGENT_SERVE_PORT:"8443"},run);
+  if(oldOrigin===target)return {status:"already-migrated",target};
   if(!oldOrigin||!/^https:\/\/[a-z0-9.-]+\.ts\.net$/i.test(oldOrigin))
     throw Error("Existing pilot origin is not the original private HTTPS host");
-  const target=tailnetOrigin({OAGENT_SERVE_PORT:"8443"},run);
   if(oldOrigin!==tailnetOrigin({OAGENT_SERVE_PORT:"443"},run))
     throw Error("Current pilot origin does not belong to this Tailscale machine");
   const status=verifyPrivateServeAvailability(run("tailscale",
@@ -67,7 +70,7 @@ export async function migrateExisting({apply=false,read=readFile,
     throw Error("First run node repair-db-auth.mjs --apply to reconcile database roles.");
   const password=current.match(/^OAGENT_OWNER_PASSWORD=([a-f0-9]{48})$/m)?.[1];
   if(!password)throw Error("Missing saved owner credential");
-  const template=JSON.parse(await read(join(dir,"oagent-realm.json"),"utf8"));
+  const template=JSON.parse(await read(join(directory,"oagent-realm.json"),"utf8"));
   const oldRealm=JSON.stringify(renderOwnerRealm(template,{origin:oldOrigin,password}),null,2)+"\n";
   if(await read(realmPath,"utf8")!==oldRealm)
     throw Error("Private Keycloak realm was modified; manual review required");
@@ -95,16 +98,16 @@ export async function migrateExisting({apply=false,read=readFile,
     const nextClient=planClientOrigin(originalClient,oldOrigin,target);
     // Authenticated, complete and VERIFIED encrypted backups first.
     const stamp=new Date().toISOString().replace(/[:.]/g,"-");
-    const recovery=join(homedir(),".oagent-recovery-keys");
+    const recovery=keyDirectory;
     await mkdir(recovery,{recursive:true,mode:0o700});
     const keyPath=join(recovery,"pilot-port-"+stamp+".key");
     const secret=randomBytes(40).toString("base64url");
     await writeFile(keyPath,secret+"\n",{flag:"wx",mode:0o600});
-    const backupPath=join(dir,"backups","pre-existing-port-"+stamp);
+    const backupPath=join(backupDirectory,"pre-existing-port-"+stamp);
     await backup({password:secret,output:backupPath});
     for(const name of ["oagent","keycloak"])
       await verify(join(backupPath,name+".oagent.enc"),secret);
-    const localCopy=join(dir,".private","pre-existing-port-"+stamp);
+    const localCopy=join(directory,".private","pre-existing-port-"+stamp);
     await mkdir(localCopy,{mode:0o700});
     await copyFile(configPath,join(localCopy,"env.local"));
     await copyFile(realmPath,join(localCopy,"realm.json"));
@@ -126,8 +129,8 @@ export async function migrateExisting({apply=false,read=readFile,
     if(/^OAGENT_SERVE_PORT=/m.test(nextEnv))
       nextEnv=nextEnv.replace(/^OAGENT_SERVE_PORT=.*$/m,"OAGENT_SERVE_PORT=8443");
     else nextEnv=nextEnv.trimEnd()+"\nOAGENT_SERVE_PORT=8443\n";
-    const tmpEnv=join(dir,".env.local."+nonce+".tmp");
-    const tmpRealm=join(dir,".private","realm."+nonce+".tmp");
+    const tmpEnv=join(directory,".env.local."+nonce+".tmp");
+    const tmpRealm=join(directory,".private","realm."+nonce+".tmp");
     await writeFile(tmpEnv,nextEnv,{flag:"wx",mode:0o600});
     await writeFile(tmpRealm,newRealm,{flag:"wx",mode:0o600});
     await rename(tmpEnv,configPath);
@@ -153,7 +156,9 @@ async function main(){
   if(args[0]!=="8443"||args.length>2||(args[1]&&args[1]!=="--apply"))
     throw Error("Usage: node migrate-existing-port.mjs 8443 [--apply]");
   const r=await migrateExisting({apply:args.includes("--apply")});
-  if(r.status==="ready-to-migrate"){
+  if(r.status==="already-migrated"){
+    console.log("[PASS] This private pilot already uses "+r.target);
+  }else if(r.status==="ready-to-migrate"){
     console.log("[READY] Existing HTTPS 8443 -> 8787 route verified.");
     console.log("Run node migrate-existing-port.mjs 8443 --apply after database repair.");
   }else{
