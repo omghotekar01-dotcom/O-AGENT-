@@ -69,7 +69,7 @@ export async function checkPilot({
     if(origin && origin!==current)throw Error("Wrong tailnet");
   },"Sign into Tailscale on this computer; check MagicDNS host matches setup.");
   await check("Private local gateway",async()=>{
-    const health=await json(fetchImpl,"http://127.0.0.1:8791/health/ready");
+    const health=await json(fetchImpl,"http://127.0.0.1:8787/health/ready");
     if(health.status!=="ready"||health.database!=="connected")
       throw Error("Health not ready");
   },"Run docker compose --env-file .env.local -f compose.yaml up -d --build; inspect docker compose logs.");
@@ -77,7 +77,7 @@ export async function checkPilot({
     await check("Phone HTTPS route",async()=>{
       const health=await json(fetchImpl,origin+"/health/ready");
       if(health.status!=="ready")throw Error("Not ready");
-    },"Run tailscale serve --bg 8791; enable HTTPS/MagicDNS and connect phone to same tailnet.");
+    },"Check private HTTPS Serve forwarding to local port 8787; connect phone to same tailnet.");
     await check("OIDC identity provider",async()=>{
       const oidc=await json(fetchImpl,origin+
         "/auth/realms/oagent/.well-known/openid-configuration");

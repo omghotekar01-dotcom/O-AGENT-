@@ -39,7 +39,7 @@ test("self-host stack never publishes identity or postgres ports",()=>{
   const realm=JSON.parse(read("oagent-realm.json"));
   const init=read("init-postgres.sh");
   assert.equal((compose.match(/ports:/g)||[]).length,1);
-  assert.match(compose,/127\.0\.0\.1:8791:8081/);
+  assert.match(compose,/127\.0\.0\.1:8787:8081/);
   assert.match(compose,/OAGENT_LOCAL_PILOT: "1"/);
   assert.match(compose,/postgres:16-alpine/);
   assert.match(compose,/keycloak:26\.4\.0/);
@@ -64,7 +64,7 @@ test("native Web Push VAPID keys are EC-P256, generated locally without a paid v
 test("free pilot exposes a single private start command, never Funnel",()=>{
   const program=read("start.mjs");
   assert.match(program,/startFreePilot/);
-  assert.match(program,/127\.0\.0\.1:8791/);
+  assert.match(program,/127\.0\.0\.1:8787/);
   assert.doesNotMatch(program,/run\("tailscale",\["funnel"/);
 });
 

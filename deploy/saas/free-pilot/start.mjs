@@ -9,8 +9,8 @@ const execute=(binary,args)=>execFileSync(binary,args,{
   cwd:folder,stdio:["ignore","pipe","pipe"],encoding:"utf8",timeout:180000,
 });
 const compose=["compose","--env-file",".env.local","-f","compose.yaml"];
-const allowedProxy=new Set(["http://127.0.0.1:8791",
-  "http://localhost:8791","127.0.0.1:8791"]);
+const allowedProxy=new Set(["http://127.0.0.1:8787",
+  "http://localhost:8787","127.0.0.1:8787"]);
 /** Fail closed if Tailscale already hosts any unrelated Serve or Funnel app.
  * Installing O-AGENT must not replace the user's existing private services.
  */
@@ -59,8 +59,9 @@ export async function startFreePilot({
   }catch{
     throw Error("Private Compose configuration is invalid. Run node doctor.mjs.");
   }
+  let serveStatus;
   try{
-    verifyPrivateServeAvailability(
+    serveStatus=verifyPrivateServeAvailability(
       run("tailscale",["serve","status","--json"]),servePort);
   }catch{
     throw Error("Existing Tailscale Serve/Funnel configuration could conflict. Review tailscale serve status manually; no service has been changed.");
@@ -70,12 +71,14 @@ export async function startFreePilot({
   }catch{
     throw Error("Private services could not start. Inspect docker compose logs; no public ports were requested.");
   }
-  try{
-    // Serve (not Funnel) exposes the loopback gateway ONLY to tailnet devices.
-    run("tailscale",["serve","--bg","--https="+servePort,"127.0.0.1:8791"]);
-  }catch{
-    throw Error("Tailscale Serve could not enable private HTTPS. Run tailscale serve status and check HTTPS in tailnet settings.");
-  }
+  if(!serveStatus.existing){
+    try{
+      // Do not overwrite the user's existing 8443 -> 8787 route.
+      run("tailscale",["serve","--bg","--https="+servePort,"127.0.0.1:8787"]);
+    }catch{
+      throw Error("Tailscale Serve could not enable private HTTPS. Check tailnet HTTPS settings.");
+    }
+  }else notify("Existing private Tailscale Serve route preserved (local port 8787).");
   notify("Private pilot requested on "+origin);
   const results=await doctor();
   notify(formatDoctor(results));

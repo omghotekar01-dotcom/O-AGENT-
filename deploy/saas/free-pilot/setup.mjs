@@ -86,7 +86,7 @@ export async function setupPilot({env=process.env,notify=console.log,execute=exe
   const vapidPub=Buffer.concat([Buffer.from([4]),
     Buffer.from(pub.x,"base64url"),Buffer.from(pub.y,"base64url")])
     .toString("base64url");
-  const data=["# Generated locally; never share or commit.","OAGENT_ORIGIN="+origin,
+  const data=["# Generated locally; never share or commit.","OAGENT_ORIGIN="+origin,"OAGENT_SERVE_PORT="+(new URL(origin).port||"443"),
     ...names.map(n=>n+"="+randomBytes(24).toString("hex")),
     "OAGENT_VAPID_PUBLIC_KEY="+vapidPub,
     "OAGENT_VAPID_PRIVATE_KEY="+priv.d].join("\n")+"\n";
@@ -95,7 +95,7 @@ export async function setupPilot({env=process.env,notify=console.log,execute=exe
   await ensurePrivateRealm(data,origin);
   notify("Private pilot passwords generated at "+file+" (not displayed).");
   notify("docker compose --env-file .env.local -f compose.yaml up -d --build");
-  notify("tailscale serve --bg 8791");
+  notify("Expected local private gateway: 127.0.0.1:8787 (preserve existing Tailscale Serve).");
   notify("Open on a phone in your tailnet: "+origin);
   return {created:true,origin};
 }

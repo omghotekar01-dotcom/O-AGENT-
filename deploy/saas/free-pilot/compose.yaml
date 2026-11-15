@@ -115,11 +115,13 @@ services:
     image: oagent/free-pilot-gateway:local
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8791:8081"
+      - "127.0.0.1:8787:8081"
     read_only: true
     tmpfs: [/tmp, /config, /data]
     cap_drop: ["ALL"]
     security_opt: ["no-new-privileges:true"]
+    environment:
+      OAGENT_PUBLIC_HTTPS_PORT: ${OAGENT_SERVE_PORT:-443}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on: [api, identity]

@@ -63,3 +63,14 @@ creating Docker containers or volumes, run `node migrate-port.mjs 8443`
 once from this directory. The helper retains passwords, makes a private
 backup and refuses to touch initialized databases or an unrelated app on 8443.
 Never use `tailscale serve reset` or `docker compose down -v`.
+
+### Existing Windows port mapping (O-AGENT)
+The gateway binds **127.0.0.1:8787** to match the pre-existing Tailscale
+Serve mapping **HTTPS :8443 -> http://127.0.0.1:8787**. The other application
+on HTTPS 443 -> localhost:8000 is preserved. If an 8443 route already matches
+8787, the starter reuses it without changing the Tailscale Serve configuration;
+a conflicting 8443 route remains blocked.
+
+The local readiness URL is `http://127.0.0.1:8787/health/ready`. If
+PostgreSQL migration reports SQLSTATE 28P01, the migrator role password
+does not match the current pilot secret; do not delete volumes.

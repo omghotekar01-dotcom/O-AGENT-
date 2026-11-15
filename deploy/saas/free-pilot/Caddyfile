@@ -4,7 +4,7 @@
   handle @idp {
     reverse_proxy identity:8080 {
       header_up X-Forwarded-Proto https
-      header_up X-Forwarded-Port 443
+      header_up X-Forwarded-Port {$OAGENT_PUBLIC_HTTPS_PORT}
       header_up X-Forwarded-Host {http.request.host}
     }
   }

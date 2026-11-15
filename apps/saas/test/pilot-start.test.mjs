@@ -12,7 +12,7 @@ test("one command starts only private Docker Compose and Tailscale Serve",async(
   assert.deepEqual(calls.map(x=>x[0]),["docker","docker","tailscale","docker","tailscale"]);
   assert.ok(calls.some(x=>x.includes("--quiet")));
   assert.ok(calls.some(x=>x.includes("--build")));
-  assert.ok(calls.some(x=>x.includes("127.0.0.1:8791")));
+  assert.ok(calls.some(x=>x.includes("127.0.0.1:8787")));
   assert.doesNotMatch(JSON.stringify(calls),/funnel|--public|--port=0\.0\.0\.0/);
   assert.ok(messages.some(x=>x.includes("Private pilot requested")));
 });
@@ -31,7 +31,7 @@ test("Tailscale existing unrelated services cannot be silently overwritten",()=>
   assert.deepEqual(verifyPrivateServeAvailability("{}"),
     {compatible:true,existing:false});
   const owned={TCP:{"443":{HTTPS:true}},
-    Web:{"my.example.ts.net:443":{Handlers:{"/":{Proxy:"http://127.0.0.1:8791"}}}}};
+    Web:{"my.example.ts.net:443":{Handlers:{"/":{Proxy:"http://127.0.0.1:8787"}}}}};
   assert.deepEqual(verifyPrivateServeAvailability(owned),
     {compatible:true,existing:true});
   assert.throws(()=>verifyPrivateServeAvailability({
@@ -65,4 +65,21 @@ test("port migration failure stages are safe and actionable",()=>{
     assert.doesNotMatch(migrationRemedies[stage],/OAGENT_OWNER_PASSWORD=|TOKEN=|-----BEGIN/);
   }
   assert.match(migrationRemedies["check existing O-AGENT data"],/do not delete/);
+});
+
+test("existing 8443 -> 8787 mapping is reused without mutating Tailscale",async()=>{
+  const configured={TCP:{"443":{HTTPS:true},"8443":{HTTPS:true}},Web:{
+    "host.example.ts.net:443":{Handlers:{"/":{Proxy:"http://127.0.0.1:8000"}}},
+    "host.example.ts.net:8443":{Handlers:{"/":{Proxy:"http://127.0.0.1:8787"}}}}};
+  const calls=[],messages=[];
+  const result=await startFreePilot({
+    setup:async()=>({origin:"https://host.example.ts.net:8443"}),
+    run:(cmd,args)=>{calls.push([cmd,...args]);return args.includes("status")?JSON.stringify(configured):"";},
+    doctor:async()=>({ready:true,checks:[]}),notify:m=>messages.push(m),
+  });
+  assert.equal(result.ready,true);
+  assert.deepEqual(calls.map(x=>x[0]),["docker","docker","tailscale","docker"]);
+  assert.ok(messages.some(m=>m.includes("route preserved")));
+  assert.deepEqual(verifyPrivateServeAvailability(configured,8443),
+    {compatible:true,existing:true});
 });
