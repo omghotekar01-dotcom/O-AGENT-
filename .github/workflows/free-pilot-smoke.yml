@@ -134,6 +134,11 @@ jobs:
           }
           throw Error("Private pilot container startup failed checks: "+lastError?.message);
           JS
+      - name: Verify dedicated mobile OAuth PKCE registration on real Keycloak
+        run: |
+          node deploy/saas/free-pilot/ensure-native-client.mjs
+          # Idempotence: a second start must verify, not create another client.
+          node deploy/saas/free-pilot/ensure-native-client.mjs
       - name: Verify real PostgreSQL migration history before identity test
         run: |
           docker compose --env-file deploy/saas/free-pilot/.env.local -f deploy/saas/free-pilot/compose.yaml exec -T db             psql -U postgres -d oagent -Atc "SELECT name FROM schema_migrations ORDER BY name" |             grep -q "002_legacy_upgrade.sql"
