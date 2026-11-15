@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -168,6 +169,10 @@ Future<Map<String, dynamic>> securePilotRequest(Uri url, String method,
     throw const PilotFailure('Laptop unreachable. Check Tailscale, Docker and worker connectivity.');
   } on HandshakeException {
     throw const PilotFailure('Private HTTPS certificate could not be verified.');
+  } on TlsException {
+    throw const PilotFailure('Private HTTPS connection failed. Check Tailscale certificates and system date.');
+  } on HttpException {
+    throw const PilotFailure('Private server closed the connection unexpectedly. Restart the one-click PC launcher.');
   } on TimeoutException {
     throw const PilotFailure('The backend did not respond. Keep your laptop on and awake.');
   } finally {
@@ -230,7 +235,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
   Uri? origin;
   Map<String, dynamic>? _config;
   PilotTokens? _tokens;
-  String? error, selectedWorkspace;
+  String? error, selectedWorkspace, connectionStatus;
   Map<String, dynamic> me = {};
   List<Map<String, dynamic>> devices = [], runs = [], approvals = [],
     sessions = [], providerSessions = [];
@@ -246,6 +251,50 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     validatedPilotAuthConfig(target, await _request(
       target.resolve('/v1/public-config'), 'GET', null, null, const {}));
 
+  // A read-only preflight using the same HTTPS transport as native login.
+  // It never requests or persists owner credentials.
+  Future<void> testConnection(String address) async {
+    if (busy) return;
+    final target = privatePilotOrigin(address);
+    if (target == null) {
+      connectionStatus = null;
+      error = 'Enter the private HTTPS address printed by START-O-AGENT.cmd.';
+      notifyListeners();
+      return;
+    }
+    busy = true; error = null; connectionStatus = null; notifyListeners();
+    var stage = 'health';
+    try {
+      final health = await _request(target.resolve('/health/ready'),
+        'GET', null, null, const {});
+      if (health['status'] != 'ready' ||
+          health['database'] != 'connected') {
+        throw const PilotFailure('Private server responded, but its database is not ready. Keep the PC launcher running and check its [FIX] report.');
+      }
+      stage = 'configuration';
+      await _readConfig(target);
+      stage = 'identity';
+      final identity = await _request(target.resolve(
+        '/auth/realms/oagent/.well-known/openid-configuration'),
+        'GET', null, null, const {});
+      if (identity['issuer'] != target.origin + '/auth/realms/oagent' ||
+          identity['authorization_endpoint'] is! String ||
+          identity['jwks_uri'] is! String) {
+        throw const PilotFailure('The identity service returned an unexpected issuer. Check the PC HTTPS address and Keycloak configuration.');
+      }
+      connectionStatus = 'Private HTTPS, database and identity checks passed. You can now sign in.';
+    } catch (e) {
+      error = pilotLoginStageError(e, stage);
+    } finally {
+      busy = false; notifyListeners();
+    }
+  }
+
+  void clearLoginFeedback() {
+    if (error == null && connectionStatus == null) return;
+    error = null; connectionStatus = null; notifyListeners();
+  }
+
   Future<void> signIn(String address, {bool rememberDevice = false}) async {
     if (busy) return;
     final target = privatePilotOrigin(address);
@@ -253,22 +302,26 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
       error = 'Enter your exact private HTTPS O-AGENT address.';
       notifyListeners(); return;
     }
-    busy = true; error = null; notifyListeners();
+    busy = true; error = null; connectionStatus = null; notifyListeners();
+    var stage = 'configuration';
     try {
       final cfg = await _readConfig(target);
+      stage = 'android-auth';
       final tokens = await _auth.signIn(target, cfg);
       origin = target; _config = cfg; _tokens = tokens;
+      stage = 'account';
       me = await _api('/v1/me');
-      _rememberDevice = rememberDevice;
+      stage = 'phone-storage';
       if (rememberDevice && tokens.refreshToken != null) {
         await _store.write(StoredPilotSession(target.origin, tokens.refreshToken!));
       } else {
         await _store.clear();
       }
+      _rememberDevice = rememberDevice;
       _startPolling();
       await refresh();
     } catch (e) {
-      error = pilotFriendlyError(e); _tokens = null; me = {};
+      error = pilotLoginStageError(e, stage); _tokens = null; me = {};
       _rememberDevice = false;
     } finally {
       busy = false; notifyListeners();
@@ -561,7 +614,57 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
 
 String pilotFriendlyError(Object error) {
   if (error is PilotFailure) return error.message;
+  if (error is HandshakeException || error is TlsException) {
+    return 'Private HTTPS certificate check failed. Check Tailscale certificates and your phone clock.';
+  }
+  if (error is SocketException) {
+    return 'Cannot reach your private PC. Check Tailscale VPN on your phone and START-O-AGENT.cmd on the laptop.';
+  }
+  if (error is TimeoutException) {
+    return 'Private server timed out. Keep the PC awake and retry.';
+  }
+  if (error is HttpException) {
+    return 'Private server connection ended unexpectedly. Check the one-click launcher.';
+  }
   return 'Secure operation failed. Check your private server or sign in again.';
+}
+
+/// Safe, stage-specific login guidance. Do not display raw platform exceptions:
+/// they can contain internal URLs, OAuth codes or other sensitive data.
+String pilotLoginStageError(Object error, String stage) {
+  if (error is PilotFailure) {
+    if (error.statusCode == 401 || error.statusCode == 403) {
+      return 'Your O-AGENT account was not authorized. Sign in again and confirm your PC owner account (HTTP ${error.statusCode}).';
+    }
+    if (error.statusCode == 404 && stage == 'configuration') {
+      return 'The private server is missing /v1/public-config. Start the updated secure pilot with START-O-AGENT.cmd.';
+    }
+    return error.message;
+  }
+  if (error is HandshakeException || error is TlsException ||
+      error is SocketException || error is TimeoutException ||
+      error is HttpException) {
+    return pilotFriendlyError(error);
+  }
+  switch (stage) {
+    case 'health':
+      return 'Cannot verify PC health (NET-01). Check Tailscale VPN on both devices and restart START-O-AGENT.cmd.';
+    case 'configuration':
+      return 'Cannot read native login configuration (API-02). Confirm the PC launcher reports [PASS] and the private URL is correct.';
+    case 'identity':
+      return 'Cannot reach Keycloak identity service (ID-03). Check Tailscale HTTPS and the PC launcher identity check.';
+    case 'android-auth':
+      if (error is PlatformException) {
+        return 'Android secure sign-in failed to open or return (AUTH-04). Update Chrome, verify the native OAuth client in START-O-AGENT.cmd, and retry.';
+      }
+      return 'Secure sign-in could not finish (AUTH-04). Test the private connection; if it passes, check Keycloak mobile login and the Android browser callback.';
+    case 'account':
+      return 'Sign-in returned, but your O-AGENT account could not be verified (AUTH-05). Check the PC identity service and signed-in account.';
+    case 'phone-storage':
+      return 'Android secure session storage failed (PHONE-06). Try signing in with Remember this phone unchecked.';
+    default:
+      return pilotFriendlyError(error);
+  }
 }
 String _requestKey() {
   final secure = Random.secure();
