@@ -142,4 +142,65 @@ void main(){
       },kind:'codex_cli_turn',mode:'read_only',prompt:'continue'),
       throwsA(isA<PilotFailure>()));
   });
+  test('verified Codex sessions bind continuation to correct discovered cwd',
+      () async {
+    final id='11111111-1111-4111-8111-111111111111';
+    final runId='33333333-3333-4333-8333-333333333333';
+    final device={
+      'id':id,'name':'Trusted laptop',
+      'last_seen_at':DateTime.now().toUtc().toIso8601String(),
+      'revoked_at':null,'workspace_root':'/trusted/workspace',
+      'capabilities':['workspace_inventory','codex_cli_turn'],
+    };
+    final session={
+      'deviceId':id,'sessionId':'codex-thread-12345',
+      'cwd':'/trusted/workspace/project-one',
+      'title':'Existing work in VS Code',
+      'syncedAt':DateTime.now().toUtc().toIso8601String(),
+      'updatedAt':DateTime.now().toUtc().toIso8601String(),
+      'messages':<Map<String,dynamic>>[],
+    };
+    final writes=<String,Map<String,dynamic>>{};
+    Future<Map<String,dynamic>> request(Uri url,String method,
+        Map<String,dynamic>? body,String? bearer,Map<String,String> headers) async {
+      if(url.path=='/v1/public-config')return {
+        'authEnabled':true,'audience':'oagent-api',
+        'authorizationEndpoint':origin+
+          'auth/realms/oagent/protocol/openid-connect/auth',
+        'tokenEndpoint':origin+
+          'auth/realms/oagent/protocol/openid-connect/token'};
+      expect(bearer,'short-lived-in-memory-token');
+      if(url.path=='/v1/me')return {'tenantId':'tenant-id','role':'owner'};
+      if(url.path=='/v1/devices')return {'devices':[device]};
+      if(url.path=='/v1/runs'&&method=='GET')return {'runs':[]};
+      if(url.path=='/v1/approvals')return {'approvals':[]};
+      if(url.path=='/v1/sessions')return {'sessions':[session]};
+      if(method=='POST'){
+        writes[url.path]=body??{};
+        return {'runId':runId,'status':'waiting_for_approval'};
+      }
+      throw StateError('Unknown path '+url.path);
+    }
+    final c=NativePilotController(
+      request:request,auth:FakeLogin(),store:FakeStore());
+    addTearDown(c.dispose);
+    await c.signIn(origin);
+    expect(c.sessions.length,1);
+    await expectLater(c.requestTurn(device:device,kind:'codex_cli_turn',
+      mode:'read_only',prompt:'Continue previous code edits',
+      sessionId:'invented-session-12345'),throwsA(isA<PilotFailure>()));
+    expect(writes,isEmpty,'manual guessed thread IDs must not run');
+    await c.requestTurn(device:device,kind:'codex_cli_turn',
+      mode:'read_only',prompt:'Continue previous code edits',
+      sessionId:'codex-thread-12345');
+    expect(writes['/v1/runs']?['cwd'],'/trusted/workspace/project-one');
+    expect(writes['/v1/runs']?['sessionId'],'codex-thread-12345');
+    expect(writes['/v1/runs']?['prompt'],'Continue previous code edits');
+    await c.cancelRun(runId);
+    expect(writes['/v1/runs/'+runId+'/cancel'],isNotNull);
+    await c.acknowledgeInterruptedRun(runId);
+    expect(writes['/v1/runs/'+runId+'/resolve-interrupted']?['confirm'],
+      'MARK_INTERRUPTED_RUN_FAILED');
+  });
+
 }
