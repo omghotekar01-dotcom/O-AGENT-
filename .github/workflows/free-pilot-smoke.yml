@@ -1,17 +1,8 @@
 name: O-AGENT Private Pilot Container Smoke (No APK)
 on:
   workflow_dispatch:
-  # Initial integration smoke once on this implementation branch; later runs
-  # are manual so a free-tier account does not pay repeated container pulls.
-  push:
-    branches: ["feat/saas-secure-control-plane-20261114"]
-    paths:
-      - ".github/workflows/free-pilot-smoke.yml"
-      - "deploy/saas/free-pilot/oagent-realm.json"
-      - "deploy/saas/free-pilot/ci-oidc-smoke.mjs"
-      - "deploy/saas/free-pilot/compose.yaml"
-      - "deploy/saas/free-pilot/setup.mjs"
-      - ".dockerignore"
+  # Container registry pulls and full-stack smoke are opt-in/manual after the
+  # one-time pilot CI foundation. Never consume repeated free-tier builds.
 concurrency:
   group: oagent-pilot-smoke-${{ github.ref }}
   cancel-in-progress: true
@@ -69,7 +60,7 @@ jobs:
           // protocol-accurate HTTP/1.1 to the loopback gateway instead.
           async function probe(path,host=correctHost){
             return new Promise((resolve,reject)=>{
-              const req=http.get({hostname:"127.0.0.1",port:8791,path,
+              const req=http.get({hostname:"127.0.0.1",port:8787,path,
                 headers:{Host:host}},res=>{
                 const chunks=[];
                 res.on("data",chunk=>chunks.push(chunk));
@@ -104,7 +95,7 @@ jobs:
               assert.equal(web.audience,"oagent-api");
               const push=await probe("/v1/push/config");
               assert.equal(push.status,401,"Push endpoints require real OIDC");
-              const invalidHost=await probe("/v1/public-config","localhost:8791");
+              const invalidHost=await probe("/v1/public-config","localhost:8787");
               assert.equal(invalidHost.status,403,
                 "Untrusted hostnames must still be rejected");
               console.log("Private pilot booted: PostgreSQL, Keycloak OIDC, Caddy, API and HTTP access guard verified.");
