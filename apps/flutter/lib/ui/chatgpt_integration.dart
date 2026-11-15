@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
@@ -68,14 +67,14 @@ class _ChatGptIntegrationState extends State<ChatGptIntegrationScreen> {
     if(loading)return;
     setState((){loading=true;error=null;});
     try{
-      final result=await FilePicker.platform.pickFiles(
-        type:FileType.custom,allowedExtensions:['zip','json'],withData:false);
-      if(result==null)return;
-      final file=result.files.single;
-      if(file.size>90*1024*1024)throw const FormatException('Large export');
-      final path=file.path;
-      final data=file.bytes??(path==null?null:await File(path).readAsBytes());
-      if(data==null)throw const FormatException('No file data');
+      final file=await FilePicker.pickFile(type:FileType.custom,
+        allowedExtensions:['zip','json']);
+      if(file==null)return;
+      final size=file.lengthSync() ?? await file.length();
+      if(size==null||size<2||size>60*1024*1024){
+        throw const FormatException('Export is empty or exceeds 60 MB');
+      }
+      final data=await file.readAsBytes();
       final list=await compute(decodeChatGptFile,Uint8List.fromList(data));
       if(mounted)setState((){chats=list;page=1;});
     }catch(_){
