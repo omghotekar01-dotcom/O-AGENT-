@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../core/controller.dart';
 import '../core/api_client.dart';
@@ -776,34 +775,14 @@ class StudioConnect extends StatefulWidget {
 
 class _StudioConnectState extends State<StudioConnect> {
   final url = TextEditingController(text: 'http://127.0.0.1:8787');
-  final saasUrl = TextEditingController();
   final token = TextEditingController();
   final inviteCode = TextEditingController();
   final displayName = TextEditingController();
   bool joining = false;
   bool hidden = true;
   bool rememberDevice = false;
-  Future<void> openPrivateSaas() async {
-    final destination = secureSaasOrigin(saasUrl.text);
-    if (destination == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Enter your private HTTPS Tailnet URL first.')));
-      return;
-    }
-    try {
-      final opened = await launchUrl(destination,
-        mode: LaunchMode.externalApplication);
-      if (!opened && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not open the private command center. Check Tailscale.')));
-      }
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Secure browser unavailable. Check your HTTPS connection.')));
-    }
-  }
   @override
-  void dispose() { url.dispose(); saasUrl.dispose(); token.dispose(); inviteCode.dispose(); displayName.dispose(); super.dispose(); }
+  void dispose() { url.dispose(); token.dispose(); inviteCode.dispose(); displayName.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(animation: widget.controller, builder: (context, _) =>
@@ -842,31 +821,23 @@ class _StudioConnectState extends State<StudioConnect> {
           const SizedBox(height: 14),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white, borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: const Color(0xFFD9E8E5))),
+            decoration: BoxDecoration(color: OTheme.lavender,
+              borderRadius: BorderRadius.circular(15)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('NEW PRIVATE SaaS CONTROL CENTER',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _ok)),
-              const SizedBox(height: 7),
-              const Text('Use your new mobile approvals, team workspaces and secure OIDC sign-in.',
-                style: TextStyle(fontSize: 13, color: _muted)),
-              const SizedBox(height: 12),
-              TextField(controller: saasUrl, keyboardType: TextInputType.url,
-                autocorrect: false, enableSuggestions: false,
-                decoration: const InputDecoration(
-                  labelText: 'Private HTTPS address from START-O-AGENT',
-                  hintText: 'https://your-laptop.tailnet.ts.net',
-                  prefixIcon: Icon(Icons.security_rounded))),
-              const SizedBox(height: 12),
-              SizedBox(width: double.infinity,child: OutlinedButton.icon(
-                onPressed: openPrivateSaas,
-                icon: const Icon(Icons.open_in_new_rounded),
-                label: const Text('Open secure mobile command center'),
-              )),
-              const SizedBox(height: 7),
-              const Text('Both phone and PC must be connected to your Tailscale network. This opens the authenticated PWA in your browser; the legacy operator token is never sent to it.',
-                style: TextStyle(fontSize: 12, color: _muted, height: 1.45)),
+              const Text('NEW CONTROL CENTER IS NOW NATIVE',
+                style: TextStyle(color: OTheme.violet,
+                  fontWeight: FontWeight.w800, fontSize: 12)),
+              const SizedBox(height: 8),
+              const Text('Your private device, agent runs and approvals are inside '
+                'the main Flutter app. This screen is only for the previous '
+                'operator-token backend.',
+                style: TextStyle(color: _muted, height: 1.5)),
+              const SizedBox(height: 9),
+              OutlinedButton.icon(
+                onPressed: Navigator.canPop(context)
+                  ? () => Navigator.pop(context) : null,
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Return to native O-AGENT')),
             ]),
           ),
           const SizedBox(height: 22),
