@@ -4,7 +4,7 @@ import {mkdtemp,rm} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {createHash,createHmac,pbkdf2Sync} from "node:crypto";
-import {parseRoleSecrets,matchesRolePassword,repairDbAuth} from "../../../deploy/saas/free-pilot/repair-db-auth.mjs";
+import {parseRoleSecrets,matchesRolePassword,repairDbAuth,databaseCheckHints} from "../../../deploy/saas/free-pilot/repair-db-auth.mjs";
 
 const source=["OAGENT_RUNTIME_PASSWORD="+ "a".repeat(48),
   "OAGENT_MIGRATION_PASSWORD="+ "b".repeat(48),
@@ -83,4 +83,24 @@ test("failure to produce an encrypted backup refuses every database credential c
       keyDirectory:join(tmp,"keys"),backupDirectory:join(tmp,"backups")
     }),/backup failed/);
   }finally{await rm(tmp,{recursive:true,force:true});}
+});
+
+test("read-only diagnostic reports safe database check stage, never credential material",async()=>{
+  const steps=[];
+  await assert.rejects(()=>repairDbAuth({read:async()=>source,
+    inspect:async(_query,progress)=>{
+      progress("check O-AGENT role catalog");
+      throw Error("CONNECTION-PASSWORD-SECRET-DO-NOT-LOG");
+    },
+    progress:stage=>steps.push(stage),
+  }),/CONNECTION-PASSWORD-SECRET-DO-NOT-LOG/);
+  assert.deepEqual(steps,[
+    "read local private configuration",
+    "connect to local PostgreSQL admin",
+    "check O-AGENT role catalog",
+  ]);
+  for(const stage of steps){
+    assert.ok(databaseCheckHints[stage]);
+    assert.doesNotMatch(databaseCheckHints[stage],/PASSWORD=|CONNECTION-PASSWORD|PRIVATE KEY/);
+  }
 });
