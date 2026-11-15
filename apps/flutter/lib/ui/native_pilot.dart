@@ -351,8 +351,13 @@ class _WorkState extends State<_Work>{
       .map((x)=>x.toString()).where((x)=>const [
         'workspace_inventory','codex_cli_turn','claude_agent_turn',
         'copilot_sdk_turn'].contains(x)).toList();
+    // A provider conversation is the primary purpose of this product.
+    // Workspace inventory is a diagnostics fallback, never preferred over
+    // an enabled Codex/Claude/Copilot adapter.
+    final aiOperations=available.where((k)=>k!='workspace_inventory').toList();
     final kind=available.contains(operation)?operation:
-      (available.isNotEmpty?available.first:null);
+      (aiOperations.isNotEmpty?aiOperations.first:
+        (available.isNotEmpty?available.first:null));
     final savedForDevice=widget.c.sessions
       .where((x)=>x['deviceId']==selected?['id']).toList();
     final chosenSaved=savedForDevice.where(
@@ -441,8 +446,12 @@ class _WorkState extends State<_Work>{
             icon:Icons.laptop_chromebook),const SizedBox(height:20),
         ]else _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,
           children:[
-            const Text('NEW SUPERVISED TURN',style:TextStyle(
+            const Text('SUPPORTED AI AGENT TURN',style:TextStyle(
               color:OTheme.violet,fontWeight:FontWeight.w800)),
+            const SizedBox(height:6),
+            const Text('Choose your real agent and conversation. '
+              'Workspace inventory is only a read-only diagnostic.',
+              style:TextStyle(color:_muted,fontSize:12)),
             const SizedBox(height:12),
             DropdownButtonFormField<String>(
               key:ValueKey('worker-'+_val(selected?['id'])),
