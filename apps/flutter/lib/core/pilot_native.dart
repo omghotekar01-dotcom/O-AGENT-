@@ -347,9 +347,20 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
   Future<Map<String, dynamic>> runDetail(String id) =>
     _api('/v1/runs/' + Uri.encodeComponent(id));
   Future<List<Map<String, dynamic>>> runEvents(String id) async {
-    final result = await _api('/v1/runs/' +
-      Uri.encodeComponent(id) + '/events?after=0');
-    return _items(result, 'events');
+    // The API pages at most 100 events; fetch all six bounded pages so later
+    // tool approvals and final status never disappear behind page one.
+    final history=<Map<String,dynamic>>[];
+    var cursor=0;
+    for(var page=0;page<6;page++){
+      final response=await _api('/v1/runs/' +
+        Uri.encodeComponent(id) + '/events?after=' + cursor.toString());
+      final entries=_items(response,'events');
+      history.addAll(entries);
+      final next=int.tryParse(response['nextCursor']?.toString() ?? '');
+      if(entries.length<100 || next==null || next<=cursor)break;
+      cursor=next;
+    }
+    return history;
   }
   Future<void> requestTurn({
     required Map<String, dynamic> device, required String kind,
