@@ -604,6 +604,36 @@ class _NativeRunDetailState extends State<NativeRunDetail>{
       });
     }catch(e){if(mounted)setState(()=>error=pilotFriendlyError(e));}
   }
+  Future<void> _supervise({required bool acknowledge}) async {
+    final approved=await showDialog<bool>(context:context,builder:(dialog)=>
+      AlertDialog(
+        title:Text(acknowledge?'Acknowledge interrupted execution?'
+          :'Cancel this queued request?'),
+        content:Text(acknowledge
+          ?'The worker may have made changes before its connection broke. '
+            'This marks the interrupted run failed WITHOUT replaying it. '
+            'Inspect your project before starting new work.'
+          :'This cancels a run that has not started. It cannot undo a run '
+            'that the worker has already executed.'),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(dialog,false),
+            child:const Text('Keep current state')),
+          FilledButton(onPressed:()=>Navigator.pop(dialog,true),
+            child:Text(acknowledge?'Mark failed; do not replay':'Cancel request')),
+        ]));
+    if(approved!=true||!mounted)return;
+    try{
+      if(acknowledge){
+        await widget.c.acknowledgeInterruptedRun(widget.id);
+      }else{
+        await widget.c.cancelRun(widget.id);
+      }
+      await _reload();
+      if(mounted)_toast(context,acknowledge
+        ?'Interrupted run acknowledged. No action was replayed.'
+        :'Pending run cancelled.');
+    }catch(e){if(mounted)_toast(context,pilotFriendlyError(e));}
+  }
   @override void dispose(){timer?.cancel();super.dispose();}
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('Native agent activity'),
@@ -629,6 +659,20 @@ class _NativeRunDetailState extends State<NativeRunDetail>{
               style:const TextStyle(color:_muted)),
             if(run!['error']!=null)Text(_val(run!['error']),
               style:const TextStyle(color:Colors.red)),
+            if(['waiting_for_approval','queued'].contains(run!['status']))...[
+              const SizedBox(height:12),
+              OutlinedButton.icon(
+                onPressed:()=>_supervise(acknowledge:false),
+                icon:const Icon(Icons.cancel_outlined),
+                label:const Text('Cancel pending work')),
+            ],
+            if(run!['status']=='needs_recovery')...[
+              const SizedBox(height:12),
+              OutlinedButton.icon(
+                onPressed:()=>_supervise(acknowledge:true),
+                icon:const Icon(Icons.warning_amber_outlined),
+                label:const Text('Review interrupted run (no replay)')),
+            ],
           ])),
         const SizedBox(height:20),
         const Text('LIVE EVENT HISTORY',style:TextStyle(
