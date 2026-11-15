@@ -25,7 +25,7 @@ function request(path,{method="GET",body,authorization}={}){
       headers["Content-Length"]=String(payload.byteLength);
     }
     if(authorization)headers.Authorization="Bearer "+authorization;
-    const req=http.request({hostname:"127.0.0.1",port:8791,path,
+    const req=http.request({hostname:"127.0.0.1",port:8787,path,
       method,headers,timeout:7000},response=>{
       const chunks=[];
       response.on("data",part=>chunks.push(part));
