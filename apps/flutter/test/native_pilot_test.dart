@@ -34,6 +34,16 @@ void main(){
     expect(nativeClientId,'oagent-mobile');
     expect(nativeRedirectUri,'com.omiiii.oagent:/oauth2redirect');
   });
+  test('private pairing links remain bound to exact own tailnet origin',(){
+    final own=Uri.parse(origin);
+    final token='oen_' + ('q'*43);
+    expect(pilotPairingToken(origin+'#pair='+token,own),token);
+    expect(pilotPairingToken(token,own),token);
+    expect(()=>pilotPairingToken('https://other.ts.net/#pair='+token,own),
+      throwsA(isA<PilotFailure>()));
+    expect(()=>pilotPairingToken(origin+'#pair=short',own),
+      throwsA(isA<PilotFailure>()));
+  });
   test('OIDC endpoints cannot silently point to a different auth server',(){
     final uri=Uri.parse(origin);
     final config={
