@@ -49,7 +49,7 @@ node doctor.mjs
 if errorlevel 1 goto :failed
 echo.
 echo [READY] O-AGENT private gateway and login diagnostics passed.
-echo Open https://om-v16.tailbb6a8f.ts.net:8443/ from your tailnet phone.
+echo Open the private HTTPS :8443 address printed above on your tailnet phone.
 goto :end
 :missing
 echo [FIX] This branch is missing the repair scripts. Pull latest GitHub files.
