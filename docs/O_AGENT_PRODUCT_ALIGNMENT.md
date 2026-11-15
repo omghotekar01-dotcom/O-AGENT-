@@ -1,6 +1,8 @@
 # O-AGENT — agent-first cross-platform product contract
 Updated: 2026-11-15
 
+**Current source-of-truth acceptance list:** [AGENT_FIRST_ACCEPTANCE_TRACKER.md](AGENT_FIRST_ACCEPTANCE_TRACKER.md)
+
 ## Purpose (non-negotiable)
 
 O-AGENT is an **iOS and Android remote control center for AI work already
@@ -50,11 +52,11 @@ not an acceptable substitute.
 | Codex CLI / IDE | Saved local Codex threads discovered by opt-in worker; resume and supervised turns require official CLI + real sessions | Sessions only when verified on an online capable worker |
 | Claude Agent SDK | Verified O-AGENT-owned recorded SDK sessions and supported worker capability | Sessions with independent worker/provider auth; no claude.ai takeover |
 | GitHub Copilot SDK | Verified O-AGENT-owned recorded SDK sessions and supported worker capability | Same restrictions as Claude SDK |
-| VS Code local projects | Enrolled workspace inventory and scoped Codex CLI/IDE support | Device/projects; not arbitrary live IDE tab control |
-| GitHub repositories, Actions and PRs | Connector exists in a separate older native workspace using its own backend/config | Show separate integration, route to old workspace, do not claim private-pilot connection |
-| Cursor Cloud | Older connector exists separately; real use needs separate credentials/backend | Show separate integration without claiming current SaaS enrollment |
-| ChatGPT consumer/Work browser | No verified third-party API to list/take over arbitrary existing chats and approvals | Official service shortcut only, prominent unsupported note |
-| Claude.ai / Gemini consumer chats | No verified takeover API in this project | Official service shortcut only |
+| VS Code local projects | Older authorized remote gateway provides scoped file and project controls; SaaS worker provides Codex session discovery | New app Remote tab opens actual older IDE tools after separate gateway authorization |
+| GitHub repositories, Actions and PRs | Connector exists in older gateway using its own auth/config | Route into integrated Remote tab, not old StudioConnect; do not claim it shares SaaS tokens |
+| Cursor Cloud | Older connector exists; real use still requires provider credentials and legacy gateway authorization | Route into integrated Remote, not warning-only cards |
+| ChatGPT consumer/Work browser | No verified third-party API for arbitrary chat takeover | Use visible, consented Windows screen and trusted input from Remote; no consumer chat import |
+| Claude.ai / Gemini consumer chats | No verified general consumer-chat takeover API in O-AGENT | Use user-selected visible Windows screen through Remote, not a fake account API |
 | O-AGENT-owned OpenAI/Anthropic API chats | Earlier own-conversation runtime exists with provider API keys | Preserve legacy route; eventual shared authenticated migration |
 | Files, screen, PDFs, images, cloud work | Partial older modules, no universally verified end-to-end app flow | Must pass provider-specific acceptance; no pretend buttons |
 
@@ -70,12 +72,15 @@ conversation does not grant O-AGENT that user's token or permissions.
       session records, never static online statuses.
 - [x] Shared Cupertino-style Agents-first navigation and agent directory,
       searchable and available before login as a read-only preview.
-- [x] Preserve Sessions, Inbox, Devices, Settings and earlier native workspace.
+- [x] Bring existing RemoteMissionControl into the primary native app tab, preserving previous authorized gateway settings.
+- [x] Restore readable original O-AGENT light dashboard and eliminate Android OS-dark Cupertino card mismatch.
+- [x] Queue verified owner's read-only agent turns directly and show actual run event timeline; keep meaningful write/tool approvals.
+- [x] Normal PC launcher also restores the existing consented Windows remote gateway when it is already configured.
 - [ ] **Physical device acceptance** on an Android phone and iPhone.
 - [ ] Validate real Codex resume, Claude/Copilot SDK resume, and approval
       delivery on the owner's signed-in machines.
-- [ ] Merge legacy GitHub/Cursor project data through explicitly authorized
-      secure endpoints into the same account, instead of a separate UI.
+- [ ] Merge old gateway authorization and SaaS OIDC identity; sharing a mobile tab is NOT yet unified credentials.
+- [ ] Verify existing screen control, VS Code and GitHub/Cursor flows on a real Windows PC and physical phone.
 - [ ] Native provider account connections, capability testing and revocation.
 - [ ] Agent/session-first composer with real output and tool event timeline.
 
@@ -123,4 +128,4 @@ Flutter iOS/Android (Cupertino UX)
     -> Codex official CLI/app-server, Claude Agent SDK, Copilot SDK,
        and separately authorized GitHub/Cursor APIs.
 
-Provider consumers without APIs remain external, not fake live-control surfaces.
+Consumer provider apps without session APIs may be reached only through the user-consented remote Windows screen. Do not claim their private provider chats are imported.
