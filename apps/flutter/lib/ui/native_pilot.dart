@@ -451,7 +451,7 @@ class _WorkState extends State<_Work>{
                   'Check local Codex login and keep the worker online.',
                   style:TextStyle(color:Colors.red,height:1.45))
               else DropdownButtonFormField<String>(
-                key:ValueKey('codex-'+_val(selected?['id'])),
+                key:ValueKey('codex-'+_val(selected?['id'])+'-'+_val(savedSessionId)),
                 initialValue:chosenSaved?['sessionId']?.toString() ??
                   savedForDevice.first['sessionId']?.toString(),
                 decoration:const InputDecoration(
