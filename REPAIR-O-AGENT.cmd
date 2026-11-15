@@ -52,7 +52,9 @@ node migrate-existing-port.mjs 8443 --apply
 if errorlevel 1 goto :failed
 echo.
 echo [7/8] Refresh saved private realm and Keycloak hostname...
-docker compose --env-file .env.local -f compose.yaml up --no-deps --force-recreate realm-init
+rem realm-init exits immediately after copying the private realm. Compose 'up' by
+rem itself stays attached even after Exit 0. Use its exit code so recovery resumes.
+docker compose --env-file .env.local -f compose.yaml up --no-deps --force-recreate --exit-code-from realm-init realm-init
 if errorlevel 1 goto :failed
 docker compose --env-file .env.local -f compose.yaml up -d --no-deps --force-recreate identity
 if errorlevel 1 goto :failed
