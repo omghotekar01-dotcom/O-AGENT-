@@ -65,6 +65,10 @@ if errorlevel 1 goto :failed
 node doctor.mjs
 if errorlevel 1 goto :failed
 echo.
+echo [NATIVE] Registering dedicated Flutter OAuth client securely...
+node ensure-native-client.mjs
+if errorlevel 1 goto :failed
+echo.
 echo [READY] O-AGENT diagnostics passed.
 echo Connect your phone to the tailnet and open HTTPS :8443.
 goto :end

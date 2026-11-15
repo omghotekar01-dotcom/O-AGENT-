@@ -71,7 +71,7 @@ services:
       OAGENT_OIDC_ISSUER: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent
       OAGENT_OIDC_JWKS_URL: http://identity:8080/auth/realms/oagent/protocol/openid-connect/certs
       OAGENT_OIDC_AUDIENCE: oagent-api
-      OAGENT_OIDC_CLIENT_IDS: oagent-web
+      OAGENT_OIDC_CLIENT_IDS: oagent-web,oagent-mobile
       DATABASE_URL: postgresql://oagent_runtime:${OAGENT_RUNTIME_PASSWORD:?Missing runtime secret}@db:5432/oagent?sslmode=disable
       OAGENT_MIGRATION_DATABASE_URL: postgresql://oagent_migrator:${OAGENT_MIGRATION_PASSWORD:?Missing migration secret}@db:5432/oagent?sslmode=disable
     depends_on:
@@ -97,7 +97,7 @@ services:
       OAGENT_OIDC_ISSUER: ${OAGENT_ORIGIN:?Missing origin}/auth/realms/oagent
       OAGENT_OIDC_JWKS_URL: http://identity:8080/auth/realms/oagent/protocol/openid-connect/certs
       OAGENT_OIDC_AUDIENCE: oagent-api
-      OAGENT_OIDC_CLIENT_IDS: oagent-web
+      OAGENT_OIDC_CLIENT_IDS: oagent-web,oagent-mobile
       OAGENT_VAPID_PUBLIC_KEY: ${OAGENT_VAPID_PUBLIC_KEY:?Missing browser push key}
       OAGENT_VAPID_PRIVATE_KEY: ${OAGENT_VAPID_PRIVATE_KEY:?Missing browser push key}
       OAGENT_OIDC_WEB_CLIENT_ID: oagent-web

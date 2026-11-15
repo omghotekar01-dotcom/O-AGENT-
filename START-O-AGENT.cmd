@@ -47,9 +47,16 @@ echo        O-AGENT DIAGNOSTIC REPORT
 echo ==========================================
 node doctor.mjs
 set "DOCTOR_RESULT=%errorlevel%"
+if "%START_RESULT%"=="0" if "%DOCTOR_RESULT%"=="0" (
+  echo.
+  echo [NATIVE] Registering the dedicated Android/iOS OAuth PKCE client...
+  node ensure-native-client.mjs
+  set "NATIVE_RESULT=%errorlevel%"
+)
 popd
 if not "%START_RESULT%"=="0" goto :failed
 if not "%DOCTOR_RESULT%"=="0" goto :failed
+if not "%NATIVE_RESULT%"=="0" goto :failed
 echo.
 echo [READY] Local prerequisite checks passed.
 echo Open the PRIVATE HTTPS Tailnet address printed above on your phone.
