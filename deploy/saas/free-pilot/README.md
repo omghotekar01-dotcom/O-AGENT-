@@ -52,3 +52,14 @@ Docker builds explicitly ignore all local `.env.*`, `.private`, and encrypted ba
 
 ### Verified email policy
 The owner identity for this private pilot is the cryptographically verified OIDC subject, not a user-controlled email string. The pilot can use a pseudonymous owner without falsely marking a placeholder address as verified. Commercial runtime defaults to **requiring an explicitly verified email claim**; this is controlled with `OAGENT_REQUIRE_VERIFIED_EMAIL=1` and should remain enabled for public customer onboarding. This setting never bypasses access-token signature, issuer, audience, client allowlist or permissions.
+
+### Another app uses HTTPS port 443
+O-AGENT supports a private `https://YOUR-TAILNET-HOST.ts.net:8443/` dashboard
+while preserving an unrelated application on port 443. For a new pilot, set
+`$env:OAGENT_SERVE_PORT="8443"` in PowerShell before starting. The selected port
+is persisted in the private `.env.local` and used on future launches.
+If your first setup already generated secrets for 443 but stopped before
+creating Docker containers or volumes, run `node migrate-port.mjs 8443`
+once from this directory. The helper retains passwords, makes a private
+backup and refuses to touch initialized databases or an unrelated app on 8443.
+Never use `tailscale serve reset` or `docker compose down -v`.

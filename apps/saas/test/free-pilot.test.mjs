@@ -8,6 +8,9 @@ const read=name=>readFileSync(new URL("../../../deploy/saas/free-pilot/"+name,im
 test("pilot setup requires a real, connected Tailscale HTTPS DNS name",()=>{
   const fake=()=>JSON.stringify({BackendState:"Running",Self:{DNSName:"laptop.my-tailnet.ts.net."}});
   assert.equal(tailnetOrigin({},fake),"https://laptop.my-tailnet.ts.net");
+  assert.equal(tailnetOrigin({OAGENT_SERVE_PORT:"8443"},fake),
+    "https://laptop.my-tailnet.ts.net:8443");
+  assert.throws(()=>tailnetOrigin({OAGENT_SERVE_PORT:"9999"},fake),/port/);
   assert.throws(()=>tailnetOrigin({OAGENT_TAILNET_HOST:"public.example.com"}),/MagicDNS/);
   assert.throws(()=>tailnetOrigin({},()=>JSON.stringify({BackendState:"Stopped"})),/connected/);
   assert.throws(()=>tailnetOrigin({},()=>{throw Error("absent")}),/Install Tailscale/);
@@ -89,6 +92,8 @@ test("private realm renderer inserts generated owner password and HTTPS redirect
   assert.equal(realm.users[0].credentials[0].value,password);
   assert.equal(realm.clients[0].redirectUris[0],origin+"/");
   assert.equal(realm.clients[0].webOrigins[0],origin);
+  const alternate=renderOwnerRealm(template,{origin:origin+":8443",password});
+  assert.equal(alternate.clients[0].redirectUris[0],origin+":8443/");
   assert.equal(realm.clients[0].directAccessGrantsEnabled,false);
   assert.ok(!JSON.stringify(realm).includes("$"+"{OAGENT_"));
   const compose=read("compose.yaml");

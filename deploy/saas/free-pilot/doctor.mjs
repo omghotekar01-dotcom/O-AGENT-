@@ -11,7 +11,7 @@ const configuredOrigin=raw=>{
   const match=raw.match(/^OAGENT_ORIGIN=(https:\/\/[^\r\n]+)$/m);
   if(!match)throw Error("No OAGENT_ORIGIN in local pilot settings");
   const url=new URL(match[1]);
-  if(url.protocol!=="https:" || url.port || url.pathname!=="/"||
+  if(url.protocol!=="https:" || (url.port&&url.port!=="8443") || url.pathname!=="/"||
       !/\.ts\.net$/i.test(url.hostname))throw Error("Not a private HTTPS Tailnet origin");
   return url.origin;
 };
@@ -65,7 +65,7 @@ export async function checkPilot({
       stdio:["ignore","pipe","pipe"]});
   },"Install/start Docker Desktop (or compatible Compose) and retry.");
   await check("Tailscale connection",()=>{
-    const current=tailnetOrigin({},execute);
+    const current=tailnetOrigin({OAGENT_SERVE_PORT:new URL(origin).port||"443"},execute);
     if(origin && origin!==current)throw Error("Wrong tailnet");
   },"Sign into Tailscale on this computer; check MagicDNS host matches setup.");
   await check("Private local gateway",async()=>{

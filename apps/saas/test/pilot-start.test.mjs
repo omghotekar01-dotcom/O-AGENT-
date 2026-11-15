@@ -36,9 +36,23 @@ test("Tailscale existing unrelated services cannot be silently overwritten",()=>
   assert.throws(()=>verifyPrivateServeAvailability({
     Web:{"my.example.ts.net:443":{Handlers:{"/":{Proxy:"http://localhost:9999"}}}},
   }),/Another Tailscale/);
-  assert.throws(()=>verifyPrivateServeAvailability({TCP:{"3399":{}}}),
-    /may not be replaced/);
+  assert.deepEqual(verifyPrivateServeAvailability({TCP:{"3399":{}}}),
+    {compatible:true,existing:false});
   assert.throws(()=>verifyPrivateServeAvailability({AllowFunnel:{"my.example.ts.net:443":true}}),
     /Funnel/);
   assert.throws(()=>verifyPrivateServeAvailability("not-json"),SyntaxError);
+});
+
+test("HTTPS 8443 keeps another application on 443 untouched",async()=>{
+  const other={TCP:{"443":{HTTPS:true}},Web:{
+    "host.example.ts.net:443":{Handlers:{"/":{Proxy:"http://127.0.0.1:9000"}}}}};
+  assert.deepEqual(verifyPrivateServeAvailability(other,8443),{compatible:true,existing:false});
+  const calls=[];
+  await startFreePilot({setup:async()=>({origin:"https://host.example.ts.net:8443"}),
+    run:(cmd,args)=>{calls.push([cmd,...args]);return args.includes("status")?JSON.stringify(other):"";},
+    doctor:async()=>({ready:true,checks:[]}),notify:()=>{}});
+  assert.ok(calls.some(x=>x.includes("--https=8443")));
+  assert.throws(()=>verifyPrivateServeAvailability({AllowFunnel:{"host.example.ts.net:8443":true}},8443),/Funnel/);
+  assert.throws(()=>verifyPrivateServeAvailability({Web:{
+    "host.example.ts.net:8443":{Handlers:{"/":{Proxy:"http://localhost:9999"}}}}},8443),/Another Tailscale/);
 });

@@ -8,7 +8,7 @@ const file=join(dir,".env.local");
 const realmPath=join(dir,".private","oagent-realm.json");
 const realmTemplate=join(dir,"oagent-realm.json");
 export function renderOwnerRealm(template,{origin,password}){
-  if(!/^https:\/\/[a-z0-9.-]+\.ts\.net$/i.test(origin)||
+  if(!/^https:\/\/[a-z0-9.-]+\.ts\.net(?::8443)?$/i.test(origin)||
       typeof password!=="string"||!/^[a-f0-9]{48}$/.test(password))
     throw Error("Invalid private realm origin or generated password");
   const raw=JSON.stringify(template);
@@ -56,18 +56,27 @@ export function tailnetOrigin(env=process.env,execute=execFileSync) {
   name=String(name||"").replace(/^https:\/\//,"").replace(/\.$/,"");
   if(!/^[a-z0-9][a-z0-9-]{0,62}\.[a-z0-9][a-z0-9.-]{0,190}\.ts\.net$/i.test(name))
     throw Error("Use this computer's MagicDNS name ending .ts.net");
-  return "https://"+name.toLowerCase();
+  const port=String(env.OAGENT_SERVE_PORT||"443");
+  if(!["443","8443"].includes(port))throw Error("Use HTTPS port 443 or 8443");
+  return "https://"+name.toLowerCase()+(port==="443"?"":":"+port);
 }
 export async function setupPilot({env=process.env,notify=console.log,execute=execFileSync}={}){
-  const origin=tailnetOrigin(env,execute);
-  try{
-    const existing=await readFile(file,"utf8");
+  // Reuse the port selected at first setup; never rewrite identity secrets silently.
+  let existing=null;
+  try{existing=await readFile(file,"utf8");}
+  catch(error){if(error.code!=="ENOENT")throw error;}
+  const savedOrigin=existing?.match(/^OAGENT_ORIGIN=(https:\/\/[^\r\n]+)$/m)?.[1];
+  if(existing&&!savedOrigin)throw Error("Existing pilot origin is invalid");
+  const savedPort=savedOrigin?(new URL(savedOrigin).port||"443"):null;
+  const origin=tailnetOrigin({...env,
+    OAGENT_SERVE_PORT:env.OAGENT_SERVE_PORT||savedPort||"443"},execute);
+  if(existing){
     if(!existing.includes("OAGENT_ORIGIN="+origin+"\n"))
       throw Error("Pilot already configured for a different tailnet URL. Do not silently rotate keys or overwrite.");
     await ensurePrivateRealm(existing,origin);
     notify("Existing private secrets preserved: "+file);
     return {created:false,origin};
-  }catch(error){if(error.code!=="ENOENT")throw error;}
+  }
   const names=["OAGENT_PG_ADMIN_PASSWORD","OAGENT_RUNTIME_PASSWORD",
     "OAGENT_MIGRATION_PASSWORD","OAGENT_KEYCLOAK_DB_PASSWORD",
     "OAGENT_KEYCLOAK_ADMIN_PASSWORD","OAGENT_OWNER_PASSWORD"];

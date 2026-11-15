@@ -14,24 +14,28 @@ const allowedProxy=new Set(["http://127.0.0.1:8791",
 /** Fail closed if Tailscale already hosts any unrelated Serve or Funnel app.
  * Installing O-AGENT must not replace the user's existing private services.
  */
-export function verifyPrivateServeAvailability(json){
+export function verifyPrivateServeAvailability(json,port=443){
   const parsed=typeof json==="string"?JSON.parse(json):json;
   if(parsed==null)return {compatible:true,existing:false};
   if(typeof parsed!=="object"||Array.isArray(parsed))
     throw Error("Invalid existing Tailscale Serve status");
-  if(Object.values(parsed.AllowFunnel||{}).some(Boolean))
-    throw Error("An existing Funnel must be reviewed and disabled manually");
-  const web=Object.values(parsed.Web||{});
-  const handlers=web.flatMap(site=>Object.values(site?.Handlers||{}));
-  const tcp=Object.keys(parsed.TCP||{});
-  if(handlers.length===0){
-    if(web.length || tcp.length || Object.keys(parsed.Services||{}).length)
-      throw Error("Existing Tailscale configuration may not be replaced automatically");
-    return {compatible:true,existing:false};
-  }
-  if(handlers.some(h=>typeof h?.Proxy!=="string"||
-      !allowedProxy.has(h.Proxy))||tcp.some(p=>p!=="443"))
-    throw Error("Another Tailscale Serve app is configured");
+  if(![443,8443].includes(port))throw Error("Unsupported HTTPS port");
+  // Guard only OUR port; preserve unrelated Serve and Funnel sites on 443.
+  const onPort=key=>{
+    const value=String(key);
+    if(/^\\d+$/.test(value))return Number(value)===port;
+    const m=value.match(/:(\\d+)$/);
+    return Number(m?m[1]:443)===port;
+  };
+  if(Object.entries(parsed.AllowFunnel||{}).some(([key,enabled])=>onPort(key)&&Boolean(enabled)))
+    throw Error("Requested port already has a Funnel");
+  const sites=Object.entries(parsed.Web||{}).filter(([key])=>onPort(key));
+  const handlers=sites.flatMap(([,site])=>Object.values(site?.Handlers||{}));
+  const tcp=Object.entries(parsed.TCP||{}).filter(([key])=>onPort(key));
+  if(!sites.length&&!tcp.length)return {compatible:true,existing:false};
+  if(!handlers.length||handlers.some(h=>typeof h?.Proxy!=="string"||
+       !allowedProxy.has(h.Proxy))||tcp.some(([,v])=>v?.HTTPS!==true))
+    throw Error("Another Tailscale Serve app is configured on the requested port");
   return {compatible:true,existing:true};
 }
 /**
@@ -44,6 +48,7 @@ export async function startFreePilot({
   notify=console.log,
 }={}){
   const {origin}=await setup({notify});
+  const servePort=Number(new URL(origin).port||443);
   try{
     run("docker",["compose","version"]);
   }catch{
@@ -56,7 +61,7 @@ export async function startFreePilot({
   }
   try{
     verifyPrivateServeAvailability(
-      run("tailscale",["serve","status","--json"]));
+      run("tailscale",["serve","status","--json"]),servePort);
   }catch{
     throw Error("Existing Tailscale Serve/Funnel configuration could conflict. Review tailscale serve status manually; no service has been changed.");
   }
@@ -67,7 +72,7 @@ export async function startFreePilot({
   }
   try{
     // Serve (not Funnel) exposes the loopback gateway ONLY to tailnet devices.
-    run("tailscale",["serve","--bg","127.0.0.1:8791"]);
+    run("tailscale",["serve","--bg","--https="+servePort,"127.0.0.1:8791"]);
   }catch{
     throw Error("Tailscale Serve could not enable private HTTPS. Run tailscale serve status and check HTTPS in tailnet settings.");
   }
