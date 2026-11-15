@@ -231,6 +231,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
   Map<String, dynamic> me = {};
   List<Map<String, dynamic>> devices = [], runs = [], approvals = [], sessions = [];
   bool busy = false, syncing = false;
+  bool _rememberDevice = false;
   bool get connected => origin != null && _tokens != null && me.isNotEmpty;
   int get onlineDevices => devices.where(pilotDeviceOnline).length;
   int get activeRuns => runs.where((r) =>
@@ -254,6 +255,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
       final tokens = await _auth.signIn(target, cfg);
       origin = target; _config = cfg; _tokens = tokens;
       me = await _api('/v1/me');
+      _rememberDevice = rememberDevice;
       if (rememberDevice && tokens.refreshToken != null) {
         await _store.write(StoredPilotSession(target.origin, tokens.refreshToken!));
       } else {
@@ -263,6 +265,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
       await refresh();
     } catch (e) {
       error = pilotFriendlyError(e); _tokens = null; me = {};
+      _rememberDevice = false;
     } finally {
       busy = false; notifyListeners();
     }
@@ -278,6 +281,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
       final config = await _readConfig(target);
       final fresh = await _auth.renew(target, config, saved.refreshToken);
       origin = target; _config = config; _tokens = fresh;
+      _rememberDevice = true;
       me = await _api('/v1/me');
       if (fresh.refreshToken != null) {
         await _store.write(StoredPilotSession(target.origin, fresh.refreshToken!));
@@ -306,7 +310,9 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     }
     final renewed = await _auth.renew(origin!, _config!, current.refreshToken!);
     _tokens = renewed;
-    if (renewed.refreshToken != null) {
+    // Refreshing an in-memory session must never silently opt this phone
+    // into credential persistence after the user left Remember unchecked.
+    if (_rememberDevice && renewed.refreshToken != null) {
       await _store.write(StoredPilotSession(origin!.origin, renewed.refreshToken!));
     }
     return renewed.accessToken;
@@ -476,6 +482,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     _timer?.cancel();
     await _store.clear();
     _tokens = null; _config = null; me = {};
+    _rememberDevice = false;
     devices = []; runs = []; approvals = []; sessions = [];
     error = null; selectedWorkspace = null; notifyListeners();
   }
