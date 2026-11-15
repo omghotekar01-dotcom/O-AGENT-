@@ -320,12 +320,12 @@ class _WorkState extends State<_Work>{
       '\nSaved session: '+_val(savedSessionId,'New if supported')+
       '\n\nPrompt:\n'+text+
       '\n\nThis REQUESTS approval; nothing executes automatically.';
-    final confirmed=await showDialog<bool>(context:context,builder:(dialog)=>
-      AlertDialog(title:const Text('Review your next turn'),
+    final confirmed=await showCupertinoDialog<bool>(context:context,builder:(dialog)=>
+      CupertinoAlertDialog(title:const Text('Review your next turn'),
         content:SingleChildScrollView(child:SelectableText(details)),actions:[
-          TextButton(onPressed:()=>Navigator.pop(dialog,false),
+          CupertinoDialogAction(onPressed:()=>Navigator.pop(dialog,false),
             child:const Text('Cancel')),
-          FilledButton(onPressed:()=>Navigator.pop(dialog,true),
+          CupertinoDialogAction(isDefaultAction:true,onPressed:()=>Navigator.pop(dialog,true),
             child:const Text('Request approval')),
         ]));
     if(confirmed!=true||!mounted)return;
@@ -567,8 +567,8 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
       _toast(context,'Your laptop worker is offline. Your prompt has not been sent.');
       return;
     }
-    final yes=await showDialog<bool>(context:context,builder:(d)=>
-      AlertDialog(
+    final yes=await showCupertinoDialog<bool>(context:context,builder:(d)=>
+      CupertinoAlertDialog(
         title:const Text('Continue this exact Codex thread?'),
         content:SingleChildScrollView(child:SelectableText(
           'Trusted laptop: '+_val(device['name'])+
@@ -579,9 +579,9 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
           '\n\nThis first requests approval. A separate explicit '
           'approval is required before any worker executes.')),
         actions:[
-          TextButton(onPressed:()=>Navigator.pop(d,false),
+          CupertinoDialogAction(onPressed:()=>Navigator.pop(d,false),
             child:const Text('Cancel')),
-          FilledButton(onPressed:()=>Navigator.pop(d,true),
+          CupertinoDialogAction(isDefaultAction:true,onPressed:()=>Navigator.pop(d,true),
             child:const Text('Request supervised continuation')),
         ]));
     if(yes!=true||!mounted)return;
@@ -743,8 +743,8 @@ class _NativeRunDetailState extends State<NativeRunDetail>{
     }catch(e){if(mounted)setState(()=>error=pilotFriendlyError(e));}
   }
   Future<void> _supervise({required bool acknowledge}) async {
-    final approved=await showDialog<bool>(context:context,builder:(dialog)=>
-      AlertDialog(
+    final approved=await showCupertinoDialog<bool>(context:context,builder:(dialog)=>
+      CupertinoAlertDialog(
         title:Text(acknowledge?'Acknowledge interrupted execution?'
           :'Cancel this queued request?'),
         content:Text(acknowledge
@@ -754,9 +754,9 @@ class _NativeRunDetailState extends State<NativeRunDetail>{
           :'This cancels a run that has not started. It cannot undo a run '
             'that the worker has already executed.'),
         actions:[
-          TextButton(onPressed:()=>Navigator.pop(dialog,false),
+          CupertinoDialogAction(onPressed:()=>Navigator.pop(dialog,false),
             child:const Text('Keep current state')),
-          FilledButton(onPressed:()=>Navigator.pop(dialog,true),
+          CupertinoDialogAction(isDefaultAction:true,onPressed:()=>Navigator.pop(dialog,true),
             child:Text(acknowledge?'Mark failed; do not replay':'Cancel request')),
         ]));
     if(approved!=true||!mounted)return;
@@ -851,12 +851,12 @@ class _Inbox extends StatelessWidget{
       '\nExpires: '+_date(item['expires_at'])+
       '\nFingerprint: '+_val(item['action_hash'])+
       '\n\nExact request:\n'+_val(item['description']);
-    final ok=await showDialog<bool>(context:ctx,builder:(d)=>AlertDialog(
+    final ok=await showCupertinoDialog<bool>(context:ctx,builder:(d)=>CupertinoAlertDialog(
       title:Text(approve?'Approve exact request?':'Deny this request?'),
       content:SingleChildScrollView(child:SelectableText(details)),actions:[
-        TextButton(onPressed:()=>Navigator.pop(d,false),
+        CupertinoDialogAction(onPressed:()=>Navigator.pop(d,false),
           child:const Text('Cancel')),
-        FilledButton(onPressed:()=>Navigator.pop(d,true),
+        CupertinoDialogAction(isDefaultAction:true,onPressed:()=>Navigator.pop(d,true),
           child:Text(approve?'Approve once':'Deny')),
       ]));
     if(ok!=true||!ctx.mounted)return;
@@ -908,16 +908,16 @@ class _Devices extends StatelessWidget{
   const _Devices({required this.c});
   final NativePilotController c;
   Future<void> _revoke(BuildContext context,Map<String,dynamic> device) async {
-    final confirmed = await showDialog<bool>(context:context,builder:(dialog)=>
-      AlertDialog(title:const Text('Revoke this trusted worker?'),
+    final confirmed = await showCupertinoDialog<bool>(context:context,builder:(dialog)=>
+      CupertinoAlertDialog(title:const Text('Revoke this trusted worker?'),
         content:SelectableText('Device: '+_val(device['name'])+
           '\nID: '+_val(device['id'])+
           '\n\nThis permanently removes its authorization. '
           'Reconnect using a fresh owner-approved enrollment.'),
         actions:[
-          TextButton(onPressed:()=>Navigator.pop(dialog,false),
+          CupertinoDialogAction(onPressed:()=>Navigator.pop(dialog,false),
             child:const Text('Cancel')),
-          FilledButton(onPressed:()=>Navigator.pop(dialog,true),
+          CupertinoDialogAction(isDestructiveAction:true,onPressed:()=>Navigator.pop(dialog,true),
             child:const Text('Revoke device')),
         ]));
     if(confirmed!=true||!context.mounted)return;
@@ -992,8 +992,8 @@ class _NativeEnrollPanelState extends State<_NativeEnrollPanel> {
         _toast(context,'This worker has already been enrolled.');
         return;
       }
-      final accepted=await showDialog<bool>(context:context,builder:(d)=>
-        AlertDialog(
+      final accepted=await showCupertinoDialog<bool>(context:context,builder:(d)=>
+        CupertinoAlertDialog(
           title:const Text('Verify laptop identity'),
           content:SingleChildScrollView(child:Column(
             mainAxisSize:MainAxisSize.min,
@@ -1011,9 +1011,9 @@ class _NativeEnrollPanelState extends State<_NativeEnrollPanel> {
               Text('Expires: '+_date(inspected['expiresAt'])),
             ])),
           actions:[
-            TextButton(onPressed:()=>Navigator.pop(d,false),
+            CupertinoDialogAction(onPressed:()=>Navigator.pop(d,false),
               child:const Text('Not my device')),
-            FilledButton(onPressed:()=>Navigator.pop(d,true),
+            CupertinoDialogAction(isDefaultAction:true,onPressed:()=>Navigator.pop(d,true),
               child:const Text('Fingerprint matches · Approve')),
           ],
         ));
@@ -1073,14 +1073,14 @@ class _More extends StatelessWidget{
             label:const Text('Earlier native projects and Codex')),
           const SizedBox(height:8),
           TextButton.icon(onPressed:()async{
-            final ok=await showDialog<bool>(context:context,builder:(d)=>
-              AlertDialog(title:const Text('Sign out of this phone?'),
+            final ok=await showCupertinoDialog<bool>(context:context,builder:(d)=>
+              CupertinoAlertDialog(title:const Text('Sign out of this phone?'),
                 content:const Text('Only the encrypted phone session will '
                   'be cleared. Your laptop and server data remain intact.'),
                 actions:[
-                  TextButton(onPressed:()=>Navigator.pop(d,false),
+                  CupertinoDialogAction(onPressed:()=>Navigator.pop(d,false),
                     child:const Text('Cancel')),
-                  FilledButton(onPressed:()=>Navigator.pop(d,true),
+                  CupertinoDialogAction(isDestructiveAction:true,onPressed:()=>Navigator.pop(d,true),
                     child:const Text('Sign out')),
                 ]));
             if(ok==true)await c.signOut();
