@@ -782,6 +782,21 @@ class _NativeRunDetailState extends State<NativeRunDetail>{
               style:const TextStyle(color:_muted)),
             if(run!['error']!=null)Text(_val(run!['error']),
               style:const TextStyle(color:Colors.red)),
+            if(run!['status']=='waiting_for_approval')...[
+              const SizedBox(height:12),
+              FilledButton.icon(
+                icon:const Icon(Icons.verified_user_outlined),
+                label:const Text('Review this real action in Inbox'),
+                onPressed:() async {
+                  await widget.c.refresh();
+                  if(!mounted)return;
+                  await Navigator.push(context,CupertinoPageRoute<void>(
+                    builder:(_)=>Scaffold(
+                      appBar:AppBar(title:const Text('Review exact action')),
+                      body:_Inbox(c:widget.c))));
+                  await _reload();
+                }),
+            ],
             if(['waiting_for_approval','queued'].contains(run!['status']))...[
               const SizedBox(height:12),
               OutlinedButton.icon(
@@ -801,8 +816,12 @@ class _NativeRunDetailState extends State<NativeRunDetail>{
         const Text('LIVE EVENT HISTORY',style:TextStyle(
           color:OTheme.violet,fontWeight:FontWeight.w800)),
         const SizedBox(height:10),
-        if(events.isEmpty)const _Blank('Waiting for live updates',
-          'Worker events will appear after an approved action starts.')
+        if(events.isEmpty) _Blank('No worker events yet',
+          run!['status']=='waiting_for_approval'
+            ?'This project-writing or sensitive action needs your exact '
+              'approval. Open Review this real action in Inbox above.'
+            :'An online worker will report real agent output here. '
+              'Queued work is not a fabricated running session.')
         else for(final ev in events)...[
           _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,
             children:[
