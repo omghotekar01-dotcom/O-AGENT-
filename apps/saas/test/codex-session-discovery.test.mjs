@@ -65,15 +65,20 @@ test("Codex app-server discovery only sends list/read RPC and never starts work"
             const msg=JSON.parse(line);
             if(!msg.method)continue;
             called.push(msg.method);
+            if(msg.method==="thread/read")
+              assert.equal(msg.params.includeTurns,false,
+                "Unbounded history must not be loaded by thread/read");
             const result=msg.method==="initialize"?{}:
               msg.method==="thread/list"?{data:[{id:"saved-codex-1234",
                 cwd:root,source:{kind:"cli"},name:"Existing Codex task",
                 preview:"Fix native login",updatedAt:1730831111}]}:
-              msg.method==="thread/read"?{thread:{turns:[{items:[
+              msg.method==="thread/read"?{thread:{
+                id:"saved-codex-1234",cwd:root,turns:[]}}:
+              msg.method==="thread/turns/list"?{data:[{items:[
                 {type:"userMessage",content:[{type:"text",
                   text:"Continue existing task"}]},
                 {type:"agentMessage",text:"Files updated"}
-              ]}]}}:{};
+              ]}]}:{};
             queueMicrotask(()=>process.stdout.write(
               JSON.stringify({id:msg.id,result})+"\n"));
           }
@@ -84,7 +89,10 @@ test("Codex app-server discovery only sends list/read RPC and never starts work"
       };
       const sessions=await discoverStoredCodexSessions({
         root,isWindows:false,spawnImpl,timeoutMs:2000,env:{PATH:"/usr/bin"}});
-      assert.deepEqual(called,["initialize","initialized","thread/list","thread/read"]);
+      assert.deepEqual(called,["initialize","initialized","thread/list",
+        "thread/read","thread/turns/list"]);
+      assert.ok(!called.includes("thread/resume"));
+      assert.ok(!called.includes("turn/start"));
       assert.equal(sessions.length,1);
       assert.equal(sessions[0].sessionId,"saved-codex-1234");
       assert.deepEqual(sessions[0].messages,[
