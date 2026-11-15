@@ -1,7 +1,7 @@
 name: o_agent_mobile
 description: Native Flutter mobile mission control for O-AGENT.
 publish_to: none
-version: 0.16.0+20
+version: 0.17.0+21
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
