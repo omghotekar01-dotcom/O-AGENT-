@@ -78,7 +78,9 @@ async function inspectRoles(query=psql){
 }
 export async function repairDbAuth({apply=false,read=readFile,
   inspect=inspectRoles,query=psql,backup=backupPilot,
-  verify=verifyBackup}={}){
+  verify=verifyBackup,
+  keyDirectory=join(homedir(),".oagent-recovery-keys"),
+  backupDirectory=join(directory,"backups")}={}){
   const secrets=parseRoleSecrets(await read(join(directory,".env.local"),"utf8"));
   const saved=await inspect(query);
   const mismatch=Object.keys(names).filter(role=>!
@@ -89,12 +91,12 @@ export async function repairDbAuth({apply=false,read=readFile,
   // access. Require an authenticated, complete and verified encrypted backup
   // of both databases before touching even one role.
   const stamp=new Date().toISOString().replace(/[:.]/g,"-");
-  const recovery=join(homedir(),".oagent-recovery-keys");
+  const recovery=keyDirectory;
   await mkdir(recovery,{recursive:true,mode:0o700});
   const keyPath=join(recovery,"pilot-repair-"+stamp+".key");
   const passphrase=randomBytes(40).toString("base64url");
   await writeFile(keyPath,passphrase+"\n",{flag:"wx",mode:0o600});
-  const backupFolder=join(directory,"backups","pre-db-auth-repair-"+stamp);
+  const backupFolder=join(backupDirectory,"pre-db-auth-repair-"+stamp);
   await backup({password:passphrase,output:backupFolder});
   for(const database of ["oagent","keycloak"])
     await verify(join(backupFolder,database+".oagent.enc"),passphrase);
