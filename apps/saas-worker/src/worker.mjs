@@ -209,6 +209,21 @@ export class SignedCloudWorker {
       });
       if(this.revoked)return;
       await this.api("/v1/device/sessions",{body:{sessions}});
+      // Only an actual working local Codex app-server with at least one
+      // verified stored thread can activate the Codex continuation adapter.
+      // All agent turns still require a separate owner approval, and "0"
+      // remains an explicit opt-out. No API key or password is provisioned.
+      if(sessions.length>0 &&
+         this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC!=="0" &&
+         this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC!=="1"){
+        const root=await realpath(this.root);
+        await this.api("/v1/device/capabilities",{
+          body:{capabilities:supported({
+            ...this.env,OAGENT_ENABLE_CODEX_LOCAL_SYNC:"1",
+          }),workspaceRoot:root},
+        });
+        this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC="1";
+      }
     }catch{
       // Optional read-only discovery must not stop the signed worker or
       // advertise stale snapshots as active IDE connections.
