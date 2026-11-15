@@ -103,7 +103,7 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
     'claude_sdk' => LucideIcons.bot,
     'copilot_sdk' => LucideIcons.workflow,
     'vscode' => LucideIcons.monitor,
-    'github' => LucideIcons.github,
+    'github' => LucideIcons.gitBranch,
     'cursor' => LucideIcons.mousePointer2,
     'chatgpt' => LucideIcons.messageCircle,
     'claude_web' => LucideIcons.messagesSquare,
