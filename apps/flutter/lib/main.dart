@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'core/controller.dart';
 import 'core/push_bootstrap.dart';
 import 'theme.dart';
@@ -32,6 +33,9 @@ class _OAgentAppState extends State<OAgentApp> {
         title: 'O-AGENT',
         debugShowCheckedModeBanner: false,
         theme: OTheme.studio(),
-        home: NativePilotShell(legacy: controller),
+        home: CupertinoTheme(
+          data: OTheme.sharedCupertino,
+          child: NativePilotShell(legacy: controller),
+        ),
       );
 }
