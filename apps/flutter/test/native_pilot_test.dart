@@ -103,6 +103,7 @@ void main(){
       if(url.path=='/v1/me')return {'tenantId':'tenant-test','role':'owner'};
       if(url.path=='/v1/devices')return {'devices':[online]};
       if(url.path=='/v1/sessions')return {'sessions':[]};
+      if(url.path=='/v1/provider-sessions')return {'sessions':[]};
       if(url.path=='/v1/runs'&&method=='GET')return {'runs':[]};
       if(url.path=='/v1/approvals'&&method=='GET'){
         return {'approvals':approvalCreated&&!wasApproved?[pending]:[]};
@@ -159,6 +160,7 @@ void main(){
       if(url.path=='/v1/runs')return {'runs':[]};
       if(url.path=='/v1/approvals')return {'approvals':[]};
       if(url.path=='/v1/sessions')return {'sessions':[]};
+      if(url.path=='/v1/provider-sessions')return {'sessions':[]};
       throw StateError('Unexpected '+url.path);
     }
     final c=NativePilotController(request:request,
@@ -247,5 +249,77 @@ void main(){
     expect(writes['/v1/runs/'+runId+'/resolve-interrupted']?['confirm'],
       'MARK_INTERRUPTED_RUN_FAILED');
   });
+
+  test('SDK conversation continuation is device, provider and cwd bound',
+      () async {
+    final id='11111111-1111-4111-8111-111111111111';
+    final device={
+      'id':id,'name':'Trusted laptop',
+      'last_seen_at':DateTime.now().toUtc().toIso8601String(),
+      'revoked_at':null,'workspace_root':'/safe/workspace',
+      'capabilities':['claude_agent_turn','copilot_sdk_turn'],
+    };
+    final saved={
+      'kind':'claude_agent_turn','deviceId':id,
+      'deviceName':'Trusted laptop',
+      'sessionId':'claude-sdk-session-34567',
+      'cwd':'/safe/workspace/repository',
+      'lastPrompt':'Review the code changes',
+      'updatedAt':DateTime.now().toUtc().toIso8601String(),
+    };
+    final posted=<Map<String,dynamic>>[];
+    Future<Map<String,dynamic>> request(Uri url,String method,
+        Map<String,dynamic>? body,String? token,Map<String,String> headers) async {
+      if(url.path=='/v1/public-config')return {
+        'authEnabled':true,'audience':'oagent-api',
+        'authorizationEndpoint':origin+
+          'auth/realms/oagent/protocol/openid-connect/auth',
+        'tokenEndpoint':origin+
+          'auth/realms/oagent/protocol/openid-connect/token'};
+      expect(token,'short-lived-in-memory-token');
+      if(url.path=='/v1/me')return {'tenantId':'tenant-test','role':'owner'};
+      if(url.path=='/v1/devices')return {'devices':[device]};
+      if(url.path=='/v1/runs' && method=='GET')return {'runs':[]};
+      if(url.path=='/v1/approvals')return {'approvals':[]};
+      if(url.path=='/v1/sessions')return {'sessions':[]};
+      if(url.path=='/v1/provider-sessions')return {'sessions':[saved]};
+      if(url.path=='/v1/provider-sessions/claude_agent_turn/claude-sdk-session-34567'){
+        expect(url.queryParameters['deviceId'],id);
+        return {'turns':[{'prompt':'Review the code changes',
+          'response':'Completed the original SDK work'}]};
+      }
+      if(url.path=='/v1/runs' && method=='POST'){
+        posted.add(body!);
+        return {'runId':'33333333-3333-4333-8333-333333333333',
+          'status':'waiting_for_approval'};
+      }
+      throw StateError('Unexpected request '+url.toString());
+    }
+    final c=NativePilotController(
+      request:request,auth:FakeLogin(),store:FakeStore());
+    addTearDown(c.dispose);
+    await c.signIn(origin);
+    expect(c.connected,true);
+    expect(c.providerSessions.length,1);
+    final history=await c.providerHistory(kind:'claude_agent_turn',
+      deviceId:id,sessionId:'claude-sdk-session-34567');
+    expect(history.single['response'],'Completed the original SDK work');
+    await expectLater(c.requestTurn(device:device,kind:'claude_agent_turn',
+      mode:'read_only',prompt:'Continue',
+      sessionId:'guessed-other-sdk-123456'),
+      throwsA(isA<PilotFailure>()));
+    await expectLater(c.requestTurn(device:device,kind:'copilot_sdk_turn',
+      mode:'read_only',prompt:'Continue',
+      sessionId:'claude-sdk-session-34567'),
+      throwsA(isA<PilotFailure>()));
+    expect(posted,isEmpty);
+    await c.requestTurn(device:device,kind:'claude_agent_turn',
+      mode:'read_only',prompt:'Continue verified session',
+      sessionId:'claude-sdk-session-34567');
+    expect(posted.single['cwd'],'/safe/workspace/repository');
+    expect(posted.single['sessionId'],'claude-sdk-session-34567');
+    expect(posted.single['kind'],'claude_agent_turn');
+  });
+
 
 }
