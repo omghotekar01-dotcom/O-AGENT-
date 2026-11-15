@@ -229,7 +229,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
   PilotTokens? _tokens;
   String? error, selectedWorkspace;
   Map<String, dynamic> me = {};
-  List<Map<String, dynamic>> devices = [], runs = [], approvals = [];
+  List<Map<String, dynamic>> devices = [], runs = [], approvals = [], sessions = [];
   bool busy = false, syncing = false;
   bool get connected => origin != null && _tokens != null && me.isNotEmpty;
   int get onlineDevices => devices.where(pilotDeviceOnline).length;
@@ -331,10 +331,12 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final responses = await Future.wait([
         _api('/v1/devices'), _api('/v1/runs'), _api('/v1/approvals'),
+        _api('/v1/sessions'),
       ]);
       devices = _items(responses[0], 'devices');
       runs = _items(responses[1], 'runs');
       approvals = _items(responses[2], 'approvals');
+      sessions = _items(responses[3], 'sessions');
       error = null;
     } catch (e) {
       error = pilotFriendlyError(e);
@@ -359,10 +361,27 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     if (!((device['capabilities'] as List?)?.contains(kind) ?? false)) {
       throw const PilotFailure('This worker has not enabled that provider adapter.');
     }
-    if (kind == 'codex_cli_turn' && (sessionId == null || sessionId.isEmpty)) {
-      throw const PilotFailure('Codex requires an existing verified native session ID.');
+    Map<String, dynamic>? verified;
+    if (kind == 'codex_cli_turn') {
+      for (final found in sessions) {
+        if (found['sessionId'] == sessionId &&
+            found['deviceId'] == device['id']) {
+          verified = found;
+          break;
+        }
+      }
+      if (verified == null) {
+        throw const PilotFailure('Select an actual discovered Codex session on this laptop.');
+      }
+      final lastSync = DateTime.tryParse(verified['syncedAt']?.toString() ?? '');
+      if (lastSync == null ||
+          DateTime.now().difference(lastSync).inMinutes > 5) {
+        throw const PilotFailure('Saved Codex list is stale. Refresh while the laptop worker is online.');
+      }
     }
-    final cwd = device['workspace_root']?.toString() ?? '';
+    final cwd = kind == 'codex_cli_turn'
+      ? verified!['cwd']?.toString() ?? ''
+      : device['workspace_root']?.toString() ?? '';
     if (kind != 'workspace_inventory' && cwd.isEmpty) {
       throw const PilotFailure('Worker has not verified an enrolled project folder.');
     }
@@ -424,7 +443,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     _timer?.cancel();
     await _store.clear();
     _tokens = null; _config = null; me = {};
-    devices = []; runs = []; approvals = [];
+    devices = []; runs = []; approvals = []; sessions = [];
     error = null; selectedWorkspace = null; notifyListeners();
   }
   void _startPolling() {
