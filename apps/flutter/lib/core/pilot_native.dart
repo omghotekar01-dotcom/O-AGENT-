@@ -331,13 +331,20 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final responses = await Future.wait([
         _api('/v1/devices'), _api('/v1/runs'), _api('/v1/approvals'),
-        _api('/v1/sessions'),
       ]);
       devices = _items(responses[0], 'devices');
       runs = _items(responses[1], 'runs');
       approvals = _items(responses[2], 'approvals');
-      sessions = _items(responses[3], 'sessions');
-      error = null;
+      try {
+        final saved = await _api('/v1/sessions');
+        sessions = _items(saved, 'sessions');
+        error = null;
+      } on PilotFailure catch (e) {
+        if (e.statusCode != 404) rethrow;
+        sessions = [];
+        error = 'The laptop backend needs the saved-session update. '
+          'Your existing devices, runs and approvals remain accessible.';
+      }
     } catch (e) {
       error = pilotFriendlyError(e);
     } finally {
