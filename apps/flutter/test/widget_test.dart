@@ -10,10 +10,10 @@ void main() {
   testWidgets('primary experience is native instead of a website', (tester) async {
     await tester.pumpWidget(const OAgentApp());
     expect(find.text('Sign in to native app'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Earlier native project workspace'),
-      180.0, scrollable: find.byType(Scrollable).first);
-    await tester.pumpAndSettle();
-    expect(find.text('Earlier native project workspace'), findsOneWidget);
+    // The previous remote experience is integrated into the signed-in
+    // Remote tab; a second "earlier workspace" entry is not the home flow.
+    expect(find.text('Your agents.\nOne command center.'), findsOneWidget);
+    expect(find.text('Earlier native project workspace'), findsNothing);
     expect(find.textContaining('Private HTTPS address'), findsOneWidget);
     expect(find.text('Open secure mobile command center'), findsNothing);
     expect(find.text('Operator token'), findsNothing);
