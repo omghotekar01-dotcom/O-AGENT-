@@ -214,12 +214,15 @@ String pilotCapabilityLabel(String kind) => switch (kind) {
 
 class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
   NativePilotController({PilotRequest? request, PilotAuthenticator? auth,
-    PilotSessionStore? store})
-    : _request = request ?? securePilotRequest,
+    PilotSessionStore? store, DateTime Function()? now})
+    : _now = now ?? DateTime.now,
+      _request = request ?? securePilotRequest,
       _auth = auth ?? AppAuthPilotAuthenticator(),
       _store = store ?? const SecurePilotSessionStore() {
     WidgetsBinding.instance.addObserver(this);
   }
+  final DateTime Function() _now;
+  Future<PilotTokens>? _refreshInProgress;
   final PilotRequest _request;
   final PilotAuthenticator _auth;
   final PilotSessionStore _store;
@@ -302,21 +305,30 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     if (current == null || origin == null || _config == null) {
       throw const PilotFailure('Sign in securely to continue.');
     }
-    if (DateTime.now().isBefore(
+    if (_now().isBefore(
         current.expiresAt.subtract(const Duration(seconds: 45)))) {
       return current.accessToken;
     }
     if (current.refreshToken == null) {
       throw const PilotFailure('Your session expired. Sign in again.');
     }
-    final renewed = await _auth.renew(origin!, _config!, current.refreshToken!);
-    _tokens = renewed;
-    // Refreshing an in-memory session must never silently opt this phone
-    // into credential persistence after the user left Remember unchecked.
-    if (_rememberDevice && renewed.refreshToken != null) {
-      await _store.write(StoredPilotSession(origin!.origin, renewed.refreshToken!));
+    // All parallel native requests must share the same OAuth refresh.
+    // Reusing a rotating refresh token simultaneously can invalidate login.
+    final pending = _refreshInProgress;
+    if (pending != null) return (await pending).accessToken;
+    final renewal = _auth.renew(origin!, _config!, current.refreshToken!);
+    _refreshInProgress = renewal;
+    try {
+      final renewed = await renewal;
+      _tokens = renewed;
+      // Never persist a refreshed key unless the owner chose Remember.
+      if (_rememberDevice && renewed.refreshToken != null) {
+        await _store.write(StoredPilotSession(origin!.origin, renewed.refreshToken!));
+      }
+      return renewed.accessToken;
+    } finally {
+      if (identical(_refreshInProgress,renewal)) _refreshInProgress = null;
     }
-    return renewed.accessToken;
   }
   Future<Map<String, dynamic>> _api(String path, {
     String method = 'GET', Map<String, dynamic>? body,
@@ -521,6 +533,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     _timer?.cancel();
     await _store.clear();
     _tokens = null; _config = null; me = {};
+    _refreshInProgress = null;
     _rememberDevice = false;
     devices = []; runs = []; approvals = []; sessions = []; providerSessions = [];
     error = null; selectedWorkspace = null; notifyListeners();
