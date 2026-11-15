@@ -386,6 +386,7 @@ class _WorkState extends State<_Work>{
             onTap:()=>Navigator.push(context,MaterialPageRoute<void>(
               builder:(_)=>NativeSavedSessionDetail(
                 saved:saved,
+                c:widget.c,navigate:widget.navigate,
                 canContinue:online.any((m)=>m['id']==saved['deviceId'] &&
                   ((m['capabilities'] as List?)?.contains('codex_cli_turn')??false)),
                 onContinue:()=>_useSavedSession(saved)))),
@@ -503,63 +504,154 @@ class _WorkState extends State<_Work>{
   }
 }
 
-class NativeSavedSessionDetail extends StatelessWidget {
+class NativeSavedSessionDetail extends StatefulWidget {
   const NativeSavedSessionDetail({super.key,required this.saved,
-    required this.canContinue,required this.onContinue});
+    required this.canContinue,required this.onContinue,
+    required this.c,required this.navigate});
   final Map<String,dynamic> saved;
   final bool canContinue;
   final VoidCallback onContinue;
+  final NativePilotController c;
+  final ValueChanged<int> navigate;
+  @override State<NativeSavedSessionDetail> createState() =>
+    _NativeSavedSessionDetailState();
+}
+class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
+  final composer=TextEditingController();
+  String mode='read_only';
+  bool sending=false;
+  @override void dispose(){composer.dispose();super.dispose();}
+  Future<void> _send() async {
+    if(sending||!widget.canContinue)return;
+    final message=composer.text.trim();
+    if(message.isEmpty){
+      _toast(context,'Write the next prompt to continue this saved session.');
+      return;
+    }
+    final device=widget.c.devices.where((d)=>
+      d['id']==widget.saved['deviceId']).firstOrNull;
+    if(device==null || !pilotDeviceOnline(device)){
+      _toast(context,'Your laptop worker is offline. Your prompt has not been sent.');
+      return;
+    }
+    final yes=await showDialog<bool>(context:context,builder:(d)=>
+      AlertDialog(
+        title:const Text('Continue this exact Codex thread?'),
+        content:SingleChildScrollView(child:SelectableText(
+          'Trusted laptop: '+_val(device['name'])+
+          '\nSaved thread: '+_val(widget.saved['title'])+
+          '\nWorkspace: '+_val(widget.saved['cwd'])+
+          '\nMode: '+_name(mode)+
+          '\n\nNext prompt:\n'+message+
+          '\n\nThis first requests approval. A separate explicit '
+          'approval is required before any worker executes.')),
+        actions:[
+          TextButton(onPressed:()=>Navigator.pop(d,false),
+            child:const Text('Cancel')),
+          FilledButton(onPressed:()=>Navigator.pop(d,true),
+            child:const Text('Request supervised continuation')),
+        ]));
+    if(yes!=true||!mounted)return;
+    setState(()=>sending=true);
+    try {
+      await widget.c.requestTurn(device:device,kind:'codex_cli_turn',
+        mode:mode,prompt:message,sessionId:widget.saved['sessionId']?.toString());
+      if(!mounted)return;
+      composer.clear();
+      // A run cannot begin merely by submitting a prompt. Take the user
+      // directly to the native exact-action approval inbox.
+      widget.navigate(2);
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:Text('Prompt saved as a supervised request. '
+          'Review it in the native approval inbox.')));
+    }catch(error){
+      if(mounted)_toast(context,pilotFriendlyError(error));
+    }finally{
+      if(mounted)setState(()=>sending=false);
+    }
+  }
   @override Widget build(BuildContext context){
-    final messages=(saved['messages'] as List?)??[];
+    final messages=(widget.saved['messages'] as List?)??[];
     return Scaffold(
-      appBar:AppBar(title:const Text('Saved Codex conversation')),
+      appBar:AppBar(title:const Text('Codex conversation')),
       body:SafeArea(child:ListView(padding:const EdgeInsets.all(18),children:[
-        _Heading(_val(saved['title']),
-          'Real persisted CLI / VS Code conversation snapshot, not a live IDE takeover.'),
+        _Heading(_val(widget.saved['title']),
+          'Real stored CLI/VS Code conversation history, not live screen control.'),
         _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-          Text('Worker: '+_val(saved['deviceName']),
+          Text('Worker: '+_val(widget.saved['deviceName']),
             style:const TextStyle(fontWeight:FontWeight.w800)),
           const SizedBox(height:6),
-          SelectableText('Folder: '+_val(saved['cwd']),
+          SelectableText('Enrolled folder: '+_val(widget.saved['cwd']),
             style:const TextStyle(fontSize:12,color:_muted)),
-          Text('Last activity: '+_date(saved['updatedAt']),
+          Text('Last activity: '+_date(widget.saved['updatedAt']),
             style:const TextStyle(fontSize:12,color:_muted)),
-          Text('Last synchronized: '+_date(saved['syncedAt']),
+          Text('Last synchronized: '+_date(widget.saved['syncedAt']),
             style:const TextStyle(fontSize:12,color:_muted)),
         ])),
         const SizedBox(height:20),
-        const Text('PERSISTED CONVERSATION',style:TextStyle(
+        const Text('SAVED CONVERSATION',style:TextStyle(
           color:OTheme.violet,fontWeight:FontWeight.w800)),
         const SizedBox(height:10),
         if(messages.isEmpty)
-          const _Blank('No readable text in the saved snapshot',
-            'The Codex app-server returned metadata only for this thread. '
-            'Recent text is shown only where the provider makes it available.')
+          const _Blank('No readable messages in this saved snapshot',
+            'Codex provided metadata only. Recent messages appear here '
+            'when the installed provider version exposes them.')
         else for(final message in messages)...[
           _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text(message is Map && message['role']=='user'
-              ?'YOU':'CODEX',
+            Text(message is Map && message['role']=='user'?'YOU':'CODEX',
               style:const TextStyle(color:OTheme.violet,
                 fontWeight:FontWeight.w800,fontSize:12)),
             const SizedBox(height:7),
             SelectableText(message is Map
-              ?_val(message['text']):'Unsupported message',
+              ?_val(message['text']):'Unsupported saved message',
               style:const TextStyle(height:1.5)),
           ])),
           const SizedBox(height:10),
         ],
-        const SizedBox(height:10),
-        FilledButton.icon(
-          onPressed:canContinue?(){
-            onContinue();
+        const SizedBox(height:13),
+        if(widget.canContinue) _Panel(child:Column(
+          crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+            const Text('NEXT INSTRUCTION',style:TextStyle(
+              color:OTheme.violet,fontWeight:FontWeight.w800)),
+            const SizedBox(height:7),
+            const Text('Continue this saved thread on your enrolled laptop. '
+              'Actual actions still require separate approval.',
+              style:TextStyle(color:_muted,fontSize:12,height:1.4)),
+            const SizedBox(height:12),
+            TextField(controller:composer,minLines:3,maxLines:6,maxLength:4000,
+              decoration:const InputDecoration(
+                border:OutlineInputBorder(),
+                hintText:'Continue this task and show the changes…',
+                labelText:'Write the next prompt')),
+            const SizedBox(height:10),
+            DropdownButtonFormField<String>(initialValue:mode,
+              decoration:const InputDecoration(
+                border:OutlineInputBorder(),labelText:'Permissions'),
+              items:const [
+                DropdownMenuItem(value:'read_only',
+                  child:Text('Read-only (no workspace edits)')),
+                DropdownMenuItem(value:'workspace_write',
+                  child:Text('Allow project edits with approvals')),
+              ],
+              onChanged:sending?null:(v)=>setState(()=>mode=v??'read_only')),
+            const SizedBox(height:14),
+            FilledButton.icon(
+              onPressed:sending?null:_send,
+              icon:const Icon(Icons.send_outlined),
+              label:Text(sending?'Creating request…':'Review prompt & request approval')),
+          ]))
+        else const _Blank('Read only for now',
+          'The saved history is available, but this worker is offline '
+          'or has not enabled supervised Codex continuation.'),
+        const SizedBox(height:12),
+        OutlinedButton.icon(
+          onPressed:widget.canContinue?(){
+            widget.onContinue();
             Navigator.pop(context);
           }:null,
-          icon:const Icon(Icons.play_arrow),
-          label:const Text('Select this thread to continue')),
-        if(!canContinue)const Text(
-          'This thread is readable, but Codex execution is disabled or '
-          'the worker is offline. The worker must explicitly enable Codex turns.',
-          style:TextStyle(color:_muted,fontSize:12,height:1.5)),
+          icon:const Icon(Icons.work_outline),
+          label:const Text('Use the detailed Work controls')),
       ])),
     );
   }
