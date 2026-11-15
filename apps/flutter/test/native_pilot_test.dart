@@ -90,6 +90,7 @@ void main(){
       expect(bearer,'short-lived-in-memory-token');
       if(url.path=='/v1/me')return {'tenantId':'tenant-test','role':'owner'};
       if(url.path=='/v1/devices')return {'devices':[online]};
+      if(url.path=='/v1/sessions')return {'sessions':[]};
       if(url.path=='/v1/runs'&&method=='GET')return {'runs':[]};
       if(url.path=='/v1/approvals'&&method=='GET'){
         return {'approvals':approvalCreated&&!wasApproved?[pending]:[]};
