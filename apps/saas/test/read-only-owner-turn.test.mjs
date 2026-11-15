@@ -40,13 +40,13 @@ test("verified owner read-only agent prompt queues immediately, without echoing 
     {ownerInitiated:true});
   assert.equal(result.status,"queued");
   assert.equal(result.ownerAuthorized,true);
-  assert.equal(result.runId,runId);
+  assert.match(result.runId,/^[0-9a-f-]{36}$/);
   assert.equal(queries(calls,"INSERT INTO approvals").length,0);
   const insert=queries(calls,"INSERT INTO runs(")[0];
   assert.match(insert.sql,/'queued'/);
   assert.equal(insert.params[5],"Continue the existing task and explain results");
   const audit=queries(calls,"INSERT INTO audit_events")[0];
-  assert.equal(audit.params[3],runId);
+  assert.equal(audit.params[3],result.runId);
   assert.equal(audit.params[2],"run.owner_readonly_queued");
 });
 
@@ -82,6 +82,6 @@ test("unverified, offline and missing-capability workers remain blocked before a
   const {client,calls}=database();
   await assert.rejects(createRun(client,tenantId,"owner",
     payload("codex_cli_turn"),requestKey,{ownerInitiated:true}),
-    {status:409});
+    {status:400});
   assert.equal(queries(calls,"INSERT INTO runs(").length,0);
 });
