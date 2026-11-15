@@ -10,7 +10,7 @@ on:
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
   push:
-    branches: [main, feat/saas-secure-control-plane-20261114]
+    branches: [main]
     paths:
       - "apps/saas/**"
       - "apps/saas-worker/**"
