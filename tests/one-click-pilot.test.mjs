@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {launchOneClick,prepareDocker} from "../scripts/one-click-pilot.mjs";
+import {launchOneClick,prepareDocker,startExistingRemoteGateway} from "../scripts/one-click-pilot.mjs";
 
 const file=path=>readFileSync(new URL("../"+path,import.meta.url),"utf8");
 
@@ -11,11 +11,12 @@ test("one double-click starts Docker, private server, native login, phone instru
     prepare:async()=>steps.push("docker"),
     start:async()=>{steps.push("server");return {ready:true}},
     register:async()=>{steps.push("oauth");return {created:true}},
+    previousGateway:async()=>steps.push("previous-gateway"),
     mobile:async()=>steps.push("phone"),
     worker:async()=>steps.push("worker"),
     print:msg=>messages.push(msg),
   });
-  assert.deepEqual(steps,["docker","server","oauth","phone","worker"]);
+  assert.deepEqual(steps,["docker","server","oauth","previous-gateway","phone","worker"]);
   assert.ok(messages.some(s=>s.includes("Native phone login registered")));
   assert.ok(messages.some(s=>s.includes("fingerprint")));
 });
@@ -94,4 +95,33 @@ test("Windows entry point never deletes Docker data, resets Tailscale or calls m
   assert.match(helper,/startWindowsWorker/);
   for(const script of [startup,worker,helper])
     assert.doesNotMatch(script,/docker compose down -v|tailscale (?:serve )?reset|tailscale funnel/i);
+});
+
+test("one-click starts the consented older gateway only when local configuration exists",async()=>{
+  const events=[];
+  const success=await startExistingRemoteGateway({
+    platform:"win32",env:{LOCALAPPDATA:"C:\\\\Users\\\\test\\\\AppData\\\\Local"},
+    exists:()=>true,
+    command:(_program,args)=>{events.push(args);const handlers={};
+      queueMicrotask(()=>handlers.exit?.(0,null));
+      return {once:(name,cb)=>{handlers[name]=cb;}};
+    },
+    print:()=>{},
+  });
+  assert.equal(success,true);
+  assert.equal(events.length,1);
+  assert.ok(events[0].includes("-File"));
+  let called=false;
+  const disabled=await startExistingRemoteGateway({
+    platform:"win32",env:{LOCALAPPDATA:"x",OAGENT_START_PREVIOUS_WORKSPACE:"0"},
+    exists:()=>true,command:()=>{called=true;},
+  });
+  assert.equal(disabled,false);
+  assert.equal(called,false);
+  const missing=await startExistingRemoteGateway({
+    platform:"win32",env:{LOCALAPPDATA:"x"},
+    exists:()=>false,command:()=>{called=true;},print:()=>{},
+  });
+  assert.equal(missing,false);
+  assert.equal(called,false);
 });
