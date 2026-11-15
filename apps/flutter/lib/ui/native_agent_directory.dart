@@ -13,12 +13,13 @@ class NativeAgentDirectory extends StatefulWidget {
   const NativeAgentDirectory({
     super.key, required this.pilot, required this.onSessions,
     required this.onDevices, required this.onLegacy,
-    this.onInbox, this.preview = false,
+    this.onInbox, this.onChatGpt, this.preview = false,
   });
 
   final NativePilotController pilot;
   final VoidCallback onSessions, onDevices, onLegacy;
   final VoidCallback? onInbox;
+  final VoidCallback? onChatGpt;
   final bool preview;
 
   @override
@@ -58,6 +59,10 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
   }
 
   Future<void> _open(AgentDirectoryEntry agent) async {
+    if(agent.id=='chatgpt' && widget.onChatGpt!=null){
+      widget.onChatGpt!.call();
+      return;
+    }
     switch (agent.route) {
       case AgentRoute.sessions:
         if (widget.preview) {
