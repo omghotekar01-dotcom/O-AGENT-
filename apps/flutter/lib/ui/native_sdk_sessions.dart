@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/pilot_native.dart';
+import 'native_pilot.dart' show NativeRunDetail;
 
 /// A real SDK-owned session backed by completed, tenant-scoped O-AGENT runs.
 /// No arbitrary Claude/Copilot website messages are ever invented here.
@@ -74,24 +75,8 @@ class _NativeProviderSessionDetailState extends State<NativeProviderSessionDetai
         content:Text('Write your next prompt first.')));
       return;
     }
-    final approved=await showDialog<bool>(context:context,builder:(dialog)=>
-      AlertDialog(
-        title:Text('Request an approved $provider turn?'),
-        content:SingleChildScrollView(child:SelectableText(
-          'Worker: '+_display(widget.session['deviceName'])+
-          '\nVerified SDK session: '+sessionId+
-          '\nEnrolled project: '+_display(widget.session['cwd'])+
-          '\nMode: '+permissionMode+
-          '\n\nYour next instructions:\n'+message+
-          '\n\nThis submits a supervised request. An additional explicit '
-          'approval is required in your phone inbox before execution.')),
-        actions:[
-          TextButton(onPressed:()=>Navigator.pop(dialog,false),
-            child:const Text('Cancel')),
-          FilledButton(onPressed:()=>Navigator.pop(dialog,true),
-            child:const Text('Request separately approved turn')),
-        ]));
-    if(approved!=true || !mounted)return;
+    // Sending a read-only message is the owner's explicit authorization.
+    // Write requests and tool actions retain separate server approvals.
     final device=widget.pilot.devices
       .where((d)=>d['id']==deviceId).firstOrNull;
     if(device==null||!pilotDeviceOnline(device)){
@@ -101,12 +86,19 @@ class _NativeProviderSessionDetailState extends State<NativeProviderSessionDetai
     }
     setState(()=>submitting=true);
     try{
-      await widget.pilot.requestTurn(
+      final created=await widget.pilot.requestTurn(
         device:device,kind:kind,sessionId:sessionId,
         mode:permissionMode,prompt:message);
       if(!mounted)return;
-      widget.onRequested();
-      Navigator.of(context).pop();
+      prompt.clear();
+      final id=created['runId']?.toString()??'';
+      if(RegExp(r'^[0-9a-f-]{36}'+r'$').hasMatch(id)){
+        await Navigator.push(context,MaterialPageRoute<void>(
+          builder:(_)=>NativeRunDetail(c:widget.pilot,id:id)));
+      }else{
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:Text('Request saved. Open Sessions to inspect activity.')));
+      }
     }catch(e){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content:Text(pilotFriendlyError(e))));
