@@ -142,7 +142,8 @@ export async function heartbeat(client,deviceId) {
   if(!result.rowCount)throw httpError(403,"Device revoked");
   return {ok:true};
 }
-export async function createRun(client,tenantId,subject,body,requestKey) {
+export async function createRun(client,tenantId,subject,body,requestKey,
+    {ownerInitiated=false}={}) {
   if(!isUUID(body?.deviceId)||!RUN_KINDS.has(body?.kind)||
       !MODES.has(body?.mode)||typeof requestKey!=="string"||
       !/^[A-Za-z0-9_-]{16,128}$/.test(requestKey))
@@ -228,9 +229,21 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
   if(quota.rows[0].daily>=200)
     throw httpError(429,"Daily supervised run limit reached.");
 
+  // The owner already explicitly authorized a *read-only* prompt by
+  // pressing Send. Do not echo the same text back as a second approval.
+  // Team members, workspace writes, inventory and ANY provider tool
+  // permission continue to require independent owner review.
+  // Provider and Codex read-only sandboxes still block writes and
+  // request explicit tool approvals where supported.
+  const directlyQueued=ownerInitiated===true &&
+    mode==="read_only" && new Set([
+      "codex_cli_turn","claude_agent_turn","copilot_sdk_turn"
+    ]).has(kind);
   const runId=randomUUID(),approvalId=randomUUID();
   const created=await client.query(
-    "INSERT INTO runs(id,tenant_id,device_id,kind,mode,prompt,cwd,session_id,action_hash,request_key,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'waiting_for_approval') ON CONFLICT (tenant_id,request_key) DO NOTHING RETURNING id",
+    directlyQueued
+      ? "INSERT INTO runs(id,tenant_id,device_id,kind,mode,prompt,cwd,session_id,action_hash,request_key,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'queued') ON CONFLICT (tenant_id,request_key) DO NOTHING RETURNING id"
+      : "INSERT INTO runs(id,tenant_id,device_id,kind,mode,prompt,cwd,session_id,action_hash,request_key,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'waiting_for_approval') ON CONFLICT (tenant_id,request_key) DO NOTHING RETURNING id",
     [runId,tenantId,body.deviceId,kind,mode,prompt,cwd,sessionId,digest,requestKey]);
   if(!created.rowCount){
     const retry=await client.query("SELECT id,action_hash,status FROM runs WHERE request_key=$1",[requestKey]);
@@ -238,11 +251,17 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
       return {runId:retry.rows[0].id,status:retry.rows[0].status,reused:true};
     throw httpError(409,"Request collision; please retry");
   }
-  await client.query(
-    "INSERT INTO approvals(id,tenant_id,run_id,device_id,kind,description,action_hash,status,expires_at) VALUES($1,$2,$3,$4,'run',$5,$6,'pending',now()+interval '15 minutes')",
-    [approvalId,tenantId,runId,body.deviceId,prompt,digest]);
-  await audit(client,tenantId,subject,"run.requested",runId,{kind,mode});
-  return {runId,approvalId,actionHash:digest,status:"waiting_for_approval"};
+  if(!directlyQueued) {
+    await client.query(
+      "INSERT INTO approvals(id,tenant_id,run_id,device_id,kind,description,action_hash,status,expires_at) VALUES($1,$2,$3,$4,'run',$5,$6,'pending',now()+interval '15 minutes')",
+      [approvalId,tenantId,runId,body.deviceId,prompt,digest]);
+  }
+  await audit(client,tenantId,subject,
+    directlyQueued?"run.owner_readonly_queued":"run.requested",
+    runId,{kind,mode});
+  return directlyQueued
+    ? {runId,status:"queued",ownerAuthorized:true}
+    : {runId,approvalId,actionHash:digest,status:"waiting_for_approval"};
 }
 export async function listRuns(client) {
   const {rows}=await client.query(
