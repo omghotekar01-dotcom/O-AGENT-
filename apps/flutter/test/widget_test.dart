@@ -10,7 +10,8 @@ void main() {
   testWidgets('primary experience is native instead of a website', (tester) async {
     await tester.pumpWidget(const OAgentApp());
     expect(find.text('Sign in to native app'), findsOneWidget);
-    await tester.drag(find.byType(ListView).first, const Offset(0, -550));
+    await tester.scrollUntilVisible(find.text('Earlier native project workspace'),
+      180.0, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(find.text('Earlier native project workspace'), findsOneWidget);
     expect(find.textContaining('Private HTTPS address'), findsOneWidget);
@@ -22,6 +23,7 @@ void main() {
     await tester.pumpWidget(const OAgentApp());
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Sign in to native app'), findsOneWidget);
+    expect(find.text('Test private connection'), findsOneWidget);
   });
 
   testWidgets('mobile dashboard metrics do not overflow at compact widths', (tester) async {
