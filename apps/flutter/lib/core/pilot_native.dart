@@ -71,7 +71,7 @@ class AppAuthPilotAuthenticator implements PilotAuthenticator {
       AuthorizationTokenRequest(nativeClientId, nativeRedirectUri,
         serviceConfiguration: _service(config),
         scopes: const ['openid', 'oagent-read', 'oagent-operate']));
-    if (answer?.accessToken == null || answer!.accessToken!.isEmpty) {
+    if (answer.accessToken == null || answer.accessToken!.isEmpty) {
       throw const PilotFailure('Secure sign-in returned no access token.');
     }
     return PilotTokens(accessToken: answer.accessToken!,
@@ -84,7 +84,7 @@ class AppAuthPilotAuthenticator implements PilotAuthenticator {
     final answer = await _appAuth.token(TokenRequest(nativeClientId,
       nativeRedirectUri, refreshToken: refresh,
       serviceConfiguration: _service(config)));
-    if (answer?.accessToken == null || answer!.accessToken!.isEmpty) {
+    if (answer.accessToken == null || answer.accessToken!.isEmpty) {
       throw const PilotFailure('Secure session expired; sign in again.');
     }
     return PilotTokens(accessToken: answer.accessToken!,
