@@ -60,6 +60,9 @@ class _NativePilotShellState extends State<NativePilotShell>{
     await c.signIn(endpoint.text, rememberDevice: rememberDevice);
     if(mounted&&c.error!=null)_toast(context,c.error!);
   }
+  Future<void> _checkConnection() async {
+    await c.testConnection(endpoint.text);
+  }
   @override Widget build(BuildContext context){
     if(!c.connected)return Scaffold(body:SafeArea(child:Center(
       child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:540),
@@ -93,10 +96,22 @@ class _NativePilotShellState extends State<NativePilotShell>{
                   fontWeight:FontWeight.w800)),
               const SizedBox(height:14),
               TextField(controller:endpoint,keyboardType:TextInputType.url,
-                autocorrect:false,decoration:const InputDecoration(
+                autocorrect:false,
+                onChanged:(_)=>c.clearLoginFeedback(),
+                decoration:const InputDecoration(
                   border:OutlineInputBorder(),prefixIcon:Icon(Icons.lock_outline),
                   labelText:'Private HTTPS address',
                   hintText:'https://your-device.ts.net:8443/')),
+              const SizedBox(height:10),
+              OutlinedButton.icon(
+                onPressed:c.busy?null:_checkConnection,
+                icon:const Icon(Icons.network_check),
+                label:const Text('Test private connection')),
+              if(c.connectionStatus!=null)...[
+                const SizedBox(height:10),
+                Text(c.connectionStatus!,style:const TextStyle(
+                  fontSize:12,color:OTheme.violet)),
+              ],
               const SizedBox(height:12),
               CheckboxListTile(
                 value: rememberDevice,
@@ -119,8 +134,9 @@ class _NativePilotShellState extends State<NativePilotShell>{
                 Text(c.error!,style:const TextStyle(color:Colors.red)),
               ],
               const SizedBox(height:13),
-              const Text('Keycloak opens the secure system sign-in window '
-                'for authentication, then returns you to this app. '
+              const Text('If the connection test fails, check Tailscale '
+                'on your phone and start START-O-AGENT.cmd on your PC. '
+                'Keycloak then opens the secure Android sign-in window. '
                 'Your command center stays native.',
                 style:TextStyle(fontSize:12,height:1.5,color:_muted)),
             ])),
