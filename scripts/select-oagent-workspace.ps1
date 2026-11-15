@@ -61,6 +61,51 @@ try {
     Write-Host '[PASS] Saved your trusted project folder for the next startup.'
   }
 
+  # One-time scoped consent: the new signed SaaS worker must not forget an
+  # existing authorized Codex CLI/IDE session-sync preference from O-AGENT.
+  # Never discover unrelated private sessions without the Windows owner's
+  # consent, and never copy old DPAPI operator/provider tokens.
+  $consentPath = Join-Path $settings 'codex-session-sync.consent'
+  $authorized = $false
+  if (Test-Path -LiteralPath $consentPath -PathType Leaf) {
+    $authorized = ((Get-Content -LiteralPath $consentPath -Raw -Encoding UTF8).Trim() -eq '1')
+    Write-Host '[PASS] Reusing your saved Codex session-sync choice.'
+  } else {
+    $legacySettings = Join-Path $settings 'settings.json'
+    $previousConsent = $false
+    if (Test-Path -LiteralPath $legacySettings -PathType Leaf) {
+      try {
+        $prior = Get-Content -LiteralPath $legacySettings -Raw -Encoding UTF8 | ConvertFrom-Json
+        $previousConsent = $prior.CodexLocalEnabled -eq $true
+      } catch {
+        Write-Host '[INFO] Older configuration could not be read; asking for explicit consent.'
+      }
+    }
+    if ($previousConsent) {
+      $authorized = $true
+      Write-Host '[PASS] Existing O-AGENT Codex local-sync consent recognized.'
+    } else {
+      Write-Host '[CONSENT] O-AGENT can discover and resume your saved Codex CLI/IDE'
+      Write-Host 'conversations ONLY inside the trusted project folder shown above.'
+      Write-Host 'This does not import consumer ChatGPT website chats.'
+      $answer = Read-Host 'Enable Codex saved-session sync on this PC? [y/N]'
+      $authorized = ($answer -eq 'y' -or $answer -eq 'Y')
+    }
+    New-Item -ItemType Directory -Path $settings -Force | Out-Null
+    Set-Content -LiteralPath $consentPath -Value $(if ($authorized) { '1' } else { '0' }) -Encoding UTF8 -NoNewline
+  }
+  $env:OAGENT_ENABLE_CODEX_LOCAL_SYNC = $(if ($authorized) { '1' } else { '0' })
+  $env:OAGENT_ENABLE_CODEX_DISCOVERY = $(if ($authorized) { '1' } else { '0' })
+  if ($authorized) {
+    if (Get-Command codex -ErrorAction SilentlyContinue) {
+      Write-Host '[PASS] Codex session sync enabled for your trusted project.'
+    } else {
+      Write-Host '[INFO] Codex sync enabled, but Codex CLI was not found. Install and sign in to Codex on this PC to create real saved sessions.'
+    }
+  } else {
+    Write-Host '[INFO] Codex session discovery is disabled by your saved choice.'
+  }
+
   Write-Host ('[WORKER] Project: ' + $folder)
   Write-Host '[WORKER] Keep this window open while working from your phone.'
   Write-Host '[WORKER] First enrollment: approve the exact fingerprint in O-AGENT > Devices.'
