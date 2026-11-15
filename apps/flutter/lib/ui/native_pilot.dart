@@ -176,10 +176,13 @@ class _NativePilotShellState extends State<NativePilotShell>{
 class _Panel extends StatelessWidget{
   const _Panel({required this.child});
   final Widget child;
-  @override Widget build(BuildContext context)=>Container(width:double.infinity,
-    padding:const EdgeInsets.all(17),decoration:BoxDecoration(
-      color:Colors.white,border:Border.all(color:_line),
-      borderRadius:BorderRadius.circular(17)),child:child);
+  @override Widget build(BuildContext context)=>Material(
+    color:Colors.white,
+    shape:RoundedRectangleBorder(
+      borderRadius:BorderRadius.circular(17),
+      side:const BorderSide(color:_line)),
+    child:Padding(padding:const EdgeInsets.all(17),
+      child:SizedBox(width:double.infinity,child:child)));
 }
 class _Feature extends StatelessWidget{
   const _Feature(this.icon,this.title,this.detail);
