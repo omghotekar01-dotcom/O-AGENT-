@@ -23,8 +23,8 @@ export function verifyPrivateServeAvailability(json,port=443){
   // Guard only OUR port; preserve unrelated Serve and Funnel sites on 443.
   const onPort=key=>{
     const value=String(key);
-    if(/^\\d+$/.test(value))return Number(value)===port;
-    const m=value.match(/:(\\d+)$/);
+    if(/^\d+$/.test(value))return Number(value)===port;
+    const m=value.match(/:(\d+)$/);
     return Number(m?m[1]:443)===port;
   };
   if(Object.entries(parsed.AllowFunnel||{}).some(([key,enabled])=>onPort(key)&&Boolean(enabled)))
