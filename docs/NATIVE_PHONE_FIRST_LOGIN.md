@@ -53,11 +53,20 @@ and vendor agent sign-in are consent steps, **not safe to bypass**.
   run the same `START-O-AGENT.cmd` again. Do not use public Funnel.
 - **`[FIX]` on launch:** Read that exact diagnostic and address the stated
   prerequisite; do not wipe/force-reset an existing installation.
-- **Phone says "Secure operation failed":** First check your own
-  private HTTPS origin with `/health/ready` in your phone browser.
-  If unavailable, check both Tailscale connections, the Serve route and
-  Docker readiness. If the health endpoint works, check mobile OAuth
-  registration and browser login.
+- **Phone sign-in fails:** On O-AGENT Android version 0.15.2 or later,
+  tap **Test private connection** first. This checks the local backend,
+  database, native OAuth settings, and Keycloak discovery without a password.
+  A NET-01/API-02/ID-03 result indicates which prerequisite failed.
+  If the connection test succeeds but sign-in fails with AUTH-04, check the
+  system browser and the native OAuth registration. If it says AUTH-BROWSER,
+  install/enable Chrome. If AUTH-ACTIVITY, reopen the app and retry.
+  Do not disable TLS checks or share identity-provider tokens.
+  Older Android APKs may only show a generic error; install the updated
+  debug build to see these checks.
+- **Browser sign-in fails to return:** The new Android build removes an
+  empty generated `android:taskAffinity=""` setting flagged by Flutter
+  AppAuth as interfering with native OAuth redirects. The existing API
+  and all server-side credentials are preserved.
 - **Worker already running:** A second one-click invocation detects the
   existing worker and does not start a duplicate.
 - **Changed project folder:** Stop the current worker, then use the
