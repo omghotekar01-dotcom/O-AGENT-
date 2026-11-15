@@ -189,13 +189,15 @@ bool pilotDeviceOnline(Map<String, dynamic> d, [DateTime? now]) {
 String pilotPairingToken(String input, Uri server) {
   final raw = input.trim();
   final uri = Uri.tryParse(raw);
-  final isLink = uri != null && uri.scheme == 'https';
-  if (isLink && (uri.origin != server.origin ||
-      (uri.path.isNotEmpty && uri.path != '/') ||
-      uri.hasQuery || !uri.fragment.startsWith('pair='))) {
-    throw const PilotFailure('Pairing link belongs to another server.');
+  var token = raw;
+  if (uri != null && uri.scheme == 'https') {
+    if (uri.origin != server.origin ||
+        (uri.path.isNotEmpty && uri.path != '/') ||
+        uri.hasQuery || !uri.fragment.startsWith('pair=')) {
+      throw const PilotFailure('Pairing link belongs to another server.');
+    }
+    token = Uri.decodeComponent(uri.fragment.substring(5));
   }
-  final token = isLink ? Uri.decodeComponent(uri.fragment.substring(5)) : raw;
   if (!RegExp(r'^oen_[A-Za-z0-9_-]{43}$').hasMatch(token)) {
     throw const PilotFailure('Invalid or expired-looking pairing link.');
   }
