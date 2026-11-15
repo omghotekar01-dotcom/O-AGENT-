@@ -78,8 +78,8 @@ void main() {
             '  <dict><key>NSAllowsLocalNetworking</key><true/></dict>\n'
             '</dict>\n</plist>',
       );
-      plist.writeAsStringSync(ios);
     }
+    plist.writeAsStringSync(ios);
   }
 
   stdout.writeln('Platform configuration prepared: Android INTERNET + debug-local HTTP + no backup, iOS local-network exception.');
