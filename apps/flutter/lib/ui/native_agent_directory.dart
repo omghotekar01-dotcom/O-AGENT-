@@ -13,11 +13,12 @@ class NativeAgentDirectory extends StatefulWidget {
   const NativeAgentDirectory({
     super.key, required this.pilot, required this.onSessions,
     required this.onDevices, required this.onLegacy,
-    this.preview = false,
+    this.onInbox, this.preview = false,
   });
 
   final NativePilotController pilot;
   final VoidCallback onSessions, onDevices, onLegacy;
+  final VoidCallback? onInbox;
   final bool preview;
 
   @override
@@ -224,11 +225,17 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
                   'trusted workspace to see eligible sessions.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Color(0xFF64727C))))),
-            if (!widget.preview)
+            if (!widget.preview && available > 0)
               Padding(padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
                 child: CupertinoButton.filled(
                   onPressed: widget.onSessions,
                   child: const Text('Open real sessions & prompts'))),
+            if (awaiting > 0 && widget.onInbox != null)
+              Padding(padding: const EdgeInsets.only(top: 10),
+                child: OutlinedButton.icon(
+                  onPressed: widget.onInbox,
+                  icon: const Icon(CupertinoIcons.checkmark_shield),
+                  label: Text('Review $awaiting real permission requests'))),
             const Padding(padding: EdgeInsets.fromLTRB(4, 16, 4, 0),
               child: Text(
                 'Shared-screen control uses visible PC permission. '
