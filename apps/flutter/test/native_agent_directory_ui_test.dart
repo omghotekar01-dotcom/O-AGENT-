@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:o_agent_mobile/core/pilot_native.dart';
 import 'package:o_agent_mobile/ui/native_agent_directory.dart';
+import 'package:o_agent_mobile/ui/ios_components.dart';
+import 'package:o_agent_mobile/theme.dart';
 
 void main(){
   testWidgets('iOS-style native directory renders before sign-in with truthful statuses',
@@ -13,16 +15,17 @@ void main(){
       body:NativeAgentDirectory(
         pilot:pilot,preview:true,
         onSessions:(){},onDevices:(){},onLegacy:(){}))));
-    expect(find.text('AI Agents'),findsOneWidget);
+    expect(find.text('Your AI work.\nAnywhere.'),findsOneWidget);
     expect(find.byType(CupertinoSearchTextField),findsOneWidget);
     expect(find.byType(CupertinoSlidingSegmentedControl<String>),findsOneWidget);
-    expect(find.byType(CupertinoListSection),findsWidgets);
+    expect(find.byType(OSurface),findsWidgets);
+    expect(OTheme.sharedCupertino.brightness,Brightness.light);
     expect(find.text('OpenAI Codex CLI / IDE'),findsOneWidget);
     expect(find.byKey(const ValueKey('agent-codex')),findsOneWidget);
     await tester.enterText(find.byType(CupertinoSearchTextField),'ChatGPT');
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('agent-chatgpt')),findsOneWidget);
-    expect(find.text('Official app / website only'),findsOneWidget);
+    expect(find.textContaining('Control through consented laptop screen'),findsWidgets);
     expect(find.text('OpenAI Codex CLI / IDE'),findsNothing);
     expect(tester.takeException(),isNull);
   });
