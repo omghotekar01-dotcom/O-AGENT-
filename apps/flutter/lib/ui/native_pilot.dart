@@ -5,6 +5,7 @@ import 'package:flutter/cupertino.dart';
 import 'native_agent_directory.dart';
 import '../core/controller.dart';
 import '../core/pilot_native.dart';
+import '../core/agent_directory.dart';
 import 'native_sdk_sessions.dart';
 import '../theme.dart';
 import 'studio.dart';
@@ -199,7 +200,9 @@ class _NativePilotShellState extends State<NativePilotShell>{
           _Work(c: c, navigate: (i) => setState(() => tab = i)),
           _Inbox(c: c),
           _Devices(c: c),
-          _More(c: c, legacy: _legacy),
+          _More(c: c, legacy: _legacy,
+            agents: () => setState(() => tab = 0),
+            devices: () => setState(() => tab = 3)),
         ])),
       ])),
       bottomNavigationBar: CupertinoTabBar(
@@ -1048,49 +1051,119 @@ class _NativeEnrollPanelState extends State<_NativeEnrollPanel> {
     ]));
 }
 
-class _More extends StatelessWidget{
-  const _More({required this.c,required this.legacy});
-  final NativePilotController c;final VoidCallback legacy;
-  @override Widget build(BuildContext context)=>ListView(
-    padding:const EdgeInsets.all(18),children:[
-      const _Heading('Settings & connections',
-        'Your private workspace, account and trusted connections.'),
-      _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,
-        children:[
-          const Text('PRIVATE BACKEND',style:TextStyle(
-            color:OTheme.violet,fontWeight:FontWeight.w800)),
-          const SizedBox(height:8),
-          SelectableText(c.origin?.toString()??'Not connected'),
-          const SizedBox(height:8),
-          Text('Role: '+_val(c.me['role']),
-            style:const TextStyle(color:_muted)),
-          const SizedBox(height:15),
-          OutlinedButton.icon(onPressed:c.refresh,
-            icon:const Icon(Icons.sync),label:const Text('Verify connection')),
-          const SizedBox(height:8),
-          OutlinedButton.icon(onPressed:legacy,
-            icon:const Icon(Icons.layers_outlined),
-            label:const Text('Earlier native projects and Codex')),
-          const SizedBox(height:8),
-          TextButton.icon(onPressed:()async{
-            final ok=await showCupertinoDialog<bool>(context:context,builder:(d)=>
-              CupertinoAlertDialog(title:const Text('Sign out of this phone?'),
-                content:const Text('Only the encrypted phone session will '
-                  'be cleared. Your laptop and server data remain intact.'),
-                actions:[
-                  CupertinoDialogAction(onPressed:()=>Navigator.pop(d,false),
-                    child:const Text('Cancel')),
-                  CupertinoDialogAction(isDestructiveAction:true,onPressed:()=>Navigator.pop(d,true),
-                    child:const Text('Sign out')),
-                ]));
-            if(ok==true)await c.signOut();
-          },icon:const Icon(Icons.logout),label:const Text('Sign out')),
-        ])),
-      const SizedBox(height:16),
-      const _Panel(child:Text('Only supported and authenticated provider '
-        'adapters show as runnable. Takeover of arbitrary ChatGPT.com '
-        'browser tabs, screen streaming and unimplemented IDE sessions '
-        'is not advertised as working.',
-        style:TextStyle(color:_muted,height:1.5))),
-    ]);
+class _More extends StatelessWidget {
+  const _More({required this.c, required this.legacy,
+    required this.agents, required this.devices});
+  final NativePilotController c;
+  final VoidCallback legacy, agents, devices;
+
+  Future<void> _signOut(BuildContext context) async {
+    final ok = await showCupertinoDialog<bool>(
+      context: context, builder: (d) => CupertinoAlertDialog(
+        title: const Text('Sign out of this phone?'),
+        content: const Text(
+          'Only the encrypted phone session will be cleared. '
+          'Your laptop and server data remain intact.'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(d).pop(false),
+            child: const Text('Cancel')),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(d).pop(true),
+            child: const Text('Sign out')),
+        ]));
+    if (ok == true) await c.signOut();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final agentsList = buildAgentDirectory(
+      signedIn: c.connected, devices: c.devices,
+      codexSessions: c.sessions, sdkSessions: c.providerSessions);
+    final eligible = agentsList.where((e) => e.hasVerifiedSession).length;
+    return ColoredBox(color: const Color(0xFFF5F7F9),
+      child: ListView(padding: const EdgeInsets.only(bottom: 26),
+        children: [
+          const Padding(padding: EdgeInsets.fromLTRB(20, 24, 20, 0),
+            child: _Heading('Settings & connections',
+              'Your account, authorized providers and private workspace.')),
+          CupertinoListSection.insetGrouped(
+            backgroundColor: Colors.transparent,
+            header: const Text('YOUR PRIVATE ACCOUNT'),
+            children: [
+              CupertinoListTile(
+                leading: const Icon(CupertinoIcons.lock, color: OTheme.violet),
+                title: const Text('Private O-AGENT server'),
+                subtitle: Text(c.origin?.host ?? 'Not connected'),
+                trailing: const Icon(CupertinoIcons.checkmark_shield,
+                  color: Color(0xFF287D65))),
+              CupertinoListTile(
+                leading: const Icon(CupertinoIcons.person_crop_circle,
+                  color: OTheme.violet),
+                title: const Text('Signed-in workspace role'),
+                subtitle: Text(_val(c.me['role'], 'Not authorized'))),
+              CupertinoListTile(
+                leading: const Icon(CupertinoIcons.refresh,
+                  color: OTheme.violet),
+                title: const Text('Refresh private connection'),
+                subtitle: const Text('Read real server state and agent health'),
+                onTap: c.syncing ? null : c.refresh,
+                trailing: const Icon(CupertinoIcons.chevron_forward)),
+            ],
+          ),
+          CupertinoListSection.insetGrouped(
+            backgroundColor: Colors.transparent,
+            header: const Text('AGENTS & PROJECT CONNECTIONS'),
+            children: [
+              CupertinoListTile(
+                leading: const Icon(CupertinoIcons.square_grid_2x2,
+                  color: OTheme.violet),
+                title: const Text('AI agent directory'),
+                subtitle: Text('$eligible adapter types with '
+                  'a verified resume-eligible session'),
+                trailing: const Icon(CupertinoIcons.chevron_forward),
+                onTap: agents),
+              CupertinoListTile(
+                leading: const Icon(CupertinoIcons.folder,
+                  color: OTheme.violet),
+                title: const Text('GitHub and Cursor integrations'),
+                subtitle: const Text('Earlier native workspace · separate setup'),
+                trailing: const Icon(CupertinoIcons.chevron_forward),
+                onTap: legacy),
+              CupertinoListTile(
+                leading: const Icon(CupertinoIcons.device_laptop,
+                  color: OTheme.violet),
+                title: const Text('Trusted computers'),
+                subtitle: Text(c.onlineDevices.toString() +
+                  ' online · manage pairing and revocation'),
+                trailing: const Icon(CupertinoIcons.chevron_forward),
+                onTap: devices),
+            ],
+          ),
+          CupertinoListSection.insetGrouped(
+            backgroundColor: Colors.transparent,
+            header: const Text('SECURITY'),
+            children: [
+              CupertinoListTile(
+                leading: const Icon(CupertinoIcons.square_arrow_right,
+                  color: Color(0xFFB3474E)),
+                title: const Text('Sign out of this phone'),
+                subtitle: const Text('Clear encrypted mobile session only'),
+                trailing: const Icon(CupertinoIcons.chevron_forward),
+                onTap: () => _signOut(context)),
+            ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            child: Text(
+              'Provider authorizations remain separate. This release does '
+              'not import ChatGPT or Claude website conversations, or '
+              'allow arbitrary VS Code window control. In-app provider '
+              'credential setup is still an outstanding product milestone.',
+              style: TextStyle(fontSize: 12, height: 1.5,
+                color: Color(0xFF6A7983))),
+          ),
+        ]));
+  }
 }
