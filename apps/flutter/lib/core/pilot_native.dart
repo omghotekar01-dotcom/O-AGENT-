@@ -462,7 +462,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     }
     return history;
   }
-  Future<void> requestTurn({
+  Future<Map<String,dynamic>> requestTurn({
     required Map<String, dynamic> device, required String kind,
     required String mode, required String prompt, String? sessionId,
   }) async {
@@ -511,12 +511,15 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     if (kind != 'workspace_inventory' && cwd.isEmpty) {
       throw const PilotFailure('Worker has not verified an enrolled project folder.');
     }
-    await _api('/v1/runs', method: 'POST',
+    final created = await _api('/v1/runs', method: 'POST',
       headers: {'idempotency-key': _requestKey()},
       body: {'deviceId': device['id'], 'kind': kind, 'mode': mode,
         'prompt': prompt, 'cwd': cwd,
         if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId});
     await refresh();
+    // The server, not the mobile UI, decides whether this is already
+    // queued by its verified owner or requires independent approval.
+    return created;
   }
   Future<void> cancelRun(String id) async {
     if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
