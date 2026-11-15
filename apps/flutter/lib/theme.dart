@@ -22,6 +22,10 @@ class OTheme {
   // deliver a consistent, familiar iOS-style interaction model without
   // pretending this cross-platform app is an embedded website.
   static const CupertinoThemeData sharedCupertino = CupertinoThemeData(
+    // Do not inherit Android's dark OS brightness while rendering fixed
+    // light-surface Cupertino cards: it previously produced black cards
+    // with dark unreadable labels (reported on physical Android hardware).
+    brightness: Brightness.light,
     primaryColor: violet,
     barBackgroundColor: paper,
     scaffoldBackgroundColor: paper,
