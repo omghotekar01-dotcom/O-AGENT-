@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'native_agent_directory.dart';
+import 'chatgpt_integration.dart';
 import '../core/controller.dart';
 import '../core/pilot_native.dart';
 import '../core/agent_directory.dart';
@@ -54,6 +55,9 @@ class _NativePilotShellState extends State<NativePilotShell>{
   }
   // Retain the old provider gateway behind one integrated remote tab.
   void _legacy() => setState(() => tab = 2);
+  void _chatGpt() => Navigator.of(context).push(
+    MaterialPageRoute<void>(builder:(_) => ChatGptIntegrationScreen(
+      computer:widget.legacy,pilot:c)));
   void _nativeDevices() => Navigator.of(context).push(
     CupertinoPageRoute<void>(builder: (_) => Scaffold(
       appBar: AppBar(title: const Text('Trusted computers')),
@@ -195,6 +199,7 @@ class _NativePilotShellState extends State<NativePilotShell>{
             child: const Text('RETRY'))]),
         Expanded(child: IndexedStack(index: tab, children: [
           NativeAgentDirectory(pilot: c, onLegacy: _legacy,
+            onChatGpt: _chatGpt,
             onSessions: () => setState(() => tab = 1),
             onDevices: _nativeDevices,
             onInbox: () => setState(() => tab = 3)),
