@@ -10,7 +10,7 @@ import '../core/chatgpt_history.dart';
 import '../core/controller.dart';
 import '../core/pilot_native.dart';
 import 'remote_fullscreen.dart';
-import 'account_workspace.dart';
+import 'native_openai_api_chat.dart';
 
 const _ink=Color(0xFF1A2940),_muted=Color(0xFF6A7B8C);
 const _blue=Color(0xFF4862D9),_canvas=Color(0xFFF6F8FC);
@@ -314,18 +314,12 @@ class _ChatGptIntegrationState extends State<ChatGptIntegrationScreen> {
             label:Text(connecting?'Authenticating…':'Connect PC')),
         ],
       ])),
-      _tile('OpenAI API conversations',
-        'Use your own OpenAI API key and separate O-AGENT-owned chats. '
-        'Does not import your ChatGPT consumer account.',
+      _tile('Start a real OpenAI API chat',
+        'Enter your own API key securely on this phone. '
+        'Send actual prompts; this is separate from ChatGPT website chats.',
         LucideIcons.keyRound,(){
-          if(!widget.computer.connected){
-            setState(()=>error='Connect your authorized PC gateway above '
-              'before entering a provider key.');
-          }else{
-            Navigator.push(context,MaterialPageRoute<void>(
-              builder:(_)=>AccountWorkspaceScreen(
-                controller:widget.computer)));
-          }
+          Navigator.push(context,MaterialPageRoute<void>(
+            builder:(_)=>const NativeOpenAiApiChat()));
         }),
       _tile('ChatGPT plugin / MCP connection',
         'Authorized ChatGPT can call O-AGENT workspace tools. '
