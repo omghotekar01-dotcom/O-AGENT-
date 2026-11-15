@@ -24,11 +24,11 @@ test("native client only on private local pilot API allowlist",()=>{
   const compose=read("deploy/saas/free-pilot/compose.yaml");
   assert.equal(compose.split("OAGENT_OIDC_CLIENT_IDS: oagent-web,oagent-mobile").length,3);
   // The single entrypoint delegates to the safety-checked one-click orchestrator.
-  assert.match(read("START-O-AGENT.cmd"),/scripts\\\\one-click-pilot[.]mjs/);
+  assert.match(read("START-O-AGENT.cmd"),/scripts\\one-click-pilot[.]mjs/);
   const launcher=read("scripts/one-click-pilot.mjs");
   assert.match(launcher,/register=ensureNativeClient/);
-  assert.match(launcher,/await register\\(\\)/);
-  assert.match(launcher,/if\\(!outcome\\?\\.ready\\)/);
+  assert.match(launcher,/await register\(\)/);
+  assert.match(launcher,/if\(!outcome\?\.ready\)/);
 
   assert.match(read("REPAIR-O-AGENT.cmd"),/node ensure-native-client[.]mjs/);
 });
