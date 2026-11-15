@@ -565,37 +565,21 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
       _toast(context,'Your laptop worker is offline. Your prompt has not been sent.');
       return;
     }
-    final yes=await showCupertinoDialog<bool>(context:context,builder:(d)=>
-      CupertinoAlertDialog(
-        title:const Text('Continue this exact Codex thread?'),
-        content:SingleChildScrollView(child:SelectableText(
-          'Trusted laptop: '+_val(device['name'])+
-          '\nSaved thread: '+_val(widget.saved['title'])+
-          '\nWorkspace: '+_val(widget.saved['cwd'])+
-          '\nMode: '+_name(mode)+
-          '\n\nNext prompt:\n'+message+
-          '\n\nThis first requests approval. A separate explicit '
-          'approval is required before any worker executes.')),
-        actions:[
-          CupertinoDialogAction(onPressed:()=>Navigator.pop(d,false),
-            child:const Text('Cancel')),
-          CupertinoDialogAction(isDefaultAction:true,onPressed:()=>Navigator.pop(d,true),
-            child:const Text('Request supervised continuation')),
-        ]));
-    if(yes!=true||!mounted)return;
+    // Send authorizes an owner's read-only prompt; server reviews writes.
     setState(()=>sending=true);
     try {
-      await widget.c.requestTurn(device:device,kind:'codex_cli_turn',
-        mode:mode,prompt:message,sessionId:widget.saved['sessionId']?.toString());
+      final created=await widget.c.requestTurn(
+        device:device,kind:'codex_cli_turn',mode:mode,prompt:message,
+        sessionId:widget.saved['sessionId']?.toString());
       if(!mounted)return;
       composer.clear();
-      // A run cannot begin merely by submitting a prompt. Take the user
-      // directly to the native exact-action approval inbox.
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:Text('Prompt saved as a supervised request. '
-          'Review it in the native approval inbox.')));
-      widget.navigate(3);
-      Navigator.of(context).pop();
+      final id=created['runId']?.toString()??'';
+      if(RegExp(r'^[0-9a-f-]{36}'+r'$').hasMatch(id)){
+        await Navigator.push(context,CupertinoPageRoute<void>(
+          builder:(_)=>NativeRunDetail(c:widget.c,id:id)));
+      }else{
+        _toast(context,'Request saved. Check session activity.');
+      }
     }catch(error){
       if(mounted)_toast(context,pilotFriendlyError(error));
     }finally{
@@ -649,8 +633,8 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
             const Text('NEXT INSTRUCTION',style:TextStyle(
               color:OTheme.violet,fontWeight:FontWeight.w800)),
             const SizedBox(height:7),
-            const Text('Continue this saved thread on your enrolled laptop. '
-              'Actual actions still require separate approval.',
+            const Text('Read-only prompts go directly to the agent. '
+              'Workspace edits and sensitive actions require approval.',
               style:TextStyle(color:_muted,fontSize:12,height:1.4)),
             const SizedBox(height:12),
             TextField(controller:composer,minLines:3,maxLines:6,maxLength:4000,
@@ -673,7 +657,7 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
             FilledButton.icon(
               onPressed:sending?null:_send,
               icon:const Icon(Icons.send_outlined),
-              label:Text(sending?'Creating request…':'Review prompt & request approval')),
+              label:Text(sending?'Sending to Codex…':'Send to Codex')),
           ]))
         else const _Blank('Read only for now',
           'The saved history is available, but this worker is offline '
