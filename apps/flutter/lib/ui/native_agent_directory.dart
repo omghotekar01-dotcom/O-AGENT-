@@ -138,6 +138,7 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
   Widget _tile(AgentDirectoryEntry agent) => CupertinoListTile(
     key: ValueKey('agent-' + agent.id),
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    backgroundColor: Colors.white,
     leading: Container(
       width: 39, height: 39,
       decoration: BoxDecoration(color: OTheme.lavender,
@@ -165,10 +166,13 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
   Widget _section(String title, List<AgentDirectoryEntry> items) {
     if (items.isEmpty) return const SizedBox.shrink();
     return CupertinoListSection.insetGrouped(
+      decoration: BoxDecoration(color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDCE6E9))),
       header: Text(title, style: const TextStyle(
         color: OTheme.violet, fontWeight: FontWeight.w800,
         fontSize: 12, letterSpacing: 0.7)),
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFFF5F7F9),
       children: items.map(_tile).toList(),
     );
   }
@@ -216,11 +220,16 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
                         color: Color(0xFF64727C))),
                   const SizedBox(height: 16),
                   CupertinoSearchTextField(
+                    backgroundColor: Colors.white,
+                    style: const TextStyle(color: OTheme.ink, fontSize: 15),
+                    itemColor: OTheme.violet,
                     placeholder: 'Search agents, sessions, integrations',
                     onChanged: (value) => setState(() => query = value)),
                   const SizedBox(height: 15),
                   SizedBox(width: double.infinity,
                     child: CupertinoSlidingSegmentedControl<String>(
+                      backgroundColor: const Color(0xFFE8EEF0),
+                      thumbColor: Colors.white,
                       groupValue: filter,
                       children: const {
                         'all': Padding(padding: EdgeInsets.symmetric(
