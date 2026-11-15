@@ -3,7 +3,7 @@ import 'pilot_native.dart';
 /// One truthful provider catalog across iOS and Android. A provider is
 /// "session ready" only when a *real recorded session* belongs to a
 /// currently-online, capable, non-revoked worker.
-enum AgentRoute { sessions, devices, legacyWorkspace, officialService }
+enum AgentRoute { sessions, devices, legacyWorkspace, remoteDesktop }
 enum AgentState { sessionReady, workerEnabled, offline, needsSetup, separateWorkspace, externalOnly }
 
 class AgentDirectoryEntry {
@@ -127,41 +127,38 @@ List<AgentDirectoryEntry> buildAgentDirectory({
     ),
     const AgentDirectoryEntry(
       id: 'github', name: 'GitHub repositories & Actions',
-      summary: 'Projects, Actions and PRs via separately configured legacy connector.',
-      status: 'Separate workspace · not linked to this private pilot',
+      summary: 'Use the existing O-AGENT Projects and Actions controls from Remote.',
+      status: 'Remote project connector · authorize once',
       state: AgentState.separateWorkspace,
       route: AgentRoute.legacyWorkspace,
     ),
     const AgentDirectoryEntry(
       id: 'cursor', name: 'Cursor Cloud agents',
-      summary: 'Previously developed connector is in the separate legacy workspace.',
-      status: 'Separate workspace · requires its own connection',
+      summary: 'Existing Cursor Cloud runs and follow-ups in the remote workspace.',
+      status: 'Remote cloud connector · authorize once',
       state: AgentState.separateWorkspace,
       route: AgentRoute.legacyWorkspace,
     ),
     const AgentDirectoryEntry(
       id: 'chatgpt', name: 'ChatGPT',
-      summary: 'Existing ChatGPT chats and Work sessions are not controllable here.',
-      status: 'Official app / website only',
+      summary: 'See and interact with your own shared ChatGPT browser window via Remote. Direct chat sync is unavailable.',
+      status: 'Control through consented laptop screen',
       state: AgentState.externalOnly,
-      route: AgentRoute.officialService,
-      officialUrl: 'https://chatgpt.com/',
+      route: AgentRoute.remoteDesktop,
     ),
     const AgentDirectoryEntry(
       id: 'claude_web', name: 'Claude (web)',
-      summary: 'claude.ai conversations are separate from Claude Agent SDK sessions.',
-      status: 'Official app / website only',
+      summary: 'Claude.ai is accessible via shared desktop; Claude Code has its own official remote control.',
+      status: 'Consented desktop or separate Claude Code Remote',
       state: AgentState.externalOnly,
-      route: AgentRoute.officialService,
-      officialUrl: 'https://claude.ai/',
+      route: AgentRoute.remoteDesktop,
     ),
     const AgentDirectoryEntry(
       id: 'gemini', name: 'Google Gemini',
-      summary: 'Existing consumer chats are not connected to the private worker.',
-      status: 'Official app / website only',
+      summary: 'Interact with an already-open Gemini browser via consented laptop screen. Gemini CLI sessions need an adapter.',
+      status: 'Control through consented laptop screen',
       state: AgentState.externalOnly,
-      route: AgentRoute.officialService,
-      officialUrl: 'https://gemini.google.com/',
+      route: AgentRoute.remoteDesktop,
     ),
   ];
 }
