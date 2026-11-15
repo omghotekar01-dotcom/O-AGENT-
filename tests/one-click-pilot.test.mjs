@@ -125,3 +125,14 @@ test("one-click starts the consented older gateway only when local configuration
   assert.equal(missing,false);
   assert.equal(called,false);
 });
+
+test("Windows signed worker reuses old Codex opt-in or asks once, never silently discovers threads",()=>{
+  const script=file("scripts/select-oagent-workspace.ps1");
+  assert.match(script,/codex-session-sync\.consent/);
+  assert.match(script,/CodexLocalEnabled/);
+  assert.match(script,/Read-Host 'Enable Codex saved-session sync/);
+  assert.match(script,/OAGENT_ENABLE_CODEX_LOCAL_SYNC/);
+  assert.match(script,/OAGENT_ENABLE_CODEX_DISCOVERY/);
+  assert.match(script,/\$authorized\s*=\s*\$false/);
+  assert.doesNotMatch(script,/Unlock-OAgentSecret|Write-Host.*ApiTokenEncrypted/);
+});
