@@ -347,9 +347,12 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
       if(method==="POST"&&path==="/v1/runs"){
         assertJson(req);const data=objectJson(await bytes(req,10000));
         let notificationTenant;
-        const created=await asTenant((c,t)=>{
+        const created=await asTenant((c,t,role)=>{
           notificationTenant=t;
-          return createRun(c,t,identity.subject,data,req.headers["idempotency-key"]);
+          // The role is checked against tenant membership INSIDE withIdentity;
+          // never accept owner authorization from a phone-supplied flag.
+          return createRun(c,t,identity.subject,data,
+            req.headers["idempotency-key"],{ownerInitiated:role==="owner"});
         });
         reply(res,201,created);
         if(!created.reused)void notifyTenant(pool,notificationTenant,config).catch(()=>{});
