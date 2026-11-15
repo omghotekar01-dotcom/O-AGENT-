@@ -158,9 +158,12 @@ test("real HTTP + PostgreSQL: OIDC owner, exact fingerprint pairing, signed work
     assert.equal(stale.status,409,"Stale saved-session snapshots cannot execute");
     assert.equal((await signed("/v1/device/sessions",{
       sessions:[savedSession]})).status,200);
+    // A workspace-writing Codex run still needs its separate approval.
+    // Owner read-only sends are covered by read-only-owner-turn.test.mjs.
     const realCodex=await request("/v1/runs",{
       method:"POST",token:"owner-user",
-      headers:{"idempotency-key":randomUUID()},body:codexRequest,
+      headers:{"idempotency-key":randomUUID()},
+      body:{...codexRequest,mode:"workspace_write"},
     });
     assert.equal(realCodex.status,201,JSON.stringify(realCodex.data));
     assert.equal(realCodex.data.status,"waiting_for_approval");
