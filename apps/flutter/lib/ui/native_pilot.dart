@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../core/controller.dart';
 import '../core/pilot_native.dart';
+import 'native_sdk_sessions.dart';
 import '../theme.dart';
 import 'studio.dart';
 
@@ -274,7 +275,9 @@ class _Home extends StatelessWidget{
         _Number('Approvals',c.approvals.length.toString(),
           Icons.verified_user_outlined),
         const SizedBox(width:10),
-        _Number('Saved Codex',c.sessions.length.toString(),Icons.forum_outlined),
+        _Number('Saved threads',
+          (c.sessions.length+c.providerSessions.length).toString(),
+          Icons.forum_outlined),
       ]),
       const SizedBox(height:16),
       FilledButton.icon(onPressed:()=>navigate(1),
@@ -406,6 +409,43 @@ class _WorkState extends State<_Work>{
               Text('Saved thread · '+_name(_val(saved['sourceKind']))+
                 ' · '+_date(saved['updatedAt']),
                 style:const TextStyle(color:_muted,fontSize:11)),
+            ]))),
+          const SizedBox(height:9),
+        ],
+        const SizedBox(height:20),
+        const Text('CLAUDE & COPILOT SDK CONVERSATIONS',
+          style:TextStyle(color:OTheme.violet,fontWeight:FontWeight.w800)),
+        const SizedBox(height:9),
+        if(widget.c.providerSessions.isEmpty)
+          const _Blank('No SDK-owned conversations yet',
+            'Completed Claude and GitHub Copilot SDK sessions from your '
+            'trusted workers appear here. These are not external website tabs.')
+        else for(final provider in widget.c.providerSessions.take(20))...[
+          _Panel(child:InkWell(
+            onTap:()=>Navigator.push(context,MaterialPageRoute<void>(
+              builder:(_)=>NativeProviderSessionDetail(
+                pilot:widget.c,session:provider,
+                canContinue:online.any((machine)=>
+                  machine['id']==provider['deviceId'] &&
+                  ((machine['capabilities'] as List?)?.contains(provider['kind'])??false)),
+                onRequested:()=>widget.navigate(2)))),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Row(children:[
+                const Icon(Icons.smart_toy_outlined,color:OTheme.violet),
+                const SizedBox(width:10),
+                Expanded(child:Text(
+                  pilotCapabilityLabel(_val(provider['kind'])),
+                  style:const TextStyle(fontWeight:FontWeight.w800))),
+                const Icon(Icons.chevron_right,color:OTheme.violet),
+              ]),
+              const SizedBox(height:7),
+              Text(_val(provider['lastPrompt'],
+                'Completed SDK conversation'),
+                maxLines:2,overflow:TextOverflow.ellipsis),
+              const SizedBox(height:5),
+              Text(_val(provider['deviceName'])+' · '+
+                _date(provider['updatedAt']),
+                style:const TextStyle(fontSize:12,color:_muted)),
             ]))),
           const SizedBox(height:9),
         ],
