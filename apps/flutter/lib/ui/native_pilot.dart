@@ -1093,21 +1093,27 @@ class _More extends StatelessWidget {
             child: _Heading('Settings & connections',
               'Your account, authorized providers and private workspace.')),
           CupertinoListSection.insetGrouped(
-            backgroundColor: Colors.transparent,
+            decoration: BoxDecoration(color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _line)),
+            backgroundColor: const Color(0xFFF5F7F9),
             header: const Text('YOUR PRIVATE ACCOUNT'),
             children: [
               CupertinoListTile(
+                backgroundColor: Colors.white,
                 leading: const Icon(CupertinoIcons.lock, color: OTheme.violet),
                 title: const Text('Private O-AGENT server'),
                 subtitle: Text(c.origin?.host ?? 'Not connected'),
                 trailing: const Icon(CupertinoIcons.checkmark_shield,
                   color: Color(0xFF287D65))),
               CupertinoListTile(
+                backgroundColor: Colors.white,
                 leading: const Icon(CupertinoIcons.person_crop_circle,
                   color: OTheme.violet),
                 title: const Text('Signed-in workspace role'),
                 subtitle: Text(_val(c.me['role'], 'Not authorized'))),
               CupertinoListTile(
+                backgroundColor: Colors.white,
                 leading: const Icon(CupertinoIcons.refresh,
                   color: OTheme.violet),
                 title: const Text('Refresh private connection'),
@@ -1117,10 +1123,14 @@ class _More extends StatelessWidget {
             ],
           ),
           CupertinoListSection.insetGrouped(
-            backgroundColor: Colors.transparent,
+            decoration: BoxDecoration(color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _line)),
+            backgroundColor: const Color(0xFFF5F7F9),
             header: const Text('AGENTS & PROJECT CONNECTIONS'),
             children: [
               CupertinoListTile(
+                backgroundColor: Colors.white,
                 leading: const Icon(CupertinoIcons.square_grid_2x2,
                   color: OTheme.violet),
                 title: const Text('AI agent directory'),
@@ -1129,6 +1139,7 @@ class _More extends StatelessWidget {
                 trailing: const Icon(CupertinoIcons.chevron_forward),
                 onTap: agents),
               CupertinoListTile(
+                backgroundColor: Colors.white,
                 leading: const Icon(CupertinoIcons.folder,
                   color: OTheme.violet),
                 title: const Text('GitHub and Cursor integrations'),
@@ -1136,6 +1147,7 @@ class _More extends StatelessWidget {
                 trailing: const Icon(CupertinoIcons.chevron_forward),
                 onTap: legacy),
               CupertinoListTile(
+                backgroundColor: Colors.white,
                 leading: const Icon(CupertinoIcons.device_laptop,
                   color: OTheme.violet),
                 title: const Text('Trusted computers'),
@@ -1146,10 +1158,14 @@ class _More extends StatelessWidget {
             ],
           ),
           CupertinoListSection.insetGrouped(
-            backgroundColor: Colors.transparent,
+            decoration: BoxDecoration(color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _line)),
+            backgroundColor: const Color(0xFFF5F7F9),
             header: const Text('SECURITY'),
             children: [
               CupertinoListTile(
+                backgroundColor: Colors.white,
                 leading: const Icon(CupertinoIcons.square_arrow_right,
                   color: Color(0xFFB3474E)),
                 title: const Text('Sign out of this phone'),
