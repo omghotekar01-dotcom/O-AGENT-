@@ -1,5 +1,12 @@
 import 'dart:io';
 
+/// The Flutter-generated MainActivity has an empty taskAffinity. Flutter
+/// AppAuth warns this can prevent the OAuth redirect from returning to the
+/// native application after Keycloak sign-in. Leave other activity options
+/// untouched and remove only the generated empty attribute.
+String nativeOAuthAndroidManifest(String source) =>
+    source.replaceAll('android:taskAffinity=""', '');
+
 /// Run after 'flutter create --platforms=android,ios .'.
 /// Keeps HTTP exceptions limited to local development and enables INTERNET.
 void main() {
@@ -34,6 +41,7 @@ void main() {
       '<application android:allowBackup="false"',
     );
   }
+  android = nativeOAuthAndroidManifest(android);
   mainManifest.writeAsStringSync(android);
 
   // The AppAuth PKCE callback returns from the system sign-in window to Flutter.
