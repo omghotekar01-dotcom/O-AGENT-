@@ -65,27 +65,69 @@ export async function startWindowsWorker({
   });
 }
 
+/** Reuse the previous owner's consented remote desktop/project gateway
+ * when this Windows account already configured it. Nothing is installed,
+ * no tokens are exported, and the existing OIDC SaaS port remains unchanged.
+ * Failures do not stop the secure native control plane.
+ */
+export async function startExistingRemoteGateway({
+  platform=process.platform, env=process.env, exists=existsSync,
+  command=spawn, print=console.log,
+}={}) {
+  if(platform!=="win32" || env.OAGENT_START_PREVIOUS_WORKSPACE==="0")return false;
+  const base=env.OAGENT_HOME ||
+    (env.LOCALAPPDATA?join(env.LOCALAPPDATA,"OAgent"):null);
+  if(!base || !exists(join(base,"settings.json"))) {
+    print("[INFO] Previous screen-control gateway is not configured; existing SaaS startup continues.");
+    return false;
+  }
+  print("[SETUP] Starting your PREVIOUSLY AUTHORIZED screen/project gateway...");
+  const script=join(root,"tools","windows","start.ps1");
+  if(!exists(script)){
+    print("[WARN] Old remote gateway launcher is missing. Native agent work is still available.");
+    return false;
+  }
+  try {
+    const code=await new Promise((done,fail)=>{
+      const child=command("powershell.exe",[
+        "-NoProfile","-ExecutionPolicy","Bypass","-File",script,
+      ],{cwd:root,stdio:"inherit",windowsHide:false});
+      child.once("error",fail);
+      child.once("exit",(code,signal)=>done(signal?1:code));
+    });
+    if(code===0){
+      print("[PASS] Existing remote screen/project gateway is ready or already running.");
+      return true;
+    }
+  } catch { /* previous backend is optional; no private error details */ }
+  print("[WARN] Existing screen-control gateway could not start. Its local settings were preserved. Inspect O-AGENT.cmd diagnostics if needed.");
+  return false;
+}
+
 /** Everything runs in sequence inside ONE console and ONE double-click.
  * Failure of a required step stops later steps; no bogus READY banner.
  * Hardware login and explicit fingerprint approval remain human decisions.
  */
 export async function launchOneClick({
   prepare=prepareDocker,start=startFreePilot,register=ensureNativeClient,
-  mobile=showMobileLogin,worker=startWindowsWorker,print=console.log,
+  mobile=showMobileLogin,worker=startWindowsWorker,
+  previousGateway=startExistingRemoteGateway,print=console.log,
 }={}){
   print("===============================================");
   print(" O-AGENT   |   ONE-CLICK PRIVATE MISSION CONTROL");
   print("===============================================");
-  print("[1/4] Checking the local Docker engine.");
+  print("[1/5] Checking the local Docker engine.");
   await prepare({print});
-  print("[2/4] Starting and checking your private O-AGENT server.");
+  print("[2/5] Starting and checking your private O-AGENT server.");
   const outcome=await start({notify:print});
   if(!outcome?.ready)throw Error(
     "The private server is not ready. Read the [FIX] checks above. No worker was started.");
-  print("[3/4] Registering or verifying secure Android login.");
+  print("[3/5] Registering or verifying secure Android login.");
   const client=await register();
   print("[PASS] Native phone login "+(client?.created?"registered.":"verified."));
-  print("[4/4] Showing your phone address and connecting your trusted project.");
+  print("[4/5] Restoring your previously authorized live screen/projects if configured.");
+  await previousGateway({print});
+  print("[5/5] Showing your phone address and connecting your trusted project.");
   await mobile({print});
   print("On your phone: use the address above, sign in, then inspect the laptop");
   print("fingerprint in Devices. First-time owner approval cannot be skipped.");
