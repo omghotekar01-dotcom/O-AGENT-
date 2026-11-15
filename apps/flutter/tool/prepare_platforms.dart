@@ -36,6 +36,18 @@ void main() {
   }
   mainManifest.writeAsStringSync(android);
 
+  // The AppAuth PKCE callback returns from the system sign-in window to Flutter.
+  final gradleKts = File('android/app/build.gradle.kts');
+  if (gradleKts.existsSync()) {
+    var kotlin = gradleKts.readAsStringSync();
+    if (!kotlin.contains('appAuthRedirectScheme')) {
+      kotlin = kotlin.replaceFirst('defaultConfig {',
+        'defaultConfig {\n'
+        '        manifestPlaceholders.putAll(mapOf("appAuthRedirectScheme" to "com.omiiii.oagent"))');
+      gradleKts.writeAsStringSync(kotlin);
+    }
+  }
+
   final debugManifest = File('android/app/src/debug/AndroidManifest.xml');
   debugManifest.createSync(recursive: true);
   debugManifest.writeAsStringSync('''
@@ -49,6 +61,16 @@ void main() {
   final plist = File('ios/Runner/Info.plist');
   if (plist.existsSync()) {
     var ios = plist.readAsStringSync();
+    if (!ios.contains('<key>CFBundleURLTypes</key>')) {
+      ios = ios.replaceFirst(
+        '</dict>\n</plist>',
+        '  <key>CFBundleURLTypes</key>\n'
+            '  <array><dict><key>CFBundleURLSchemes</key>\n'
+            '  <array><string>com.omiiii.oagent</string></array>\n'
+            '  </dict></array>\n'
+            '</dict>\n</plist>',
+      );
+    }
     if (!ios.contains('<key>NSAppTransportSecurity</key>')) {
       ios = ios.replaceFirst(
         '</dict>\n</plist>',

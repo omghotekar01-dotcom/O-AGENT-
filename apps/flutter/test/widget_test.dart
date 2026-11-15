@@ -7,24 +7,21 @@ import 'package:o_agent_mobile/theme.dart';
 import 'package:o_agent_mobile/ui/screens.dart';
 
 void main() {
-  testWidgets('login screen is honest about backend connectivity', (tester) async {
+  testWidgets('primary experience is native instead of a website', (tester) async {
     await tester.pumpWidget(const OAgentApp());
-    expect(find.text('Connect to O-AGENT'), findsOneWidget);
-    expect(find.textContaining('Choose your workspace connection'), findsOneWidget);
-    expect(find.textContaining('Public cloud account'), findsOneWidget);
-    expect(find.textContaining('Only real machines'), findsOneWidget);
-    expect(find.byType(TextField), findsNWidgets(3));
-    expect(find.textContaining("Private HTTPS address from START-O-AGENT"), findsOneWidget);
-    expect(find.textContaining("Legacy backend URL"), findsOneWidget);
-    expect(find.textContaining('demo'), findsNothing);
+    expect(find.text('Sign in to native app'), findsOneWidget);
+    expect(find.text('Earlier native project workspace'), findsOneWidget);
+    expect(find.textContaining('Private HTTPS address'), findsOneWidget);
+    expect(find.text('Open secure mobile command center'), findsNothing);
+    expect(find.text('Operator token'), findsNothing);
   });
 
-  testWidgets('operator token remains required before connect', (tester) async {
+  testWidgets('native login has a single HTTPS endpoint field', (tester) async {
     await tester.pumpWidget(const OAgentApp());
-    expect(find.text('Operator token'), findsOneWidget);
-    final button = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Connect to O-AGENT'));
-    expect(button.onPressed, isNotNull);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Sign in to native app'), findsOneWidget);
   });
+
   testWidgets('mobile dashboard metrics do not overflow at compact widths', (tester) async {
     tester.view.physicalSize = const Size(720, 1600);
     tester.view.devicePixelRatio = 1.0;

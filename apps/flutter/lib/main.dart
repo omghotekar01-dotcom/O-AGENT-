@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'core/controller.dart';
 import 'core/push_bootstrap.dart';
 import 'theme.dart';
-import 'ui/studio.dart';
+import 'ui/native_pilot.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +32,6 @@ class _OAgentAppState extends State<OAgentApp> {
         title: 'O-AGENT',
         debugShowCheckedModeBanner: false,
         theme: OTheme.studio(),
-        home: StudioShell(controller: controller),
+        home: NativePilotShell(legacy: controller),
       );
 }
