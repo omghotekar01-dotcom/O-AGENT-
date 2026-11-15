@@ -315,33 +315,22 @@ class _WorkState extends State<_Work>{
     final text=kind=='workspace_inventory'
       ?'Inspect enrolled workspace files':prompt.text.trim();
     if(text.isEmpty){_toast(context,'Enter a prompt first.');return;}
-    final details='Worker: '+_val(machine['name'])+
-      '\nProvider: '+pilotCapabilityLabel(kind)+
-      '\nMode: '+_name(mode)+
-      '\nExact folder: '+(kind=='codex_cli_turn'
-        ?_val(widget.c.sessions.where((x)=>x['sessionId']==savedSessionId &&
-            x['deviceId']==machine['id']).firstOrNull?['cwd'])
-        :_val(machine['workspace_root']))+
-      '\nSaved session: '+_val(savedSessionId,'New if supported')+
-      '\n\nPrompt:\n'+text+
-      '\n\nThis REQUESTS approval; nothing executes automatically.';
-    final confirmed=await showCupertinoDialog<bool>(context:context,builder:(dialog)=>
-      CupertinoAlertDialog(title:const Text('Review your next turn'),
-        content:SingleChildScrollView(child:SelectableText(details)),actions:[
-          CupertinoDialogAction(onPressed:()=>Navigator.pop(dialog,false),
-            child:const Text('Cancel')),
-          CupertinoDialogAction(isDefaultAction:true,onPressed:()=>Navigator.pop(dialog,true),
-            child:const Text('Request approval')),
-        ]));
-    if(confirmed!=true||!mounted)return;
+    // Owner's read-only Send can queue immediately; workspace write
+    // and sensitive tool actions still require independent approval.
     setState(()=>sending=true);
     try{
-      await widget.c.requestTurn(device:machine,kind:kind,mode:mode,
-        prompt:text,sessionId:kind=='codex_cli_turn'
+      final created=await widget.c.requestTurn(device:machine,kind:kind,
+        mode:mode,prompt:text,sessionId:kind=='codex_cli_turn'
           ?savedSessionId:null);
       if(!mounted)return;
-      prompt.clear();widget.navigate(3);
-      _toast(context,'Supervised request created. Approve it separately.');
+      prompt.clear();
+      final id=created['runId']?.toString()??'';
+      if(RegExp(r'^[0-9a-f-]{36}'+r'$').hasMatch(id)){
+        await Navigator.push(context,CupertinoPageRoute<void>(
+          builder:(_)=>NativeRunDetail(c:widget.c,id:id)));
+      }else{
+        _toast(context,'Request created. Refresh agent activity.');
+      }
     }catch(e){if(mounted)_toast(context,pilotFriendlyError(e));}
     finally{if(mounted)setState(()=>sending=false);}
   }
@@ -443,7 +432,7 @@ class _WorkState extends State<_Work>{
             icon:Icons.laptop_chromebook),const SizedBox(height:20),
         ]else _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,
           children:[
-            const Text('SUPPORTED AI AGENT TURN',style:TextStyle(
+            const Text('START AN AGENT TURN',style:TextStyle(
               color:OTheme.violet,fontWeight:FontWeight.w800)),
             const SizedBox(height:6),
             const Text('Choose your real agent and conversation. '
@@ -517,7 +506,7 @@ class _WorkState extends State<_Work>{
                 (kind=='codex_cli_turn'&&savedForDevice.isEmpty)
                 ?null:()=>_submit(selected!,kind),
               icon:const Icon(Icons.send_outlined),
-              label:Text(sending?'Requesting…':'Review and request approval')),
+              label:Text(sending?'Sending to agent…':'Send to agent')),
             const SizedBox(height:9),
             const Text('Only real provider capabilities advertised by your '
               'enrolled worker are shown. No automatic approvals.',
