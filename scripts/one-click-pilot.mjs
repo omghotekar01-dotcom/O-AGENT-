@@ -91,7 +91,10 @@ export async function startExistingRemoteGateway({
     const code=await new Promise((done,fail)=>{
       const child=command("powershell.exe",[
         "-NoProfile","-ExecutionPolicy","Bypass","-File",script,
-      ],{cwd:root,stdio:"inherit",windowsHide:false});
+      ],{cwd:root,stdio:"inherit",windowsHide:false,
+        // Do not force-open the old web dashboard when the user requested
+        // one native mobile interface. The gateway still runs locally.
+        env:{...env,OAGENT_NO_BROWSER:"1"}});
       child.once("error",fail);
       child.once("exit",(code,signal)=>done(signal?1:code));
     });
