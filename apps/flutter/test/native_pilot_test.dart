@@ -22,6 +22,7 @@ class FakeStore implements PilotSessionStore {
   }
 }
 void main(){
+  TestWidgetsFlutterBinding.ensureInitialized();
   const origin='https://pilot.example.ts.net:8443/';
   test('strict private HTTPS origin strips no credentials into web links',(){
     expect(privatePilotOrigin('http://127.0.0.1:8787'),isNull);
