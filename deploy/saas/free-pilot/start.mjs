@@ -64,12 +64,18 @@ export async function startFreePilot({
     serveStatus=verifyPrivateServeAvailability(
       run("tailscale",["serve","status","--json"]),servePort);
   }catch{
-    throw Error("Existing Tailscale Serve/Funnel configuration could conflict. Review tailscale serve status manually; no service has been changed.");
+    if(servePort===443)throw Error("HTTPS 443 is already owned by another app. For the existing O-AGENT 8443->8787 route, first repair database role credentials, then run migrate-existing-port.mjs 8443 --apply. No route changed.");
+    throw Error("The requested Tailscale HTTPS port is already owned by another service. No route changed.");
   }
   try{
     run("docker",[...compose,"up","-d","--build"]);
   }catch{
-    throw Error("Private services could not start. Inspect docker compose logs; no public ports were requested.");
+    let roleMismatch=false;
+    try{roleMismatch=/password authentication failed for user "oagent_migrator"/.test(
+      run("docker",[...compose,"logs","--no-color","--tail=40","migrate"]));}
+    catch{}
+    if(roleMismatch)throw Error("PostgreSQL migrant credentials differ from this volume: run node repair-db-auth.mjs for safe diagnosis, then --apply after encrypted backups.");
+    throw Error("Private services could not start. Inspect docker compose logs; do not delete Docker volumes.");
   }
   if(!serveStatus.existing){
     try{
