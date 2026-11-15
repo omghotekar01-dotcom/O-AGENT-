@@ -65,11 +65,25 @@ async function psql(sql,{spawnImpl=spawn}={}){
     child.stdin.end(sql+"\n");
   });
 }
-async function inspectRoles(query=psql){
+export const databaseCheckHints=Object.freeze({
+  "read local private configuration":"The .env.local file is missing, unreadable, or its generated role credentials are invalid.",
+  "connect to local PostgreSQL admin":"Docker Desktop must be running, and the oagent-free-pilot-db-1 container must accept local postgres administrator queries.",
+  "check database catalog":"Expected oagent and keycloak databases were not both found. A healthy PostgreSQL container alone does not prove initialization completed.",
+  "check O-AGENT role catalog":"Expected oagent_runtime, oagent_migrator and oagent_keycloak database roles were not all created safely. Check database initialization; do not reset volumes.",
+  "compare password verifiers":"One or more saved PostgreSQL password verifiers is missing or invalid. Do not attempt an automatic password reset.",
+  "create encrypted database backups":"Backup must complete for both databases. Check the local Docker postgres service and free disk space; do not delete existing volumes.",
+  "verify encrypted database backups":"Both backups must authenticate before changing any database role.",
+  "apply scoped database role repair":"A PostgreSQL administrator rejected the approved role change. Do not retry destructively.",
+  "verify repaired database roles":"The database did not retain the expected scoped role credentials; keep backups for recovery."
+});
+async function inspectRoles(query=psql,progress=()=>{}){
+  progress("connect to local PostgreSQL admin");
   const operator=(await query("SELECT current_user;")).trim();
   if(operator!=="postgres")throw Error("Database administration identity is not postgres; refusing changes");
+  progress("check database catalog");
   const dbs=(await query("SELECT datname FROM pg_database WHERE datname IN ('oagent','keycloak') ORDER BY datname;")).split("\n").filter(Boolean);
   if(dbs.join(",")!=="keycloak,oagent")throw Error("Expected O-AGENT and Keycloak databases were not both found");
+  progress("check O-AGENT role catalog");
   const rows=(await query("SELECT rolname,coalesce(rolpassword,''),rolsuper,rolbypassrls FROM pg_authid WHERE rolname IN ('oagent_runtime','oagent_migrator','oagent_keycloak') ORDER BY rolname;"))
     .split("\n").filter(Boolean).map(line=>line.split("|"));
   if(rows.length!==3||rows.some(x=>x.length!==4||!(x[0] in names)||x[2]!=="f"||x[3]!=="f"))
@@ -78,11 +92,14 @@ async function inspectRoles(query=psql){
 }
 export async function repairDbAuth({apply=false,read=readFile,
   inspect=inspectRoles,query=psql,backup=backupPilot,
-  verify=verifyBackup,
+  verify=verifyBackup,progress=()=>{},
   keyDirectory=join(homedir(),".oagent-recovery-keys"),
   backupDirectory=join(directory,"backups")}={}){
+  progress("read local private configuration");
   const secrets=parseRoleSecrets(await read(join(directory,".env.local"),"utf8"));
-  const saved=await inspect(query);
+  progress("connect to local PostgreSQL admin");
+  const saved=await inspect(query,progress);
+  progress("compare password verifiers");
   const mismatch=Object.keys(names).filter(role=>!
     matchesRolePassword(secrets[role],role,saved[role]));
   if(!mismatch.length)return {status:"already-matched",changed:0};
@@ -97,15 +114,19 @@ export async function repairDbAuth({apply=false,read=readFile,
   const passphrase=randomBytes(40).toString("base64url");
   await writeFile(keyPath,passphrase+"\n",{flag:"wx",mode:0o600});
   const backupFolder=join(backupDirectory,"pre-db-auth-repair-"+stamp);
+  progress("create encrypted database backups");
   await backup({password:passphrase,output:backupFolder});
+  progress("verify encrypted database backups");
   for(const database of ["oagent","keycloak"])
     await verify(join(backupFolder,database+".oagent.enc"),passphrase);
   // Role names and credentials are validated allowlisted values. SQL is sent
   // via stdin, never command arguments, logs, env injection or shell history.
   const changes=mismatch.map(role=>"ALTER ROLE "+role+
     " PASSWORD '"+secrets[role]+"';").join("\n");
+  progress("apply scoped database role repair");
   await query("BEGIN;\n"+changes+"\nCOMMIT;");
-  const latest=await inspect(query);
+  progress("verify repaired database roles");
+  const latest=await inspect(query,progress);
   if(mismatch.some(role=>!matchesRolePassword(secrets[role],role,latest[role])))
     throw Error("Database role verification failed after repair; preserve the encrypted backups");
   return {status:"repaired",roles:mismatch,changed:mismatch.length,
@@ -113,24 +134,33 @@ export async function repairDbAuth({apply=false,read=readFile,
 }
 async function main(){
   const flag=process.argv.slice(2);
-  if(flag.length>1||(flag[0]&&flag[0]!=="--apply"))
-    throw Error("Use: node repair-db-auth.mjs [--apply]");
-  const result=await repairDbAuth({apply:flag[0]==="--apply"});
-  if(result.status==="already-matched"){
-    console.log("[PASS] Database role passwords already match local pilot settings.");return;
+  if(flag.length>1||(flag[0]&&flag[0]!=="--apply")){
+    console.error("[FIX] Use: node repair-db-auth.mjs [--apply]");
+    process.exitCode=1;return;
   }
-  if(result.status==="needs-repair"){
-    console.log("[FIX] Database role passwords do not match local pilot settings: "+result.roles.join(", "));
-    console.log("Run node repair-db-auth.mjs --apply only after reviewing the existing database.");
-    console.log("The repair first creates and verifies encrypted backups of both databases.");return;
+  let step="read local private configuration";
+  try{
+    const result=await repairDbAuth({apply:flag[0]==="--apply",progress:x=>{step=x;}});
+    if(result.status==="already-matched"){
+      console.log("[PASS] Database role passwords already match local pilot settings.");return;
+    }
+    if(result.status==="needs-repair"){
+      console.log("[FIX] Database role passwords do not match local pilot settings: "+result.roles.join(", "));
+      console.log("Run node repair-db-auth.mjs --apply only after reviewing the existing database.");
+      console.log("The repair first creates and verifies encrypted backups of both databases.");return;
+    }
+    console.log("[PASS] Reconciled "+result.changed+" O-AGENT database role password(s).");
+    console.log("Encrypted backup folder: "+result.backupFolder);
+    console.log("Private recovery key file (keep separately): "+result.keyPath);
+    console.log("Existing tables and Docker volumes were not deleted.");
+    console.log("Keycloak public issuer/redirect URLs still require port 8443 migration.");
+  }catch{
+    // Never print subprocess stderr, SQL, password hashes or private configuration.
+    console.error("[FIX] Database role recovery stopped during: "+step);
+    console.error(databaseCheckHints[step]||"Keep the private backups and inspect database readiness.");
+    console.error("No Docker volume or Tailscale route was deleted or reset.");
+    process.exitCode=1;
   }
-  console.log("[PASS] Reconciled "+result.changed+" O-AGENT database role password(s).");
-  console.log("Encrypted backup folder: "+result.backupFolder);
-  console.log("Private recovery key file (keep separately): "+result.keyPath);
-  console.log("Existing tables and Docker volumes were not deleted.");
-  console.log("Keycloak public issuer/redirect URLs still require port 8443 migration.");
 }
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1])
-  main().catch(()=>{console.error(
-    "[FIX] Database password repair stopped. No volume was deleted. Check Docker and keep backup files private.");
-    process.exitCode=1;});
+  await main();
