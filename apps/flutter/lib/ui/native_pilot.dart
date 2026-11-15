@@ -646,5 +646,5 @@ class _More extends StatelessWidget{
         'browser tabs, screen streaming and unimplemented IDE sessions '
         'is not advertised as working.',
         style:TextStyle(color:_muted,height:1.5))),
-    ]));
+    ]);
 }
