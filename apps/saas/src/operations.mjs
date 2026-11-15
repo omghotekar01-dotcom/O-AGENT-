@@ -180,6 +180,17 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
     if(safeCwd!==safeRoot&&!safeCwd.startsWith(safeRoot+"/"))
       throw httpError(403,"Requested project lies outside the enrolled workspace");
   }
+  // The server, not the phone, binds a resumed Codex turn to a recent
+  // Ed25519-signed worker snapshot for this EXACT device and project path.
+  // A forged API request must never resume a guessed/foreign thread ID.
+  if(kind==="codex_cli_turn"){
+    const discovered=await client.query(
+      "SELECT 1 FROM codex_sessions WHERE device_id=$1 AND session_id=$2 "+
+      "AND cwd=$3 AND synced_at>now()-interval '5 minutes' LIMIT 1",
+      [body.deviceId,sessionId,cwd]);
+    if(!discovered.rowCount)
+      throw httpError(409,"Codex conversation is missing, stale or belongs to a different worker. Refresh its saved session list.");
+  }
   const digest=actionDigest({deviceId:body.deviceId,kind,mode,prompt,cwd,sessionId});
   // Expired owner approvals must not permanently exhaust a tenant's quota.
   await client.query(
