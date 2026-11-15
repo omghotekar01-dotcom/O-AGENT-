@@ -60,7 +60,9 @@ export function planClientOrigin(client,from,to){
 }
 export async function migrateExisting({apply=false,read=readFile,
   run=exec,remote=containerCommand,backup=backupPilot,
-  verify=verifyBackup,checkDb=repairDbAuth,directory=dir,
+  verify=verifyBackup,checkDb=repairDbAuth,
+  sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
+  directory=dir,
   keyDirectory=join(homedir(),".oagent-recovery-keys"),
   backupDirectory=join(dir,"backups")}={}){
   stage="read pilot configuration";
@@ -103,7 +105,15 @@ export async function migrateExisting({apply=false,read=readFile,
   let originalClient=null,updated=false;
   try{
     stage="authenticate Keycloak admin";
-    await remote(["sh","-c",login]);
+    // Identity is recreated during database recovery; wait for real readiness
+    // instead of failing immediately while Keycloak boots its first realm.
+    let authenticated=false;
+    for(let attempt=0;attempt<18;attempt++){
+      try{await remote(["sh","-c",login]);authenticated=true;break;}
+      catch{if(attempt!==17)await sleep(2500);}
+    }
+    if(!authenticated)
+      throw Error("Keycloak admin login unavailable after startup checks");
     stage="inspect OIDC client";
     const clients=JSON.parse(await remote([cli,"get","clients","-r","oagent",
       "-q","clientId=oagent-web","--config",authPath]));
