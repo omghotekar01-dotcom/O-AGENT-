@@ -182,7 +182,8 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         // an unverified device id as authority. Require per-request Ed25519
         // signature + short timestamp + database-backed replay nonce.
         if(!["POST","GET"].includes(method))throw httpError(405,"Invalid worker method");
-        const raw=method==="POST"?await bytes(req,20000):Buffer.alloc(0);
+        const raw=method==="POST"?await bytes(req,
+          path==="/v1/device/sessions"?80000:20000):Buffer.alloc(0);
         if(method==="POST")assertJson(req);
         const device=await verifyDeviceHeaders(pool,{
           headers:req.headers,method,path,rawBody:raw,now});
@@ -194,12 +195,9 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           if(!scoped.rowCount)throw httpError(403,"Device revoked or unavailable");
           return fn(client,tenantId);
         });
-        if(method==="POST"&&path==="/v1/device/sessions") {
-          assertJson(req);
-          const data=objectJson(await bytes(req,80000));
+        if(method==="POST"&&path==="/v1/device/sessions")
           return reply(res,200,await call((c,t)=>
             storeCodexSessions(c,t,device.deviceId,data)));
-        }
         if(method==="POST"&&path==="/v1/device/heartbeat")
           return reply(res,200,await call(c=>heartbeat(c,device.deviceId)));
         if(method==="POST"&&path==="/v1/device/capabilities")
