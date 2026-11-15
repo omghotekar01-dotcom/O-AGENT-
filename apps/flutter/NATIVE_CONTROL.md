@@ -89,3 +89,46 @@ After installing the debug APK, check live Windows/Android integration:
 6. Test denial, offline state, stale snapshots, and no-replay recovery.
 
 A green CI and a successful Android build do not replace this physical test.
+
+## Native SDK conversations and hardening — Android 0.15.0+17
+
+This is a single consolidated Android **debug pilot** release batch, not a
+commercially signed or independently security-reviewed mobile release.
+
+- Existing local Codex/VS Code threads are read via the official disposable
+  app-server list/read/paginated-turns operations. Full histories are never
+  loaded without bounds and the app never injects into active IDE windows.
+- The owner can browse prior completed Claude Agent SDK and GitHub Copilot
+  SDK sessions inside Work, inspect genuine prior prompts/results and request
+  continuation with the same provider-owned ID and enrolled project path.
+- An authenticated app cannot forge or guess a Codex/SDK session ID:
+  the server verifies the device, provider and exact directory using tenant
+  RLS and signed worker records. Codex snapshots must also be recent.
+- Submitting a continuation only creates a pending approval. A separate
+  explicit owner action in Inbox is necessary before worker execution.
+- OAuth refresh is deduplicated across concurrent native API requests.
+  Unchecked Remember phone never stores a rotated refresh key silently.
+- Old private-pilot gateways lacking the SDK-session list endpoint return
+  404 and the native app keeps its earlier worker, run and approval screens.
+- The old legacy Flutter operator-token workspace remains accessible.
+
+### Single owner acceptance procedure
+
+1. Pull the private development branch in the SAME existing Windows folder.
+2. Run START-O-AGENT.cmd; preserve HTTPS port 8443 -> localhost:8787 and
+   the unrelated application on HTTPS 443 -> localhost:8000.
+3. Keep CONNECT-O-AGENT-WORKER.cmd running on the authorized project.
+4. Install the new debug APK. Check native Home, Work, Devices and Inbox.
+5. Check saved Codex threads. If CLI unavailable, the device shows a
+   specific read-only discovery diagnostic. Inspect one genuine history.
+6. Start or resume a configured SDK provider session; then verify native
+   history and send a follow-up prompt with an exact separate approval.
+7. Verify denial, worker offline, invalid thread IDs, token rotation and
+   interrupted-run recovery. Do not claim passed physical tests until run.
+
+Still incomplete: arbitrary consumer ChatGPT.com session takeover, real
+desktop screen/video mirroring, remote attachment to an already-running
+third-party VS Code/Cursor process, image/document uploads in this new
+SaaS control channel, push alerts when the native app is terminated,
+provider OAuth account integration at commercial scale, billing, and
+always-on hosted production infrastructure. A worker must remain online.
