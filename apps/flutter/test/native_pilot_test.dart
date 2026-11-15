@@ -189,7 +189,7 @@ void main(){
     await expectLater(c.requestTurn(device:device,kind:'codex_cli_turn',
       mode:'read_only',prompt:'Continue previous code edits',
       sessionId:'invented-session-12345'),throwsA(isA<PilotFailure>()));
-    expect(writes,isEmpty,'manual guessed thread IDs must not run');
+    expect(writes,isEmpty,reason:'manual guessed thread IDs must not run');
     await c.requestTurn(device:device,kind:'codex_cli_turn',
       mode:'read_only',prompt:'Continue previous code edits',
       sessionId:'codex-thread-12345');
