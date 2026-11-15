@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {startFreePilot,verifyPrivateServeAvailability} from "../../../deploy/saas/free-pilot/start.mjs";
 import {migrationRemedies} from "../../../deploy/saas/free-pilot/migrate-port.mjs";
 test("one command starts only private Docker Compose and Tailscale Serve",async()=>{
@@ -82,4 +83,15 @@ test("existing 8443 -> 8787 mapping is reused without mutating Tailscale",async(
   assert.ok(messages.some(m=>m.includes("route preserved")));
   assert.deepEqual(verifyPrivateServeAvailability(configured,8443),
     {compatible:true,existing:true});
+});
+
+test("Windows guarded repair keeps 8787 route and never resets volumes",()=>{
+  const script=readFileSync(new URL("../../../REPAIR-O-AGENT.cmd",import.meta.url),"utf8");
+  assert.match(script,/choice \/c YN/i,"explicit consent before role changes");
+  assert.match(script,/node repair-db-auth\\.mjs --apply/);
+  assert.match(script,/node migrate-existing-port\\.mjs 8443 --apply/);
+  assert.match(script,/node start\\.mjs/);
+  assert.match(script,/localhost:8787/);
+  assert.doesNotMatch(script,/docker compose down -v|tailscale serve reset|tailscale funnel/i);
+  assert.doesNotMatch(script,/om-v16\\.tailbb6a8f\\.ts\\.net/);
 });
