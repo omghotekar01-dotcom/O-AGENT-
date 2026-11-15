@@ -116,14 +116,14 @@ List<AgentDirectoryEntry> buildAgentDirectory({
     ),
     AgentDirectoryEntry(
       id: 'vscode', name: 'VS Code / project workspace',
-      summary: 'Enrolled project access; not control of every open IDE tab.',
+      summary: 'Open your authorized VS Code files, project changes and live screen through Remote. The older screen bridge needs its own saved authorization.',
       status: !signedIn ? 'Sign in to discover'
         : enabled('workspace_inventory')
           ? 'Trusted project worker online'
           : 'No compatible worker online',
       state: enabled('workspace_inventory')
         ? AgentState.workerEnabled : AgentState.needsSetup,
-      route: AgentRoute.devices,
+      route: AgentRoute.legacyWorkspace,
     ),
     const AgentDirectoryEntry(
       id: 'github', name: 'GitHub repositories & Actions',
