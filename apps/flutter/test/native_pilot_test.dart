@@ -11,10 +11,22 @@ class FakeLogin implements PilotAuthenticator {
   Future<PilotTokens> renew(Uri origin, Map<String, dynamic> config,
       String token) async => signIn(origin,config);
 }
+class FastExpiringLogin implements PilotAuthenticator {
+  @override
+  Future<PilotTokens> signIn(Uri origin, Map<String,dynamic> config) async =>
+    PilotTokens(accessToken:'rotating-access-token',
+      refreshToken:'rotating-refresh-token',
+      expiresAt:DateTime.now().add(const Duration(seconds:30)));
+  @override
+  Future<PilotTokens> renew(Uri origin, Map<String,dynamic> config,
+      String token) async => signIn(origin,config);
+}
 class FakeStore implements PilotSessionStore {
   StoredPilotSession? saved;
+  int writes = 0;
   @override Future<StoredPilotSession?> read() async => saved;
   @override Future<void> write(StoredPilotSession value) async {
+    writes++;
     saved=value;
   }
   @override Future<void> clear() async {
@@ -129,6 +141,39 @@ void main(){
     await c.signOut();
     expect(saved.saved,isNull);
     expect(c.connected,false);
+  });
+  test('Remember phone unchecked stays unpersisted even after token renewal',
+      () async {
+    final saved=FakeStore();
+    Future<Map<String,dynamic>> request(Uri url,String method,
+        Map<String,dynamic>? body,String? bearer,Map<String,String> headers) async {
+      if(url.path=='/v1/public-config')return {
+        'authEnabled':true,'audience':'oagent-api',
+        'authorizationEndpoint':origin+
+          'auth/realms/oagent/protocol/openid-connect/auth',
+        'tokenEndpoint':origin+
+          'auth/realms/oagent/protocol/openid-connect/token'};
+      expect(bearer,'rotating-access-token');
+      if(url.path=='/v1/me')return {'role':'owner'};
+      if(url.path=='/v1/devices')return {'devices':[]};
+      if(url.path=='/v1/runs')return {'runs':[]};
+      if(url.path=='/v1/approvals')return {'approvals':[]};
+      if(url.path=='/v1/sessions')return {'sessions':[]};
+      throw StateError('Unexpected '+url.path);
+    }
+    final c=NativePilotController(request:request,
+      auth:FastExpiringLogin(),store:saved);
+    addTearDown(c.dispose);
+    await c.signIn(origin,rememberDevice:false);
+    expect(c.connected,true);
+    expect(saved.saved,isNull);
+    await c.refresh();
+    expect(saved.writes,0,reason:'renewal must not save a refresh key');
+    expect(saved.saved,isNull);
+    await c.signOut();
+    await c.signIn(origin,rememberDevice:true);
+    expect(saved.writes,greaterThan(0));
+    expect(saved.saved,isNotNull);
   });
   test('unsupported provider and offline worker are rejected before network write',() async{
     final c=NativePilotController(request:(u,m,b,t,h) async{
