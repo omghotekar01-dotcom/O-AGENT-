@@ -98,6 +98,21 @@ void main() {
       AgentState.externalOnly);
   });
 
+  test('AI agent operation is preferred over workspace inventory diagnostics',(){
+    expect(preferredAgentOperation([
+      'workspace_inventory','codex_cli_turn']), 'codex_cli_turn');
+    expect(preferredAgentOperation([
+      'workspace_inventory','copilot_sdk_turn']), 'copilot_sdk_turn');
+    expect(preferredAgentOperation([
+      'workspace_inventory','claude_agent_turn']), 'claude_agent_turn');
+    expect(preferredAgentOperation([
+      'workspace_inventory','claude_agent_turn'],selected:'workspace_inventory'),
+      'workspace_inventory');
+    expect(preferredAgentOperation(['workspace_inventory']),
+      'workspace_inventory');
+    expect(preferredAgentOperation([]),isNull);
+  });
+
   test('capable worker without verified session is enabled, not connected',(){
     final list=catalog(workers:[worker]);
     expect(list.singleWhere((x)=>x.id=='codex').state,
