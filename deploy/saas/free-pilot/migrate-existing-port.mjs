@@ -97,7 +97,7 @@ export async function migrateExisting({apply=false,read=readFile,
   const cli="/opt/keycloak/bin/kcadm.sh";
   // Authentication uses the Keycloak container's preexisting bootstrap
   // credential through an environment variable, never a password CLI arg.
-  const login='KC_CLI_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD" exec '+
+  const login='umask 077; KC_CLI_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD" exec '+
     cli+' config credentials --server http://127.0.0.1:8080/auth '+
     '--realm master --user admin --config '+authPath;
   let originalClient=null,updated=false;
