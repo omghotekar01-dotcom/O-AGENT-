@@ -358,7 +358,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
       } on PilotFailure catch (e) {
         if(e.statusCode != 404) rethrow;
         providerSessions = [];
-        // Existing native control works against earlier pilot deployments.
+        // Earlier private pilots can still display existing runs and devices.
       }
     } catch (e) {
       error = pilotFriendlyError(e);
@@ -371,7 +371,18 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     required String sessionId,
   }) async {
     if(!const ['claude_agent_turn','copilot_sdk_turn'].contains(kind) ||
-       !RegExp(r'^[0-9a-f-]{36}
+       !RegExp(r'^[0-9a-f-]{36}$').hasMatch(deviceId) ||
+       !RegExp(r'^[A-Za-z0-9_-]{8,120}$').hasMatch(sessionId)){
+      throw const PilotFailure('Invalid verified SDK conversation.');
+    }
+    final path='/v1/provider-sessions/' + kind + '/' +
+      Uri.encodeComponent(sessionId) + '?deviceId=' +
+      Uri.encodeQueryComponent(deviceId);
+    final result=await _api(path);
+    return _items(result,'turns');
+  }
+  Future<Map<String, dynamic>> runDetail(String id) =>
+    _api('/v1/runs/' + Uri.encodeComponent(id));
   Future<List<Map<String, dynamic>>> runEvents(String id) async {
     final history=<Map<String,dynamic>>[];
     var cursor=0;
@@ -416,7 +427,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     }
     Map<String,dynamic>? sdk;
     if(sessionId != null &&
-        const ['claude_agent_turn','copilot_sdk_turn'].contains(kind)){
+       const ['claude_agent_turn','copilot_sdk_turn'].contains(kind)){
       for(final found in providerSessions){
         if(found['sessionId']==sessionId &&
            found['deviceId']==device['id'] && found['kind']==kind){
@@ -424,8 +435,8 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
           break;
         }
       }
-      if(sdk == null){
-        throw const PilotFailure('Select a verified saved SDK session for this worker, or start a new session.');
+      if(sdk==null){
+        throw const PilotFailure('Select a verified saved SDK session for this worker, or start a new approved session.');
       }
     }
     final cwd = kind == 'codex_cli_turn'
@@ -512,333 +523,6 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     _tokens = null; _config = null; me = {};
     _rememberDevice = false;
     devices = []; runs = []; approvals = []; sessions = []; providerSessions = [];
-    error = null; selectedWorkspace = null; notifyListeners();
-  }
-  void _startPolling() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 6),
-      (_) => refresh(silent: true));
-  }
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) _timer?.cancel();
-    if (state == AppLifecycleState.resumed && connected) {
-      _startPolling();
-      unawaited(refresh());
-    }
-  }
-  @override
-  void dispose() {
-    _timer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-}
-
-String pilotFriendlyError(Object error) {
-  if (error is PilotFailure) return error.message;
-  return 'Secure operation failed. Check your private server or sign in again.';
-}
-String _requestKey() {
-  final secure = Random.secure();
-  return base64UrlEncode(List<int>.generate(24, (_) => secure.nextInt(256)))
-    .replaceAll('=', '');
-}
-).hasMatch(deviceId) ||
-       !RegExp(r'^[A-Za-z0-9_-]{8,120}
-  Future<List<Map<String, dynamic>>> runEvents(String id) async {
-    final history=<Map<String,dynamic>>[];
-    var cursor=0;
-    for(var page=0;page<6;page++){
-      final response=await _api('/v1/runs/' +
-        Uri.encodeComponent(id) + '/events?after=' + cursor.toString());
-      final entries=_items(response,'events');
-      history.addAll(entries);
-      final next=int.tryParse(response['nextCursor']?.toString() ?? '');
-      if(entries.length<100 || next==null || next<=cursor)break;
-      cursor=next;
-    }
-    return history;
-  }
-  Future<void> requestTurn({
-    required Map<String, dynamic> device, required String kind,
-    required String mode, required String prompt, String? sessionId,
-  }) async {
-    if (!pilotDeviceOnline(device)) {
-      throw const PilotFailure('Laptop worker is offline. Keep the worker terminal running.');
-    }
-    if (!((device['capabilities'] as List?)?.contains(kind) ?? false)) {
-      throw const PilotFailure('This worker has not enabled that provider adapter.');
-    }
-    Map<String, dynamic>? verified;
-    if (kind == 'codex_cli_turn') {
-      for (final found in sessions) {
-        if (found['sessionId'] == sessionId &&
-            found['deviceId'] == device['id']) {
-          verified = found;
-          break;
-        }
-      }
-      if (verified == null) {
-        throw const PilotFailure('Select an actual discovered Codex session on this laptop.');
-      }
-      final lastSync = DateTime.tryParse(verified['syncedAt']?.toString() ?? '');
-      if (lastSync == null ||
-          DateTime.now().difference(lastSync).inMinutes > 5) {
-        throw const PilotFailure('Saved Codex list is stale. Refresh while the laptop worker is online.');
-      }
-    }
-    final cwd = kind == 'codex_cli_turn'
-      ? verified!['cwd']?.toString() ?? ''
-      : device['workspace_root']?.toString() ?? '';
-    if (kind != 'workspace_inventory' && cwd.isEmpty) {
-      throw const PilotFailure('Worker has not verified an enrolled project folder.');
-    }
-    await _api('/v1/runs', method: 'POST',
-      headers: {'idempotency-key': _requestKey()},
-      body: {'deviceId': device['id'], 'kind': kind, 'mode': mode,
-        'prompt': prompt, 'cwd': cwd,
-        if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId});
-    await refresh();
-  }
-  Future<void> cancelRun(String id) async {
-    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
-      throw const PilotFailure('Invalid supervised run identifier.');
-    }
-    await _api('/v1/runs/' + Uri.encodeComponent(id) + '/cancel',
-      method: 'POST', body: {});
-    await refresh();
-  }
-  Future<void> acknowledgeInterruptedRun(String id) async {
-    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
-      throw const PilotFailure('Invalid interrupted run identifier.');
-    }
-    await _api('/v1/runs/' + Uri.encodeComponent(id) +
-      '/resolve-interrupted',method: 'POST',
-      body: {'confirm':'MARK_INTERRUPTED_RUN_FAILED'});
-    await refresh();
-  }
-  Future<void> decide(Map<String, dynamic> item, bool approve) async {
-    final id = item['id']?.toString() ?? '';
-    final hash = item['action_hash']?.toString() ?? '';
-    if (!RegExp(r'^[a-f0-9-]{36}$').hasMatch(id) ||
-        !RegExp(r'^[a-f0-9]{64}$').hasMatch(hash)) {
-      throw const PilotFailure('Approval fingerprint is missing or invalid.');
-    }
-    if (approve && item['actionable'] != true) {
-      throw const PilotFailure('Request is no longer safe to approve.');
-    }
-    await _api('/v1/approvals/' + Uri.encodeComponent(id) + '/decision',
-      method: 'POST',
-      body: {'approve': approve, 'expectedActionHash': hash});
-    await refresh();
-  }
-  Future<Map<String, dynamic>> inspectPairing(String link) async {
-    if (me['role'] != 'owner' || origin == null) {
-      throw const PilotFailure('Only a signed-in owner can enroll a worker.');
-    }
-    return _api('/v1/devices/enrollments/inspect', method: 'POST',
-      body: {'pairingToken': pilotPairingToken(link, origin!)});
-  }
-  Future<void> approvePairing(String link, String expectedFingerprint) async {
-    if (me['role'] != 'owner' || origin == null) {
-      throw const PilotFailure('Only the workspace owner may approve enrollment.');
-    }
-    if (!RegExp(r'^[a-f0-9]{24}$').hasMatch(expectedFingerprint)) {
-      throw const PilotFailure('Worker fingerprint is not valid.');
-    }
-    await _api('/v1/devices/enrollments/approve', method: 'POST',
-      body: {'pairingToken': pilotPairingToken(link, origin!),
-        'expectedFingerprint': expectedFingerprint});
-    await refresh();
-  }
-
-  Future<void> revokeDevice(Map<String, dynamic> device) async {
-    if (me['role'] != 'owner') {
-      throw const PilotFailure('Only the owner can revoke a trusted device.');
-    }
-    final id = device['id']?.toString() ?? '';
-    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
-      throw const PilotFailure('Device identifier was not verified.');
-    }
-    await _api('/v1/devices/' + Uri.encodeComponent(id) + '/revoke',
-      method: 'POST', body: {});
-    await refresh();
-  }
-  Future<void> signOut() async {
-    _timer?.cancel();
-    await _store.clear();
-    _tokens = null; _config = null; me = {};
-    _rememberDevice = false;
-    devices = []; runs = []; approvals = []; sessions = [];
-    error = null; selectedWorkspace = null; notifyListeners();
-  }
-  void _startPolling() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 6),
-      (_) => refresh(silent: true));
-  }
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) _timer?.cancel();
-    if (state == AppLifecycleState.resumed && connected) {
-      _startPolling();
-      unawaited(refresh());
-    }
-  }
-  @override
-  void dispose() {
-    _timer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-}
-
-String pilotFriendlyError(Object error) {
-  if (error is PilotFailure) return error.message;
-  return 'Secure operation failed. Check your private server or sign in again.';
-}
-String _requestKey() {
-  final secure = Random.secure();
-  return base64UrlEncode(List<int>.generate(24, (_) => secure.nextInt(256)))
-    .replaceAll('=', '');
-}
-).hasMatch(sessionId)){
-      throw const PilotFailure('Invalid verified SDK conversation.');
-    }
-    final path='/v1/provider-sessions/' + kind + '/' +
-      Uri.encodeComponent(sessionId) + '?deviceId=' +
-      Uri.encodeQueryComponent(deviceId);
-    final result=await _api(path);
-    return _items(result,'turns');
-  }
-  Future<Map<String, dynamic>> runDetail(String id) =>
-    _api('/v1/runs/' + Uri.encodeComponent(id));
-  Future<List<Map<String, dynamic>>> runEvents(String id) async {
-    final history=<Map<String,dynamic>>[];
-    var cursor=0;
-    for(var page=0;page<6;page++){
-      final response=await _api('/v1/runs/' +
-        Uri.encodeComponent(id) + '/events?after=' + cursor.toString());
-      final entries=_items(response,'events');
-      history.addAll(entries);
-      final next=int.tryParse(response['nextCursor']?.toString() ?? '');
-      if(entries.length<100 || next==null || next<=cursor)break;
-      cursor=next;
-    }
-    return history;
-  }
-  Future<void> requestTurn({
-    required Map<String, dynamic> device, required String kind,
-    required String mode, required String prompt, String? sessionId,
-  }) async {
-    if (!pilotDeviceOnline(device)) {
-      throw const PilotFailure('Laptop worker is offline. Keep the worker terminal running.');
-    }
-    if (!((device['capabilities'] as List?)?.contains(kind) ?? false)) {
-      throw const PilotFailure('This worker has not enabled that provider adapter.');
-    }
-    Map<String, dynamic>? verified;
-    if (kind == 'codex_cli_turn') {
-      for (final found in sessions) {
-        if (found['sessionId'] == sessionId &&
-            found['deviceId'] == device['id']) {
-          verified = found;
-          break;
-        }
-      }
-      if (verified == null) {
-        throw const PilotFailure('Select an actual discovered Codex session on this laptop.');
-      }
-      final lastSync = DateTime.tryParse(verified['syncedAt']?.toString() ?? '');
-      if (lastSync == null ||
-          DateTime.now().difference(lastSync).inMinutes > 5) {
-        throw const PilotFailure('Saved Codex list is stale. Refresh while the laptop worker is online.');
-      }
-    }
-    final cwd = kind == 'codex_cli_turn'
-      ? verified!['cwd']?.toString() ?? ''
-      : device['workspace_root']?.toString() ?? '';
-    if (kind != 'workspace_inventory' && cwd.isEmpty) {
-      throw const PilotFailure('Worker has not verified an enrolled project folder.');
-    }
-    await _api('/v1/runs', method: 'POST',
-      headers: {'idempotency-key': _requestKey()},
-      body: {'deviceId': device['id'], 'kind': kind, 'mode': mode,
-        'prompt': prompt, 'cwd': cwd,
-        if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId});
-    await refresh();
-  }
-  Future<void> cancelRun(String id) async {
-    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
-      throw const PilotFailure('Invalid supervised run identifier.');
-    }
-    await _api('/v1/runs/' + Uri.encodeComponent(id) + '/cancel',
-      method: 'POST', body: {});
-    await refresh();
-  }
-  Future<void> acknowledgeInterruptedRun(String id) async {
-    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
-      throw const PilotFailure('Invalid interrupted run identifier.');
-    }
-    await _api('/v1/runs/' + Uri.encodeComponent(id) +
-      '/resolve-interrupted',method: 'POST',
-      body: {'confirm':'MARK_INTERRUPTED_RUN_FAILED'});
-    await refresh();
-  }
-  Future<void> decide(Map<String, dynamic> item, bool approve) async {
-    final id = item['id']?.toString() ?? '';
-    final hash = item['action_hash']?.toString() ?? '';
-    if (!RegExp(r'^[a-f0-9-]{36}$').hasMatch(id) ||
-        !RegExp(r'^[a-f0-9]{64}$').hasMatch(hash)) {
-      throw const PilotFailure('Approval fingerprint is missing or invalid.');
-    }
-    if (approve && item['actionable'] != true) {
-      throw const PilotFailure('Request is no longer safe to approve.');
-    }
-    await _api('/v1/approvals/' + Uri.encodeComponent(id) + '/decision',
-      method: 'POST',
-      body: {'approve': approve, 'expectedActionHash': hash});
-    await refresh();
-  }
-  Future<Map<String, dynamic>> inspectPairing(String link) async {
-    if (me['role'] != 'owner' || origin == null) {
-      throw const PilotFailure('Only a signed-in owner can enroll a worker.');
-    }
-    return _api('/v1/devices/enrollments/inspect', method: 'POST',
-      body: {'pairingToken': pilotPairingToken(link, origin!)});
-  }
-  Future<void> approvePairing(String link, String expectedFingerprint) async {
-    if (me['role'] != 'owner' || origin == null) {
-      throw const PilotFailure('Only the workspace owner may approve enrollment.');
-    }
-    if (!RegExp(r'^[a-f0-9]{24}$').hasMatch(expectedFingerprint)) {
-      throw const PilotFailure('Worker fingerprint is not valid.');
-    }
-    await _api('/v1/devices/enrollments/approve', method: 'POST',
-      body: {'pairingToken': pilotPairingToken(link, origin!),
-        'expectedFingerprint': expectedFingerprint});
-    await refresh();
-  }
-
-  Future<void> revokeDevice(Map<String, dynamic> device) async {
-    if (me['role'] != 'owner') {
-      throw const PilotFailure('Only the owner can revoke a trusted device.');
-    }
-    final id = device['id']?.toString() ?? '';
-    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
-      throw const PilotFailure('Device identifier was not verified.');
-    }
-    await _api('/v1/devices/' + Uri.encodeComponent(id) + '/revoke',
-      method: 'POST', body: {});
-    await refresh();
-  }
-  Future<void> signOut() async {
-    _timer?.cancel();
-    await _store.clear();
-    _tokens = null; _config = null; me = {};
-    _rememberDevice = false;
-    devices = []; runs = []; approvals = []; sessions = [];
     error = null; selectedWorkspace = null; notifyListeners();
   }
   void _startPolling() {
