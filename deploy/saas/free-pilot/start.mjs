@@ -45,6 +45,7 @@ export function verifyPrivateServeAvailability(json,port=443){
  */
 export async function startFreePilot({
   setup=setupPilot,run=execute,doctor=checkPilot,
+  sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),
   notify=console.log,
 }={}){
   const {origin}=await setup({notify});
@@ -86,7 +87,14 @@ export async function startFreePilot({
     }
   }else notify("Existing private Tailscale Serve route preserved (local port 8787).");
   notify("Private pilot requested on "+origin);
-  const results=await doctor();
+  // Containers can be created long before Keycloak imports the identity realm.
+  // Retry local private readiness rather than reporting a false failed launch.
+  let results=await doctor();
+  for(let attempt=0;!results.ready&&attempt<17;attempt++){
+    if(attempt===0)notify("Private services initializing; checking PostgreSQL, Keycloak and gateway readiness.");
+    await sleep(2500);
+    results=await doctor();
+  }
   notify(formatDoctor(results));
   if(!results.ready)notify("The stack was started but prerequisites remain unverified. Run node doctor.mjs after investigating the listed items.");
   return {origin,ready:results.ready,checks:results.checks};
