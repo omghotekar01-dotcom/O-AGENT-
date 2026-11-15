@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'ios_components.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/agent_directory.dart';
 import '../core/pilot_native.dart';
@@ -98,16 +99,16 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
   }
 
   IconData _icon(String id) => switch (id) {
-    'codex' => CupertinoIcons.square_stack,
-    'claude_sdk' => CupertinoIcons.bubble_left_bubble_right,
-    'copilot_sdk' => CupertinoIcons.cloud,
-    'vscode' => CupertinoIcons.device_laptop,
-    'github' => CupertinoIcons.folder,
-    'cursor' => CupertinoIcons.square_stack,
-    'chatgpt' => CupertinoIcons.chat_bubble_2,
-    'claude_web' => CupertinoIcons.chat_bubble,
-    'gemini' => CupertinoIcons.star,
-    _ => CupertinoIcons.square_grid_2x2,
+    'codex' => LucideIcons.code,
+    'claude_sdk' => LucideIcons.bot,
+    'copilot_sdk' => LucideIcons.workflow,
+    'vscode' => LucideIcons.monitor,
+    'github' => LucideIcons.github,
+    'cursor' => LucideIcons.mousePointer2,
+    'chatgpt' => LucideIcons.messageCircle,
+    'claude_web' => LucideIcons.messagesSquare,
+    'gemini' => LucideIcons.sparkles,
+    _ => LucideIcons.layoutGrid,
   };
 
   Widget _tile(AgentDirectoryEntry agent) =>
@@ -173,25 +174,25 @@ class _NativeAgentDirectoryState extends State<NativeAgentDirectory> {
             ]),
             const SizedBox(height: 14),
             OSurface(
-              tint: OTheme.lavender,
-              onTap: widget.onLegacy,
+              tint: const Color(0xFFEFF1FC),
+              onTap: widget.onChatGpt ?? widget.onLegacy,
               child: const Row(children: [
-                Icon(CupertinoIcons.desktopcomputer,
-                  color: OTheme.violet, size: 27),
+                Icon(LucideIcons.messageCircle,
+                  color: OTheme.violet, size: 29),
                 SizedBox(width: 13),
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Open live PC screen',
-                      style: TextStyle(fontSize: 16,
+                    Text('Your ChatGPT workspace',
+                      style: TextStyle(fontSize: 17,
                         fontWeight: FontWeight.w800, color: OTheme.ink)),
                     SizedBox(height: 4),
-                    Text('Existing remote projects and AI tools',
+                    Text('Live PC · exported history · connect API key',
                       style: TextStyle(fontSize: 12,
                         color: OTheme.violet)),
                   ])),
-                Icon(CupertinoIcons.chevron_right,
-                  color: OTheme.violet),
+                Icon(LucideIcons.chevronRight,
+                  color: OTheme.violet,size:19),
               ])),
             const OSectionTitle('Find an agent'),
             CupertinoSearchTextField(
