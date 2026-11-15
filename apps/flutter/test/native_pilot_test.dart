@@ -21,6 +21,24 @@ class FastExpiringLogin implements PilotAuthenticator {
   Future<PilotTokens> renew(Uri origin, Map<String,dynamic> config,
       String token) async => signIn(origin,config);
 }
+class ClockLogin implements PilotAuthenticator {
+  ClockLogin(this.clock);
+  final DateTime Function() clock;
+  int renewals=0;
+  @override
+  Future<PilotTokens> signIn(Uri origin, Map<String,dynamic> config) async =>
+    PilotTokens(accessToken:'validated-access',
+      refreshToken:'validated-refresh',
+      expiresAt:clock().add(const Duration(minutes:2)));
+  @override
+  Future<PilotTokens> renew(Uri origin,Map<String,dynamic> config,
+      String token) async {
+    renewals++;
+    return PilotTokens(accessToken:'validated-access',
+      refreshToken:'rotated-refresh',
+      expiresAt:clock().add(const Duration(minutes:2)));
+  }
+}
 class FakeStore implements PilotSessionStore {
   StoredPilotSession? saved;
   int writes = 0;
@@ -248,6 +266,51 @@ void main(){
     await c.acknowledgeInterruptedRun(runId);
     expect(writes['/v1/runs/'+runId+'/resolve-interrupted']?['confirm'],
       'MARK_INTERRUPTED_RUN_FAILED');
+  });
+
+  test('concurrent native data requests rotate the OAuth token only once',
+      () async {
+    var clock=DateTime.now().toUtc();
+    final auth=ClockLogin(()=>clock);
+    final saved=FakeStore();
+    Future<Map<String,dynamic>> request(Uri url,String method,
+      Map<String,dynamic>? body,String? bearer,Map<String,String> headers) async {
+      if(url.path=='/v1/public-config')return {
+        'authEnabled':true,'audience':'oagent-api',
+        'authorizationEndpoint':origin+
+          'auth/realms/oagent/protocol/openid-connect/auth',
+        'tokenEndpoint':origin+
+          'auth/realms/oagent/protocol/openid-connect/token'};
+      expect(bearer,'validated-access');
+      if(url.path=='/v1/me')return {'role':'owner'};
+      if(url.path=='/v1/devices')return {'devices':[]};
+      if(url.path=='/v1/runs'&&method=='GET')return {'runs':[]};
+      if(url.path=='/v1/approvals')return {'approvals':[]};
+      if(url.path=='/v1/sessions')return {'sessions':[]};
+      if(url.path=='/v1/provider-sessions')return {'sessions':[]};
+      if(url.path.startsWith('/v1/provider-sessions/'))return {'turns':[]};
+      if(url.path.endsWith('/events'))return {'events':[]};
+      if(url.path.startsWith('/v1/runs/'))return {'id':'verified-run'};
+      throw StateError('Unexpected URL: '+url.toString());
+    }
+    final c=NativePilotController(request:request,auth:auth,store:saved,
+      now:()=>clock);
+    addTearDown(c.dispose);
+    await c.signIn(origin,rememberDevice:false);
+    expect(c.connected,true);
+    expect(auth.renewals,0);
+    clock=clock.add(const Duration(minutes:3));
+    await Future.wait([
+      c.runDetail('11111111-1111-4111-8111-111111111111'),
+      c.runEvents('11111111-1111-4111-8111-111111111111'),
+      c.providerHistory(kind:'claude_agent_turn',
+        deviceId:'11111111-1111-4111-8111-111111111111',
+        sessionId:'claude-session-123456'),
+    ]);
+    expect(auth.renewals,1,
+      reason:'parallel API requests must share rotating refresh credentials');
+    expect(saved.writes,0,
+      reason:'token refresh must not override Remember phone unchecked');
   });
 
   test('SDK conversation continuation is device, provider and cwd bound',
