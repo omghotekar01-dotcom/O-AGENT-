@@ -392,6 +392,192 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
         if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId});
     await refresh();
   }
+  Future<void> cancelRun(String id) async {
+    if (!RegExp(r'^[0-9a-f-]{36}
+    final id = item['id']?.toString() ?? '';
+    final hash = item['action_hash']?.toString() ?? '';
+    if (!RegExp(r'^[a-f0-9-]{36}$').hasMatch(id) ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(hash)) {
+      throw const PilotFailure('Approval fingerprint is missing or invalid.');
+    }
+    if (approve && item['actionable'] != true) {
+      throw const PilotFailure('Request is no longer safe to approve.');
+    }
+    await _api('/v1/approvals/' + Uri.encodeComponent(id) + '/decision',
+      method: 'POST',
+      body: {'approve': approve, 'expectedActionHash': hash});
+    await refresh();
+  }
+  Future<Map<String, dynamic>> inspectPairing(String link) async {
+    if (me['role'] != 'owner' || origin == null) {
+      throw const PilotFailure('Only a signed-in owner can enroll a worker.');
+    }
+    return _api('/v1/devices/enrollments/inspect', method: 'POST',
+      body: {'pairingToken': pilotPairingToken(link, origin!)});
+  }
+  Future<void> approvePairing(String link, String expectedFingerprint) async {
+    if (me['role'] != 'owner' || origin == null) {
+      throw const PilotFailure('Only the workspace owner may approve enrollment.');
+    }
+    if (!RegExp(r'^[a-f0-9]{24}$').hasMatch(expectedFingerprint)) {
+      throw const PilotFailure('Worker fingerprint is not valid.');
+    }
+    await _api('/v1/devices/enrollments/approve', method: 'POST',
+      body: {'pairingToken': pilotPairingToken(link, origin!),
+        'expectedFingerprint': expectedFingerprint});
+    await refresh();
+  }
+
+  Future<void> revokeDevice(Map<String, dynamic> device) async {
+    if (me['role'] != 'owner') {
+      throw const PilotFailure('Only the owner can revoke a trusted device.');
+    }
+    final id = device['id']?.toString() ?? '';
+    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
+      throw const PilotFailure('Device identifier was not verified.');
+    }
+    await _api('/v1/devices/' + Uri.encodeComponent(id) + '/revoke',
+      method: 'POST', body: {});
+    await refresh();
+  }
+  Future<void> signOut() async {
+    _timer?.cancel();
+    await _store.clear();
+    _tokens = null; _config = null; me = {};
+    devices = []; runs = []; approvals = []; sessions = [];
+    error = null; selectedWorkspace = null; notifyListeners();
+  }
+  void _startPolling() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 6),
+      (_) => refresh(silent: true));
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) _timer?.cancel();
+    if (state == AppLifecycleState.resumed && connected) {
+      _startPolling();
+      unawaited(refresh());
+    }
+  }
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+}
+
+String pilotFriendlyError(Object error) {
+  if (error is PilotFailure) return error.message;
+  return 'Secure operation failed. Check your private server or sign in again.';
+}
+String _requestKey() {
+  final secure = Random.secure();
+  return base64UrlEncode(List<int>.generate(24, (_) => secure.nextInt(256)))
+    .replaceAll('=', '');
+}
+).hasMatch(id)) {
+      throw const PilotFailure('Invalid supervised run identifier.');
+    }
+    await _api('/v1/runs/' + Uri.encodeComponent(id) + '/cancel',
+      method: 'POST', body: {});
+    await refresh();
+  }
+  Future<void> acknowledgeInterruptedRun(String id) async {
+    if (!RegExp(r'^[0-9a-f-]{36}
+    final id = item['id']?.toString() ?? '';
+    final hash = item['action_hash']?.toString() ?? '';
+    if (!RegExp(r'^[a-f0-9-]{36}$').hasMatch(id) ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(hash)) {
+      throw const PilotFailure('Approval fingerprint is missing or invalid.');
+    }
+    if (approve && item['actionable'] != true) {
+      throw const PilotFailure('Request is no longer safe to approve.');
+    }
+    await _api('/v1/approvals/' + Uri.encodeComponent(id) + '/decision',
+      method: 'POST',
+      body: {'approve': approve, 'expectedActionHash': hash});
+    await refresh();
+  }
+  Future<Map<String, dynamic>> inspectPairing(String link) async {
+    if (me['role'] != 'owner' || origin == null) {
+      throw const PilotFailure('Only a signed-in owner can enroll a worker.');
+    }
+    return _api('/v1/devices/enrollments/inspect', method: 'POST',
+      body: {'pairingToken': pilotPairingToken(link, origin!)});
+  }
+  Future<void> approvePairing(String link, String expectedFingerprint) async {
+    if (me['role'] != 'owner' || origin == null) {
+      throw const PilotFailure('Only the workspace owner may approve enrollment.');
+    }
+    if (!RegExp(r'^[a-f0-9]{24}$').hasMatch(expectedFingerprint)) {
+      throw const PilotFailure('Worker fingerprint is not valid.');
+    }
+    await _api('/v1/devices/enrollments/approve', method: 'POST',
+      body: {'pairingToken': pilotPairingToken(link, origin!),
+        'expectedFingerprint': expectedFingerprint});
+    await refresh();
+  }
+
+  Future<void> revokeDevice(Map<String, dynamic> device) async {
+    if (me['role'] != 'owner') {
+      throw const PilotFailure('Only the owner can revoke a trusted device.');
+    }
+    final id = device['id']?.toString() ?? '';
+    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
+      throw const PilotFailure('Device identifier was not verified.');
+    }
+    await _api('/v1/devices/' + Uri.encodeComponent(id) + '/revoke',
+      method: 'POST', body: {});
+    await refresh();
+  }
+  Future<void> signOut() async {
+    _timer?.cancel();
+    await _store.clear();
+    _tokens = null; _config = null; me = {};
+    devices = []; runs = []; approvals = []; sessions = [];
+    error = null; selectedWorkspace = null; notifyListeners();
+  }
+  void _startPolling() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 6),
+      (_) => refresh(silent: true));
+  }
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) _timer?.cancel();
+    if (state == AppLifecycleState.resumed && connected) {
+      _startPolling();
+      unawaited(refresh());
+    }
+  }
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+}
+
+String pilotFriendlyError(Object error) {
+  if (error is PilotFailure) return error.message;
+  return 'Secure operation failed. Check your private server or sign in again.';
+}
+String _requestKey() {
+  final secure = Random.secure();
+  return base64UrlEncode(List<int>.generate(24, (_) => secure.nextInt(256)))
+    .replaceAll('=', '');
+}
+).hasMatch(id)) {
+      throw const PilotFailure('Invalid interrupted run identifier.');
+    }
+    // This must not automatically replay a potentially side-effecting turn.
+    await _api('/v1/runs/' + Uri.encodeComponent(id) +
+      '/resolve-interrupted',method: 'POST',
+      body: {'confirm':'MARK_INTERRUPTED_RUN_FAILED'});
+    await refresh();
+  }
   Future<void> decide(Map<String, dynamic> item, bool approve) async {
     final id = item['id']?.toString() ?? '';
     final hash = item['action_hash']?.toString() ?? '';
