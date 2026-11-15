@@ -1,8 +1,12 @@
 name: O-AGENT Private Pilot Container Smoke (No APK)
 on:
   workflow_dispatch:
-  # Container registry pulls and full-stack smoke are opt-in/manual after the
-  # one-time pilot CI foundation. Never consume repeated free-tier builds.
+  # One targeted end-to-end boot check for the non-destructive DB bootstrap.
+  # No Android APK is built. Future unrelated commits do not trigger this.
+  push:
+    branches: ["feat/saas-secure-control-plane-20261114"]
+    paths:
+      - ".github/workflows/free-pilot-smoke.yml"
 concurrency:
   group: oagent-pilot-smoke-${{ github.ref }}
   cancel-in-progress: true
@@ -48,6 +52,10 @@ jobs:
             -f deploy/saas/free-pilot/compose.yaml config --quiet
           docker compose --env-file deploy/saas/free-pilot/.env.local \
             -f deploy/saas/free-pilot/compose.yaml up -d --build
+      - name: Confirm real PostgreSQL roles and both databases were initialized
+        run: |
+          cd deploy/saas/free-pilot
+          node bootstrap-db.mjs
       - name: Probe API readiness, realm discovery and secure browser config
         run: |
           node --input-type=module <<'JS'
