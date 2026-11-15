@@ -351,13 +351,8 @@ class _WorkState extends State<_Work>{
       .map((x)=>x.toString()).where((x)=>const [
         'workspace_inventory','codex_cli_turn','claude_agent_turn',
         'copilot_sdk_turn'].contains(x)).toList();
-    // A provider conversation is the primary purpose of this product.
-    // Workspace inventory is a diagnostics fallback, never preferred over
-    // an enabled Codex/Claude/Copilot adapter.
-    final aiOperations=available.where((k)=>k!='workspace_inventory').toList();
-    final kind=available.contains(operation)?operation:
-      (aiOperations.isNotEmpty?aiOperations.first:
-        (available.isNotEmpty?available.first:null));
+    // A provider conversation is preferred over diagnostic inventory.
+    final kind=preferredAgentOperation(available,selected:operation);
     final savedForDevice=widget.c.sessions
       .where((x)=>x['deviceId']==selected?['id']).toList();
     final chosenSaved=savedForDevice.where(
