@@ -1,4 +1,4 @@
-import {isAbsolute,relative,resolve,sep} from "node:path";
+import {posix,win32} from "node:path";
 import {httpError,isUUID} from "./operations.mjs";
 
 const SESSION=/^[A-Za-z0-9_-]{8,120}$/;
@@ -6,10 +6,22 @@ const clean=(value,max)=>typeof value==="string"&&value.length<=max&&
   !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value);
 export function withinRoot(root,folder) {
   if(typeof root!=="string"||typeof folder!=="string"||
-     !isAbsolute(root)||!isAbsolute(folder))return false;
-  const r=resolve(root),f=resolve(folder);
-  const diff=relative(r,f);
-  return diff!==".."&&!diff.startsWith(".."+sep)&&!isAbsolute(diff);
+    !root||!folder||root.length>600||folder.length>600||
+    /[\x00-\x1f\x7f]/.test(root+folder))return false;
+  // The signed worker runs on Windows but PostgreSQL runs in Linux.
+  // Node's platform-native path.isAbsolute() would reject C:\ roots here.
+  const isDrivePath=p=>/^[A-Za-z]:[\\/]/.test(p);
+  const windows=isDrivePath(root);
+  if(windows!==isDrivePath(folder))return false;
+  if(!windows && (root.includes("\\")||folder.includes("\\")))return false;
+  const impl=windows?win32:posix;
+  if(!impl.isAbsolute(root)||!impl.isAbsolute(folder))return false;
+  // Windows paths are case-insensitive for drive-letter projects. Reject
+  // cross-drive, relative, UNC, alternate-drive and traversal escapes.
+  const canonicalRoot=windows?impl.normalize(root).toLowerCase():impl.normalize(root);
+  const canonicalFolder=windows?impl.normalize(folder).toLowerCase():impl.normalize(folder);
+  const rel=impl.relative(canonicalRoot,canonicalFolder);
+  return rel!==".."&&!rel.startsWith(".."+impl.sep)&&!impl.isAbsolute(rel);
 }
 export function validateCodexSessions(body,workspaceRoot) {
   if(!body||!Array.isArray(body.sessions)||body.sessions.length>10||
