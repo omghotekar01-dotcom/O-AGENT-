@@ -73,7 +73,7 @@ void main() {
         of:find.byType(CupertinoTabBar),matching:find.text('Remote')).first);
       await tester.pumpAndSettle();
       expect(find.text('Your actual screen.\nOn your phone.'),findsOneWidget);
-      expect(find.text('Existing gateway owner token'),findsOneWidget);
+      expect(find.text('Real laptop screen & agent controls'),findsOneWidget);
       await tester.tap(find.text('Agents'));
       await tester.pumpAndSettle();
       expect(find.text('Your AI work.\nAnywhere.'),findsOneWidget);
