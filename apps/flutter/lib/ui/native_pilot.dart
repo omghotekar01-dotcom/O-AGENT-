@@ -340,7 +340,7 @@ class _WorkState extends State<_Work>{
       (online.isEmpty?null:online.first);
     final available=((selected?['capabilities'] as List?)??[])
       .map((x)=>x.toString()).where((x)=>const [
-        'workspace_inventory','codex_cli_turn','claude_agent_turn',
+        'codex_cli_turn','claude_agent_turn',
         'copilot_sdk_turn'].contains(x)).toList();
     // A provider conversation is preferred over diagnostic inventory.
     final kind=preferredAgentOperation(available,selected:operation);
@@ -463,8 +463,11 @@ class _WorkState extends State<_Work>{
                 operation=v;
                 if(v!='codex_cli_turn')savedSessionId=null;
               }))
-            else const Text('No compatible provider enabled on this worker.',
-              style:TextStyle(color:_muted)),
+            else const Text('Your laptop is online, but no AI-agent '
+              'adapter is enabled. Open a Codex session on the PC and enable '
+              'its saved-session sync, or configure the authorized Claude '
+              'or Copilot SDK. Workspace inventory is not an AI chat.',
+              style:TextStyle(color:_muted,height:1.5)),
             const SizedBox(height:12),
             DropdownButtonFormField<String>(initialValue:mode,
               decoration:const InputDecoration(labelText:'Permission mode',
