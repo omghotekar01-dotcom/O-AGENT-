@@ -13,6 +13,7 @@ import {createMcp} from "./mcp.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "./push.mjs";
 import {exportOwnerData} from "./export.mjs";
 import {tenantUsage} from "./billing.mjs";
+import {storeCodexSessions,listCodexSessions} from "./codex-sessions.mjs";
 import {listWorkspaces,listTeamMembers,createTeamInvite,redeemTeamInvite,removeTeamMember,renameWorkspace} from "./team.mjs";
 import {
   httpError,startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,
@@ -193,6 +194,12 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
           if(!scoped.rowCount)throw httpError(403,"Device revoked or unavailable");
           return fn(client,tenantId);
         });
+        if(method==="POST"&&path==="/v1/device/sessions") {
+          assertJson(req);
+          const data=objectJson(await bytes(req,80000));
+          return reply(res,200,await call((c,t)=>
+            storeCodexSessions(c,t,device.deviceId,data)));
+        }
         if(method==="POST"&&path==="/v1/device/heartbeat")
           return reply(res,200,await call(c=>heartbeat(c,device.deviceId)));
         if(method==="POST"&&path==="/v1/device/capabilities")
@@ -319,7 +326,9 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         /^\/v1\/devices\/([0-9a-f-]{36})\/revoke$/i);
       if(method==="POST"&&revoke)return reply(res,200,
         await asTenant((c,t)=>revokeDevice(c,t,identity.subject,revoke[1])));
-      if(method==="GET"&&path==="/v1/runs")
+      if(method==="GET"&&path==="/v1/sessions")
+         return reply(res,200,{sessions:await asTenant(listCodexSessions)});
+       if(method==="GET"&&path==="/v1/runs")
         return reply(res,200,{runs:await asTenant(c=>listRuns(c))});
       if(method==="POST"&&path==="/v1/runs"){
         assertJson(req);const data=objectJson(await bytes(req,10000));

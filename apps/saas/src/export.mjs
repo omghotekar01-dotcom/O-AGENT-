@@ -12,6 +12,7 @@ export async function exportOwnerData(client,identity,{limit=2000,maxBytes=8_000
   const queries={
     devices:"SELECT id,name,capabilities,workspace_root,created_at,last_seen_at,revoked_at FROM devices ORDER BY created_at",
     runs:"SELECT id,device_id,kind,mode,prompt,cwd,session_id,action_hash,status,result,error,created_at,updated_at FROM runs ORDER BY created_at",
+    codexSessions:"SELECT device_id,session_id,cwd,title,preview,source_kind,updated_at,synced_at,messages FROM codex_sessions ORDER BY updated_at",
     approvals:"SELECT id,run_id,device_id,kind,description,action_hash,status,requested_at,expires_at,decided_at,decided_by FROM approvals ORDER BY requested_at",
     activity:"SELECT id,run_id,kind,text,created_at FROM run_events ORDER BY id",
     audit:"SELECT id,actor,action,target_id,created_at,detail FROM audit_events ORDER BY id",

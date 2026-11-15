@@ -6,15 +6,17 @@ on:
       - "apps/saas-worker/**"
       - "apps/gateway/src/provider-turn.mjs"
       - "apps/gateway/src/codex-turn.mjs"
+      - "apps/gateway/src/codex-session-discovery.mjs"
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
   push:
-    branches: [main]
+    branches: [main, feat/saas-secure-control-plane-20261114]
     paths:
       - "apps/saas/**"
       - "apps/saas-worker/**"
       - "apps/gateway/src/provider-turn.mjs"
       - "apps/gateway/src/codex-turn.mjs"
+      - "apps/gateway/src/codex-session-discovery.mjs"
       - ".github/workflows/saas-security.yml"
       - "deploy/saas/**"
 

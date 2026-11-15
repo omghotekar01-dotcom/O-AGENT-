@@ -8,7 +8,7 @@ export const createPool=config=>new Pool({
   connectionTimeoutMillis:5000,idleTimeoutMillis:30000,
   application_name:"oagent_saas",
 });
-const migrationFiles=["001_init.sql","002_legacy_upgrade.sql","003_team_workspaces.sql"];
+const migrationFiles=["001_init.sql","002_legacy_upgrade.sql","003_team_workspaces.sql","004_codex_sessions.sql"];
 export async function migrate(pool) {
   const migrations=await Promise.all(migrationFiles.map(async name=>{
     const sql=await readFile(fileURLToPath(new URL("../sql/"+name,import.meta.url)),"utf8");
@@ -125,12 +125,12 @@ export async function assertTenantDatabaseSecurity(pool) {
   // Table owners can change RLS policy, even with FORCE RLS.
   const owners=await pool.query(
     "SELECT relname FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r' AND pg_has_role(current_user,relowner,'MEMBER')",
-    [["devices","runs","approvals","run_events","audit_events","push_subscriptions","tenant_members"]]);
+    [["devices","runs","approvals","run_events","audit_events","push_subscriptions","tenant_members","codex_sessions"]]);
   if(owners.rowCount)throw Error("Unsafe runtime role: owner of tenant tables");
   const guard=await pool.query(
     "SELECT relname,relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname=ANY($1::text[]) AND relkind='r'",
     [["devices","runs","approvals","run_events","audit_events","push_subscriptions","tenant_members"]]);
-  if(guard.rowCount!==7||guard.rows.some(x=>!x.relrowsecurity||
+  if(guard.rowCount!==8||guard.rows.some(x=>!x.relrowsecurity||
       !x.relforcerowsecurity))
     throw Error("Tenant isolation tables have missing or disabled FORCE RLS");
   return {ok:true};
