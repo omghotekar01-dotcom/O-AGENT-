@@ -8,7 +8,7 @@ import '../core/pilot_native.dart';
 import '../core/agent_directory.dart';
 import 'native_sdk_sessions.dart';
 import '../theme.dart';
-import 'studio.dart';
+import 'unified_remote_workspace.dart';
 
 const _ink=OTheme.ink, _muted=Color(0xFF66757D), _line=Color(0xFFDCE6E9);
 String _val(dynamic x,[String missing='—']) => x==null||x.toString().isEmpty?
@@ -52,8 +52,12 @@ class _NativePilotShellState extends State<NativePilotShell>{
     if(c.origin!=null&&endpoint.text.isEmpty)endpoint.text=c.origin.toString();
     if(mounted)setState((){});
   }
-  void _legacy()=>Navigator.of(context).push(MaterialPageRoute<void>(
-    builder:(_)=>StudioShell(controller:widget.legacy)));
+  // Retain the old provider gateway behind one integrated remote tab.
+  void _legacy() => setState(() => tab = 2);
+  void _nativeDevices() => Navigator.of(context).push(
+    CupertinoPageRoute<void>(builder: (_) => Scaffold(
+      appBar: AppBar(title: const Text('Trusted computers')),
+      body: _Devices(c: c))));
   void _browseAgents() => Navigator.of(context).push(CupertinoPageRoute<void>(
     builder: (_) => Scaffold(
       appBar: AppBar(title: const Text('AI agent directory')),
@@ -165,13 +169,9 @@ class _NativePilotShellState extends State<NativePilotShell>{
             'Continue supported SDK sessions with prompts'),
           const _Feature(Icons.shield_outlined,'Exact approvals',
             'Review commands before a worker executes them'),
-          const SizedBox(height:18),
-          OutlinedButton.icon(onPressed:_legacy,
-            icon:const Icon(Icons.layers_outlined),
-            label:const Text('Earlier native project workspace')),
-          const SizedBox(height:8),
-          const Text('The previous native features remain accessible. '
-            'They use a separate legacy connection.',
+          const SizedBox(height:12),
+          const Text('Real screen and project controls appear in the '
+            'Remote tab after secure sign-in.',
             style:TextStyle(color:_muted,fontSize:12,height:1.4)),
         ]),
       ))));
@@ -196,13 +196,15 @@ class _NativePilotShellState extends State<NativePilotShell>{
         Expanded(child: IndexedStack(index: tab, children: [
           NativeAgentDirectory(pilot: c, onLegacy: _legacy,
             onSessions: () => setState(() => tab = 1),
-            onDevices: () => setState(() => tab = 3)),
+            onDevices: _nativeDevices,
+            onInbox: () => setState(() => tab = 3)),
           _Work(c: c, navigate: (i) => setState(() => tab = i)),
+          UnifiedRemoteWorkspace(legacy: widget.legacy,
+            onDevices: _nativeDevices),
           _Inbox(c: c),
-          _Devices(c: c),
           _More(c: c, legacy: _legacy,
             agents: () => setState(() => tab = 0),
-            devices: () => setState(() => tab = 3)),
+            devices: _nativeDevices),
         ])),
       ])),
       bottomNavigationBar: CupertinoTabBar(
@@ -218,9 +220,9 @@ class _NativePilotShellState extends State<NativePilotShell>{
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.chat_bubble_2), label: 'Sessions'),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.tray_full), label: 'Inbox'),
+            icon: Icon(CupertinoIcons.desktopcomputer), label: 'Remote'),
           BottomNavigationBarItem(
-            icon: Icon(CupertinoIcons.device_laptop), label: 'Devices'),
+            icon: Icon(CupertinoIcons.tray_full), label: 'Inbox'),
           BottomNavigationBarItem(
             icon: Icon(CupertinoIcons.settings), label: 'Settings'),
         ],
@@ -338,7 +340,7 @@ class _WorkState extends State<_Work>{
         prompt:text,sessionId:kind=='codex_cli_turn'
           ?savedSessionId:null);
       if(!mounted)return;
-      prompt.clear();widget.navigate(2);
+      prompt.clear();widget.navigate(3);
       _toast(context,'Supervised request created. Approve it separately.');
     }catch(e){if(mounted)_toast(context,pilotFriendlyError(e));}
     finally{if(mounted)setState(()=>sending=false);}
@@ -413,7 +415,7 @@ class _WorkState extends State<_Work>{
                 canContinue:online.any((machine)=>
                   machine['id']==provider['deviceId'] &&
                   ((machine['capabilities'] as List?)?.contains(provider['kind'])??false)),
-                onRequested:()=>widget.navigate(2)))),
+                onRequested:()=>widget.navigate(3)))),
             child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Row(children:[
                 const Icon(Icons.smart_toy_outlined,color:OTheme.violet),
@@ -603,7 +605,7 @@ class _NativeSavedSessionDetailState extends State<NativeSavedSessionDetail> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content:Text('Prompt saved as a supervised request. '
           'Review it in the native approval inbox.')));
-      widget.navigate(2);
+      widget.navigate(3);
       Navigator.of(context).pop();
     }catch(error){
       if(mounted)_toast(context,pilotFriendlyError(error));
@@ -1142,8 +1144,8 @@ class _More extends StatelessWidget {
                 backgroundColor: Colors.white,
                 leading: const Icon(CupertinoIcons.folder,
                   color: OTheme.violet),
-                title: const Text('GitHub and Cursor integrations'),
-                subtitle: const Text('Earlier native workspace · separate setup'),
+                title: const Text('Remote projects and live desktop'),
+                subtitle: const Text('Live screen, GitHub, Cursor, VS Code & projects'),
                 trailing: const Icon(CupertinoIcons.chevron_forward),
                 onTap: legacy),
               CupertinoListTile(
