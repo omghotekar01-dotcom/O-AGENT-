@@ -108,7 +108,7 @@ void main(){
     await c.requestTurn(device:online,kind:'workspace_inventory',
       mode:'read_only',prompt:'Read filenames only');
     expect(approvalCreated,true);
-    expect(wasApproved,false,'creating a prompt must not execute automatically');
+    expect(wasApproved,false,reason:'creating a prompt must not execute automatically');
     expect(c.approvals.length,1);
     await c.decide(pending,true);
     expect(wasApproved,true);
