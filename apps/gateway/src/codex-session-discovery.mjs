@@ -38,8 +38,8 @@ export async function safeCodexThreads(threads,root,{realpathImpl=realpath,max=1
   }
   return result;
 }
-export function boundedCodexMessages(thread,{maxMessages=20}={}) {
-  const turns=Array.isArray(thread?.turns)?thread.turns.slice(-20):[];
+export function boundedCodexMessages(thread,{maxMessages=10}={}) {
+  const turns=Array.isArray(thread?.turns)?thread.turns.slice(-14):[];
   const result=[];
   for(const turn of turns){
     for(const item of Array.isArray(turn?.items)?turn.items:[]){
@@ -50,7 +50,7 @@ export function boundedCodexMessages(thread,{maxMessages=20}={}) {
       const output=typeof input==="string"?input:
         Array.isArray(input)?input.filter(x=>x?.type==="text")
           .map(x=>x?.text||"").join("\n"):"";
-      const value=sane(output,1400);
+      const value=sane(output,600);
       if(value.trim())result.push({role,text:value});
     }
   }

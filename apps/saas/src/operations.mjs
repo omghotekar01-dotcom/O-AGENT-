@@ -453,6 +453,7 @@ export async function deleteOwnAccount(client,tenantId,subject,body){
     "DELETE FROM pending_devices WHERE approved_device_id IN (SELECT id FROM devices WHERE tenant_id=$1)",
     [tenantId]);
   for(const name of ["run_events","approvals","audit_events",
+       "codex_sessions",
       "push_subscriptions","runs","device_auth_keys","devices"]){
     await client.query("DELETE FROM "+name+" WHERE tenant_id=$1",[tenantId]);
   }

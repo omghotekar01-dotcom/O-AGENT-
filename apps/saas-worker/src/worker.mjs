@@ -5,6 +5,7 @@ import {randomUUID} from "node:crypto";
 import {deviceHeaders} from "../../saas/src/device-crypto.mjs";
 import {runProviderTurn} from "../../gateway/src/provider-turn.mjs";
 import {runCodexTurn} from "../../gateway/src/codex-turn.mjs";
+import {discoverStoredCodexSessions} from "../../gateway/src/codex-session-discovery.mjs";
 import {readIdentity} from "./enroll.mjs";
 
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -56,12 +57,14 @@ function supported(env) {
 export class SignedCloudWorker {
   constructor({origin,deviceId,privateKeyPem,root,env=process.env,
     fetchImpl=fetch,providerRunner=runProviderTurn,codexRunner=runCodexTurn,
+    sessionReader=discoverStoredCodexSessions,
     now=()=>Date.now(),wait=sleep,renewIntervalMs=30000}){
     this.origin=safeUrl(origin);
     this.deviceId=deviceId;this.privateKeyPem=privateKeyPem;
     this.root=resolve(root);this.env={...env,OAGENT_WORKSPACE_ROOT:this.root};
     this.fetchImpl=fetchImpl;this.providerRunner=providerRunner;
-    this.codexRunner=codexRunner;this.now=now;this.wait=wait;
+    this.codexRunner=codexRunner;this.sessionReader=sessionReader;
+    this.lastSessionSync=-Infinity;this.now=now;this.wait=wait;
     this.renewIntervalMs=renewIntervalMs;this.revoked=false;
   }
   async api(path,{body={},method="POST"}={}){
@@ -195,11 +198,31 @@ export class SignedCloudWorker {
         "Provider execution failed"};
     }finally{clearInterval(renewal);}
   }
+  async syncSavedSessions(){
+    if(this.env.OAGENT_ENABLE_CODEX_DISCOVERY!=="1" ||
+       this.now()-this.lastSessionSync<90000)return;
+    // Never block a pending approved run to scan local histories.
+    this.lastSessionSync=this.now();
+    try{
+      const sessions=await this.sessionReader({
+        root:this.root,env:this.env,
+      });
+      if(this.revoked)return;
+      await this.api("/v1/device/sessions",{body:{sessions}});
+    }catch{
+      // Optional read-only discovery must not stop the signed worker or
+      // advertise stale snapshots as active IDE connections.
+      console.warn("Codex session listing unavailable on this worker; supervised operations remain available.");
+    }
+  }
   async tick(){
     if(this.revoked)throw fail("Device identity revoked");
     await this.api("/v1/device/heartbeat");
     const {run}=await this.api("/v1/device/claim");
-    if(!run)return {claimed:false};
+    if(!run){
+      await this.syncSavedSessions();
+      return {claimed:false};
+    }
     const result=await this.execute(run);
     return {claimed:true,...result};
   }

@@ -32,10 +32,14 @@ export async function main({argv=process.argv,env=process.env}={}){
     throw Error("Device was not enrolled. Approve the pairing link on your phone.");
   console.log("Encrypted HTTPS connection to private SaaS: "+origin);
   console.log("Worker started. Keep this computer awake for remote control.");
-  console.log("Provider features start disabled until you opt in and authenticate.");
+  console.log("Provider execution requires opt-in; saved Codex CLI/VS Code history is read-only.");
+  console.log("Only threads beneath your enrolled workspace are listed. Disable with OAGENT_ENABLE_CODEX_DISCOVERY=0.");
   await new SignedCloudWorker({
     origin,deviceId:identity.deviceId,privateKeyPem:identity.privateKeyPem,
-    root:workspace,env,
+    root:workspace,env:{
+      ...env,
+      OAGENT_ENABLE_CODEX_DISCOVERY:env.OAGENT_ENABLE_CODEX_DISCOVERY??"1",
+    },
   }).start();
 }
 if(process.argv[1]&&fileURLToPath(import.meta.url)===resolve(process.argv[1]))
