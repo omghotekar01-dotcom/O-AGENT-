@@ -92,20 +92,24 @@ export async function discoverStoredCodexSessions({
       if(message.id===1){
         if(message.error)return finish(Error("Codex handshake was rejected"));
         child.stdin.write(JSON.stringify({method:"initialized",params:{}})+"\n");
-        send(2,"thread/list",{limit:30,sortKey:"updated_at",
+        send(2,"thread/list",{limit:80,sortKey:"updated_at",
           sortDirection:"desc",sourceKinds:["cli","vscode"]});
       }else if(message.id===2){
         if(message.error)return finish(Error("Codex thread listing unavailable"));
         candidates=(Array.isArray(message.result?.data)?message.result.data:[])
-          .filter(x=>SESSION_ID.test(x?.id||"")).slice(0,10);
+          .filter(x=>SESSION_ID.test(x?.id||""))
+          // Omit clearly external projects before requesting private history.
+          .filter(x=>!x.cwd || projectContains(canonical,x.cwd))
+          .slice(0,24);
         pending=candidates.length;
         if(!pending)return finish();
-        // Read metadata without resuming a thread. Some Codex versions omit
-        // cwd from thread/list, so check thread/read before accepting it.
+        // Modern Codex may have huge paginated thread histories. Reading
+        // includeTurns=true could exceed our entire metadata transport budget.
+        // Request metadata only, then a bounded recent-turn page if supported.
         candidates.forEach((row,index)=>send(3+index,"thread/read",{
-          threadId:row.id,includeTurns:true,
+          threadId:row.id,includeTurns:false,
         }));
-      }else if(message.id>=3&&message.id<13){
+      }else if(message.id>=3&&message.id<27){
         const index=message.id-3,initial=candidates[index];
         if(!message.error&&initial&&message.result?.thread){
           const detail=message.result.thread;
@@ -125,7 +129,7 @@ export async function discoverStoredCodexSessions({
               // read-only historical page, if supported by this CLI version.
               if(row.messages.length===0){
                 pending++;
-                send(20+index,"thread/turns/list",{
+                send(100+index,"thread/turns/list",{
                   threadId:initial.id,limit:10,
                   sortDirection:"desc",itemsView:"full",
                 });
@@ -135,8 +139,8 @@ export async function discoverStoredCodexSessions({
         }
         pending--;
         if(!pending)finish();
-      }else if(message.id>=20&&message.id<30){
-        const index=message.id-20;
+      }else if(message.id>=100&&message.id<124){
+        const index=message.id-100;
         if(results[index]&&!message.error&&Array.isArray(message.result?.data)){
           results[index].messages=boundedCodexMessages({
             turns:message.result.data.slice().reverse(),
