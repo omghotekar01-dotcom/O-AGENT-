@@ -90,6 +90,8 @@ test("Windows guarded repair keeps 8787 route and never resets volumes",()=>{
   assert.match(script,/choice \/c YN/i,"explicit consent before role changes");
   assert.match(script,/node repair-db-auth[.]mjs --apply/);
   assert.match(script,/node migrate-existing-port[.]mjs 8443 --apply/);
+  assert.match(script,/--exit-code-from realm-init realm-init/,
+    "one-shot realm-init must return on exit 0 without Docker attach hanging");
   assert.match(script,/node start[.]mjs/);
   assert.match(script,/localhost:8787/);
   assert.doesNotMatch(script,/docker compose down -v|tailscale serve reset|tailscale funnel/i);
