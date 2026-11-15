@@ -165,3 +165,18 @@ List<AgentDirectoryEntry> buildAgentDirectory({
     ),
   ];
 }
+
+/// When several worker capabilities are available, an AI conversation
+/// wins over a read-only diagnostic. Explicit user selection is preserved.
+String? preferredAgentOperation(Iterable<String> available,
+    {String? selected}) {
+  final kinds=available.toSet();
+  if(selected != null && kinds.contains(selected))return selected;
+  for(final kind in const [
+    'codex_cli_turn','claude_agent_turn','copilot_sdk_turn'
+  ]) {
+    if(kinds.contains(kind))return kind;
+  }
+  return kinds.contains('workspace_inventory')
+    ? 'workspace_inventory' : null;
+}
