@@ -116,3 +116,38 @@ helper silently changes that user's password.
 
 **This is a guarded pilot recovery path, not an assertion that physical
 Windows login, MFA, phone approval and provider integrations were tested.**
+
+### Native-first Android and saved Codex threads
+
+O-AGENT Android now uses Flutter as the main control interface, rather than
+launching a PWA as the command center. The system browser is used only
+for Keycloak OAuth PKCE login, after which Home, Work, Inbox, Devices and
+conversation views remain native.
+
+Keep the same Windows repository folder, enrolled worker, PostgreSQL
+database, existing local 8787 port and private Tailscale address. Pull the
+verified feature branch safely (preserve any uncommitted local work), run
+START-O-AGENT.cmd, and start the existing trusted worker. Do not delete
+.env.local, signing keys or Docker volumes to upgrade.
+
+When local Codex CLI is installed and already authenticated, the worker
+discovers saved Codex CLI and VS Code threads within the enrolled project.
+It publishes bounded read-only history through per-device signed requests.
+The phone lets the owner open the saved conversation, type the next prompt
+and explicitly approve it. No automatic run or tool approval is added.
+Running external VS Code turns are NOT hijacked or live-attached.
+
+Devices displays the actual Codex discovery result and actionable failure
+category. The API accepts canonical C:\Windows\... paths reported by trusted
+Windows workers even though the database gateway runs inside Linux Docker;
+cross-drive and outside-project paths are rejected.
+
+To opt out of reading saved threads, set OAGENT_ENABLE_CODEX_DISCOVERY=0.
+To explicitly disable supervised Codex continuation, set
+OAGENT_ENABLE_CODEX_LOCAL_SYNC=0. The signed worker and real provider
+authentication must remain online. No provider accounts or paid keys are
+created automatically.
+
+The installed older APK remains unchanged until a new consolidated debug
+APK is installed. Physical phone sign-in and live Windows Codex acceptance
+are separate, still unverified release gates.
