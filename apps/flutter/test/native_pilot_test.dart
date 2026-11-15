@@ -466,6 +466,10 @@ void main(){
       'android-auth');
     expect(android,contains('AUTH-04'));
     expect(android, isNot(contains('secret-oauth-code-value')));
+    expect(pilotLoginStageError(PlatformException(code:'no_browser_available'),
+      'android-auth'),contains('AUTH-BROWSER'));
+    expect(pilotLoginStageError(PlatformException(code:'null_activity'),
+      'android-auth'),contains('AUTH-ACTIVITY'));
     expect(pilotLoginStageError(StateError('secret-device-value'),
       'phone-storage'),contains('PHONE-06'));
     final socket=pilotLoginStageError(
