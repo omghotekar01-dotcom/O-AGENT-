@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:o_agent_mobile/core/controller.dart';
 import 'package:o_agent_mobile/core/device_session.dart';
-import 'package:o_agent_mobile/main.dart';
+import 'package:o_agent_mobile/ui/studio.dart';
 
 class FakeSessionStore implements SessionStore {
   SavedDeviceSession? data;
@@ -50,7 +50,7 @@ void main() {
   testWidgets('remembering the device is an explicit choice, disabled by default', (tester) async {
     final controller = ControlController(sessionStore: FakeSessionStore());
     addTearDown(controller.dispose);
-    await tester.pumpWidget(OAgentApp(controller: controller));
+    await tester.pumpWidget(MaterialApp(home: StudioShell(controller: controller)));
     await tester.pumpAndSettle();
     final remember = find.widgetWithText(CheckboxListTile, 'Remember this device');
     expect(remember, findsOneWidget);
