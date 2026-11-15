@@ -10,6 +10,7 @@ import {startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,lis
 import {generateDeviceKeys,sha256,deviceHeaders,verifyDeviceHeaders} from "../src/device-crypto.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "../src/push.mjs";
 import {exportOwnerData} from "../src/export.mjs";
+import {listProviderSessions,providerSessionHistory} from "../src/provider-sessions.mjs";
 
 test("PostgreSQL enforces tenant isolation, signed device enrollment and one-time approvals",
   {timeout:45000,skip:!process.env.OAGENT_TEST_DATABASE_URL},async()=>{
@@ -140,11 +141,46 @@ test("PostgreSQL enforces tenant isolation, signed device enrollment and one-tim
           toolApprovalStatus(c,device.deviceId,tool.approvalId))).state,"approved");
         const finished=await withTenant(pool,tenantA,(c,t)=>
           finishRun(c,t,device.deviceId,run.runId,{
-            leaseToken:claimed.run.leaseToken,ok:true,result:{message:"real"},
+            leaseToken:claimed.run.leaseToken,ok:true,result:{
+              message:"real",providerStatus:"completed",
+              sessionId:"claude-sdk-session-45678",
+              response:"Completed the existing workspace task",
+            },
           }));
         assert.equal(finished.status,"completed");
         assert.equal((await withIdentity(pool,owner,c=>
           runDetail(c,run.runId))).status,"completed");
+        const sdkSessions=await withIdentity(pool,owner,listProviderSessions);
+        assert.ok(sdkSessions.some(s=>
+          s.sessionId==="claude-sdk-session-45678" &&
+          s.deviceId===device.deviceId &&
+          s.kind==="claude_agent_turn"));
+        const sdkHistory=await withIdentity(pool,owner,c=>
+          providerSessionHistory(c,{kind:"claude_agent_turn",
+            deviceId:device.deviceId,sessionId:"claude-sdk-session-45678"}));
+        assert.equal(sdkHistory.turns.length,1);
+        assert.equal(sdkHistory.turns[0].response,
+          "Completed the existing workspace task");
+        assert.deepEqual(await withIdentity(pool,stranger,listProviderSessions),[]);
+        await assert.rejects(()=>withIdentity(pool,stranger,c=>
+          providerSessionHistory(c,{kind:"claude_agent_turn",
+            deviceId:device.deviceId,sessionId:"claude-sdk-session-45678"})),
+          /No verified SDK conversation/);
+        await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>createRun(
+          c,t,owner.subject,{...payload,
+            sessionId:"invented-sdk-session-999999"},
+          randomUUID()+"_forged")),/Saved SDK session does not belong/);
+        await assert.rejects(()=>withIdentity(pool,owner,(c,t)=>createRun(
+          c,t,owner.subject,{...payload,
+            cwd:"/work/other",sessionId:"claude-sdk-session-45678"},
+          randomUUID()+"_wrongfolder")),/Saved SDK session does not belong/);
+        const sdkContinued=await withIdentity(pool,owner,(c,t)=>createRun(
+          c,t,owner.subject,{...payload,
+            sessionId:"claude-sdk-session-45678"},
+          randomUUID()+"_resume"));
+        assert.equal(sdkContinued.status,"waiting_for_approval");
+        await withIdentity(pool,owner,(c,t)=>
+          cancelRun(c,t,owner.subject,sdkContinued.runId));
         const exported=await withIdentity(pool,owner,c=>exportOwnerData(c,owner));
         assert.equal(exported.format,"oagent-tenant-export-v1");
         assert.ok(exported.runs.some(x=>x.id===run.runId));
