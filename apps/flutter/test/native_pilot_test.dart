@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
+import 'dart:io';
 import 'package:o_agent_mobile/core/pilot_native.dart';
 
 class FakeLogin implements PilotAuthenticator {
@@ -51,6 +53,19 @@ class FakeStore implements PilotSessionStore {
     saved=null;
   }
 }
+
+class FailingPilotAuthenticator implements PilotAuthenticator {
+  @override
+  Future<PilotTokens> signIn(Uri origin, Map<String,dynamic> config) async {
+    throw PlatformException(code:'appauth_error',message:'AUTH-CODE-SECRET');
+  }
+  @override
+  Future<PilotTokens> renew(Uri origin, Map<String,dynamic> config,
+      String refresh) async {
+    throw PlatformException(code:'appauth_error',message:'AUTH-CODE-SECRET');
+  }
+}
+
 void main(){
   TestWidgetsFlutterBinding.ensureInitialized();
   const origin='https://pilot.example.ts.net:8443/';
@@ -384,5 +399,93 @@ void main(){
     expect(posted.single['kind'],'claude_agent_turn');
   });
 
+
+
+  test('private native connection preflight verifies health, API, and Keycloak without credentials',
+      () async {
+    final paths=<String>[];
+    final base=origin.substring(0,origin.length-1);
+    Future<Map<String,dynamic>> request(Uri url,String method,
+        Map<String,dynamic>? body,String? bearer,Map<String,String> headers) async {
+      expect(bearer,isNull);
+      expect(method,'GET');
+      paths.add(url.path);
+      if(url.path=='/health/ready')return {'status':'ready','database':'connected'};
+      if(url.path=='/v1/public-config')return {
+        'authEnabled':true,'audience':'oagent-api',
+        'authorizationEndpoint':origin+'auth/realms/oagent/protocol/openid-connect/auth',
+        'tokenEndpoint':origin+'auth/realms/oagent/protocol/openid-connect/token'};
+      if(url.path.endsWith('/.well-known/openid-configuration'))return {
+        'issuer':base+'/auth/realms/oagent',
+        'authorization_endpoint':base+'/auth/realms/oagent/protocol/openid-connect/auth',
+        'jwks_uri':base+'/auth/realms/oagent/protocol/openid-connect/certs',
+      };
+      throw StateError('unexpected path');
+    }
+    final c=NativePilotController(
+      request:request,auth:FakeLogin(),store:FakeStore());
+    addTearDown(c.dispose);
+    await c.testConnection(origin);
+    expect(c.error,isNull);
+    expect(c.connectionStatus,contains('checks passed'));
+    expect(c.connected,false);
+    expect(paths,['/health/ready','/v1/public-config',
+      '/auth/realms/oagent/.well-known/openid-configuration']);
+    c.clearLoginFeedback();
+    expect(c.connectionStatus,isNull);
+  });
+
+  test('private native preflight stops immediately if database is not ready',
+      () async {
+    final paths=<String>[];
+    Future<Map<String,dynamic>> request(Uri url,String method,
+        Map<String,dynamic>? body,String? bearer,Map<String,String> headers) async {
+      paths.add(url.path);
+      return {'status':'starting','database':'disconnected'};
+    }
+    final c=NativePilotController(
+      request:request,auth:FakeLogin(),store:FakeStore());
+    addTearDown(c.dispose);
+    await c.testConnection(origin);
+    expect(c.error,contains('database is not ready'));
+    expect(c.connectionStatus,isNull);
+    expect(paths,['/health/ready']);
+  });
+
+  test('unexpected network and platform errors are stage-specific and secret-free',
+      () {
+    expect(pilotLoginStageError(StateError('refresh-token-SECRET'),
+      'configuration'),contains('API-02'));
+    expect(pilotLoginStageError(StateError('private-password-SECRET'),
+      'identity'),contains('ID-03'));
+    expect(pilotLoginStageError(StateError('auth-code-SECRET'),
+      'account'),contains('AUTH-05'));
+    final android=pilotLoginStageError(
+      PlatformException(code:'invalid_grant',
+        message:'secret-oauth-code-value'),
+      'android-auth');
+    expect(android,contains('AUTH-04'));
+    expect(android, isNot(contains('secret-oauth-code-value')));
+    expect(pilotLoginStageError(StateError('secret-device-value'),
+      'phone-storage'),contains('PHONE-06'));
+    final socket=pilotLoginStageError(
+      const SocketException('secret-host-name'), 'health');
+    expect(socket,isNot(contains('secret-host-name')));
+  });
+
+  test('native sign-in reports the authentication stage if browser plugin fails',
+      () async {
+    final c=NativePilotController(
+      request:(url,method,body,bearer,headers) async => {
+        'authEnabled':true,'audience':'oagent-api',
+        'authorizationEndpoint':origin+'auth/realms/oagent/protocol/openid-connect/auth',
+        'tokenEndpoint':origin+'auth/realms/oagent/protocol/openid-connect/token'},
+      auth:FailingPilotAuthenticator(),store:FakeStore());
+    addTearDown(c.dispose);
+    await c.signIn(origin);
+    expect(c.connected,false);
+    expect(c.error,contains('AUTH-04'));
+    expect(c.error,isNot(contains('SECRET')));
+  });
 
 }
