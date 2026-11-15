@@ -1,0 +1,8 @@
+# Local HTTPS is terminated by Tailscale Serve, so the gateway listens only
+# on unprivileged 8081. Remove the upstream file capability that conflicts
+# with no-new-privileges + cap_drop: ALL in the private Compose sandbox.
+FROM caddy:2.9-alpine
+RUN apk add --no-cache libcap && \
+    setcap -r /usr/bin/caddy && \
+    apk del libcap
+EXPOSE 8081

@@ -1,0 +1,19 @@
+# Never transmit local owner secrets, credentials or backups to a Docker
+# build context. The trusted local private realm is bind-mounted into the
+# one-shot installer at runtime only.
+.git
+.gitignore
+**/node_modules
+**/.dart_tool
+**/build
+**/.env
+**/.env.*
+**/.private
+**/.private/**
+**/backups
+**/backups/**
+**/*.oagent.enc
+**/*.backup.enc
+**/*.backup.age
+**/*.log
+dist

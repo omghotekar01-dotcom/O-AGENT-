@@ -63,6 +63,7 @@ export async function runProviderTurn(task, {
   sendUpdate = async () => {},
   askPermission = async () => false,
   env = process.env,
+  signal = null,
   timeoutMs = 8 * 60 * 1000,
 } = {}) {
   const type = RUN_TYPES.get(task?.kind);
@@ -114,6 +115,9 @@ export async function runProviderTurn(task, {
     throw Error(type.pkg + " unavailable: install the official SDK on the enrolled machine");
   });
   const abort = new AbortController();
+  const onExternalAbort = () => abort.abort();
+  if (signal?.aborted) abort.abort();
+  else signal?.addEventListener("abort", onExternalAbort, { once: true });
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   let session = null, sessionHandle = null, client = null, completed = false, messages = 0, finalText = "", cost = null;
   let updates = Promise.resolve(), deliveryFailure = null;
@@ -254,6 +258,7 @@ export async function runProviderTurn(task, {
       response: summarize(finalText, 8000), costUsd: cost };
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", onExternalAbort);
     abort.abort();
     // Copilot sessions must be shut down in a finally block even when a
     // permission request times out. No worker may stay attached silently.

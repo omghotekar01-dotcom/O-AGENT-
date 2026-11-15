@@ -18,6 +18,24 @@ class OTheme {
   static const sage = Color(0xFFE2EEE7);
   static const hairline = Color(0xFFDCE6E9);
 
+  // Applied on BOTH iOS and Android. Flutter's built-in Cupertino widgets
+  // deliver a consistent, familiar iOS-style interaction model without
+  // pretending this cross-platform app is an embedded website.
+  static const CupertinoThemeData sharedCupertino = CupertinoThemeData(
+    // Do not inherit Android's dark OS brightness while rendering fixed
+    // light-surface Cupertino cards: it previously produced black cards
+    // with dark unreadable labels (reported on physical Android hardware).
+    brightness: Brightness.light,
+    primaryColor: violet,
+    barBackgroundColor: paper,
+    scaffoldBackgroundColor: paper,
+    textTheme: CupertinoTextThemeData(
+      textStyle: TextStyle(color: ink, fontSize: 16),
+      navTitleTextStyle: TextStyle(color: ink, fontSize: 18,
+        fontWeight: FontWeight.w700),
+    ),
+  );
+
   static ThemeData studio() {
     final colors = ColorScheme.fromSeed(
       seedColor: violet,

@@ -26,12 +26,14 @@ export async function runCodexTurn(task, {
   sendUpdate = async () => {},
   askPermission = async () => false,
   env = process.env,
+  signal = null,
   isWindows = process.platform === "win32",
   timeoutMs = 8 * 60 * 1000,
 } = {}) {
   if (task?.kind !== "codex_cli_turn") throw new Error("Expected an approved Codex CLI turn");
   const args = task.parameters ?? {};
   const { sessionId, cwd, prompt, mode } = args;
+  if (signal?.aborted) throw Error("Codex turn cancelled before execution");
   if (typeof sessionId !== "string" || !/^[a-zA-Z0-9_-]{8,120}$/.test(sessionId)) throw new Error("Invalid Codex session");
   if (typeof cwd !== "string" || cwd.length < 3 || cwd.length > 600) throw new Error("Invalid Codex workspace");
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 4000) throw new Error("Invalid Codex prompt");
@@ -57,6 +59,12 @@ export async function runCodexTurn(task, {
     let deltaBuffer = "", flushTimer = null;
     let deliveries = Promise.resolve(), deliveryError = null;
     const timeout = setTimeout(() => finish(new Error("Codex turn timed out")), timeoutMs);
+    const onExternalAbort = () => finish(new Error("Codex turn aborted: worker lease lost"));
+    signal?.addEventListener("abort", onExternalAbort, { once: true });
+    if (signal?.aborted) {
+      finish(new Error("Codex turn cancelled before execution"));
+      return;
+    }
     function enqueue(type, text = "") {
       const value = clean(text, 2500);
       deliveries = deliveries.then(() => sendUpdate({ type, text: value })).catch(error => {
@@ -85,6 +93,7 @@ export async function runCodexTurn(task, {
       finished = true;
       flush();
       clearTimeout(timeout);
+      signal?.removeEventListener("abort", onExternalAbort);
       try { child.stdin.end(); } catch {}
       try { child.kill(); } catch {}
       deliveries.then(() => {

@@ -11,6 +11,16 @@ import '../theme.dart';
 import 'remote_mission_control.dart';
 import 'free_ai_hub.dart';
 
+/// This SaaS pilot is a separate OIDC web control plane, not the legacy
+/// operator-token API. Only launch a clean HTTPS origin; never append tokens.
+Uri? secureSaasOrigin(String input) {
+  final uri = Uri.tryParse(input.trim());
+  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty ||
+      uri.userInfo.isNotEmpty) return null;
+  return Uri(scheme: 'https', host: uri.host,
+    port: uri.hasPort ? uri.port : null, path: '/');
+}
+
 const _muted = Color(0xFF777A78);
 const _ok = Color(0xFF437963);
 const _alert = Color(0xFFB46B50);
@@ -809,8 +819,33 @@ class _StudioConnectState extends State<StudioConnect> {
             label: const Text('Public cloud account: sign up / sign in'),
           ),
           const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: OTheme.lavender,
+              borderRadius: BorderRadius.circular(15)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('NEW CONTROL CENTER IS NOW NATIVE',
+                style: TextStyle(color: OTheme.violet,
+                  fontWeight: FontWeight.w800, fontSize: 12)),
+              const SizedBox(height: 8),
+              const Text('Your private device, agent runs and approvals are inside '
+                'the main Flutter app. This screen is only for the previous '
+                'operator-token backend.',
+                style: TextStyle(color: _muted, height: 1.5)),
+              const SizedBox(height: 9),
+              OutlinedButton.icon(
+                onPressed: Navigator.canPop(context)
+                  ? () => Navigator.pop(context) : null,
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Return to native O-AGENT')),
+            ]),
+          ),
+          const SizedBox(height: 22),
+          const Text('Earlier preview backend (separate connection)',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 9),
           TextField(controller: url, keyboardType: TextInputType.url,
-            decoration: const InputDecoration(labelText: 'Backend HTTPS URL', prefixIcon: Icon(Icons.link))),
+            decoration: const InputDecoration(labelText: 'Legacy backend URL', prefixIcon: Icon(Icons.link))),
           const SizedBox(height: 13),
           if (joining) ...[
             const Padding(padding: EdgeInsets.only(bottom: 10),

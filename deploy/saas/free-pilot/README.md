@@ -1,0 +1,153 @@
+# Free, private O-AGENT pilot
+**Not a public SaaS launch.** Your computer runs PostgreSQL, Keycloak, Caddy and the API; it must stay on, and model-provider usage can still cost money.
+
+Install Docker Desktop or compatible Compose and Tailscale on the computer, and Tailscale on your phone. Sign into the same private tailnet on both; enable MagicDNS and HTTPS certificates in Tailnet settings.
+
+```sh
+cd deploy/saas/free-pilot
+node start.mjs
+```
+
+Windows users can double-click `start.cmd` instead. The start command checks Compose and Tailscale, generates device-owned private credentials only on this machine, boots the isolated services, enables **Serve** (never Funnel), and prints the readiness checks without exposing secrets. It refuses to overwrite any existing unrelated Tailscale Serve or Funnel configuration.
+
+Run `node doctor.mjs` for eight explicit connection checks, then `tailscale serve status` and open the private HTTPS URL on your phone. **Do not use Tailscale Funnel**, router port forwarding, or a public domain for this personal pilot.
+
+The first import creates a private `pilot-owner` login with a randomly generated temporary password in your local `.env.local` (`OAGENT_OWNER_PASSWORD`). Sign in as `pilot-owner` using the dashboard and change the password when prompted. Enable MFA from Keycloak's account console. If needed, administer additional users at `https://YOUR-TAILNET-HOST/auth/admin/` with the separate `admin` and `OAGENT_KEYCLOAK_ADMIN_PASSWORD` credentials. No fixed/default password is embedded in GitHub.
+
+Then open the O-AGENT home dashboard and choose **Sign in securely**. To connect a dedicated worker, run the enrollment command on the computer and approve the displayed pairing link with its fingerprint in the authenticated dashboard. Provider logins remain separate and require real supported SDK accounts.
+
+All state is stored in the local Docker volume. **Never** run `docker compose down -v` against a live pilot (it deletes the database). Export encrypted backups to another disk; test restoration before trusting data. Do not commit `.env.local`, backups, tokens, or device key files.
+
+### Limits
+- Zero cloud hosting subscription is possible, but electricity, internet, device resources, provider inference, and quota overruns are not guaranteed free.
+- Tailscale Personal is intended for permitted personal use, not a commercial public multi-tenant service.
+- Only the Caddy gateway is exposed on 127.0.0.1:8791. Tailscale Serve provides private HTTPS without router ports. The PostgreSQL connection is unencrypted **inside this one local Compose network only**, controlled by an explicit pilot-only setting.
+- Keycloak imports the realm only on its **first creation**. Editing the JSON later does not overwrite real user accounts.
+- This is an owner/browser pilot, not an automatically shipped Flutter APK or a claim of arbitrary website tab control.
+- Database, Keycloak and reverse-proxy images still require Docker image pulls and physical acceptance checks. No cloud account is created automatically.
+
+Official docs: https://tailscale.com/docs/reference/tailscale-cli/serve and https://www.keycloak.org/server/importExport
+
+### Encrypted backups (free, no cloud account)
+Run `OAGENT_BACKUP_PASSPHRASE=<long-private-value> node backup.mjs` with a unique 20+ character passphrase stored safely outside this PC. The script streams both databases through authenticated AES-256-GCM encryption without writing plaintext dumps to disk. Keep the generated folder and passphrase separately; a backup stored only on the same disk is not disaster recovery.
+
+For a **destructive** restore to your private pilot, stop all active tasks, set the same passphrase and `OAGENT_RESTORE_CONFIRM=I_ACCEPT_DESTRUCTIVE_PILOT_RESTORE`, and run `node restore.mjs /path/to/backup-folder`. Both encrypted files are authenticated before any SQL restore. The script stops web/API/identity services and leaves them stopped if restoration fails. Do not restore a live production tenant this way; test this on an expendable pilot before trusting backups.
+
+### Free approval notifications
+On the dashboard Overview screen, choose **Enable approval alerts** and explicitly grant permission. It uses browser Web Push (no paid Firebase project or SMS subscription). Android supports browser push where the installed browser permits it; on iOS/iPadOS, first add the O-AGENT web app to Home Screen (iOS 16.4+). Apple/WebKit document this behavior at https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/ . Device and notification delivery still require a live internet connection, enabled browser notifications and compatible push services; they cannot be guaranteed on every device. Lock-screen payloads never contain prompts or code; open the authenticated app to inspect exact requested actions.
+
+### Easier desktop connection (one command)
+After the pilot has been initialized and both devices have Tailscale, from the repository root run `node apps/saas-worker/src/quickstart.mjs /absolute/path/to/your/project` (on Windows, supply the full drive path). The helper reads only the HTTPS origin from your local pilot configuration, generates its own per-device signing key, displays the owner pairing link once, automatically finishes enrollment when approved on your phone, and begins the free workspace-inventory worker. Keep the terminal and computer on. This does not install paid provider SDKs or enable shell/file editing silently.
+
+### Real OIDC CI verification
+The one-time GitHub Actions private-pilot smoke test uses an explicitly modified **disposable test realm** to exchange a synthetic account password for a JWT, then verifies the real audience/scope-protected `/v1/me`, `/v1/audit`, and approvals endpoints. This password grant is never enabled in the shipped Keycloak realm; real users sign in through OAuth authorization-code PKCE and must change the generated temporary password. No CI token or password is printed. Actual browser login/MFA and phone sign-in still require physical acceptance.
+
+**OAuth compatibility:** O-AGENT's registered Keycloak permissions use the literal scope names `oagent-read` and `oagent-operate` (no colon; colon syntax may be parsed as a Keycloak parameterized scope). Existing previously imported Keycloak realms are not automatically rewritten; use Keycloak administration to migrate the registered client scopes and confirm token issuance, and do not delete a database volume to force a reimport of live data.
+
+**Private first-login realm:** the starter now renders an ignored, permission-restricted `.private/oagent-realm.json` from the safe template using the locally generated password and HTTPS origin. Docker mounts this private file, not the committed template. Never commit or share the rendered file. The renderer refuses to overwrite a mismatched existing file and does not reimport/alter existing Keycloak user passwords after the first database initialization.
+
+**Realm mount security:** the first-start secret realm is copied by a one-time isolated, no-network helper into a Docker volume with mode `0400` owned by the non-root Keycloak UID. The private file stays `0600` on the host. This avoids making the generated password world-readable just to satisfy the container's file permissions.
+
+Docker builds explicitly ignore all local `.env.*`, `.private`, and encrypted backup files so container build contexts cannot accidentally package the owner's credential material.
+
+### Verified email policy
+The owner identity for this private pilot is the cryptographically verified OIDC subject, not a user-controlled email string. The pilot can use a pseudonymous owner without falsely marking a placeholder address as verified. Commercial runtime defaults to **requiring an explicitly verified email claim**; this is controlled with `OAGENT_REQUIRE_VERIFIED_EMAIL=1` and should remain enabled for public customer onboarding. This setting never bypasses access-token signature, issuer, audience, client allowlist or permissions.
+
+### Another app uses HTTPS port 443
+O-AGENT supports a private `https://YOUR-TAILNET-HOST.ts.net:8443/` dashboard
+while preserving an unrelated application on port 443. For a new pilot, set
+`$env:OAGENT_SERVE_PORT="8443"` in PowerShell before starting. The selected port
+is persisted in the private `.env.local` and used on future launches.
+If your first setup already generated secrets for 443 but stopped before
+creating Docker containers or volumes, run `node migrate-port.mjs 8443`
+once from this directory. The helper retains passwords, makes a private
+backup and refuses to touch initialized databases or an unrelated app on 8443.
+Never use `tailscale serve reset` or `docker compose down -v`.
+
+### Existing Windows port mapping (O-AGENT)
+The gateway binds **127.0.0.1:8787** to match the pre-existing Tailscale
+Serve mapping **HTTPS :8443 -> http://127.0.0.1:8787**. The other application
+on HTTPS 443 -> localhost:8000 is preserved. If an 8443 route already matches
+8787, the starter reuses it without changing the Tailscale Serve configuration;
+a conflicting 8443 route remains blocked.
+
+The local readiness URL is `http://127.0.0.1:8787/health/ready`. If
+PostgreSQL migration reports SQLSTATE 28P01, the migrator role password
+does not match the current pilot secret; do not delete volumes.
+
+### Recovering the existing Windows installation without wiping databases
+
+The default Docker gateway is now **127.0.0.1:8787** and the existing
+Tailscale Serve route **HTTPS :8443 -> 127.0.0.1:8787** is reused unchanged.
+
+If the migrator fails with PostgreSQL SQLSTATE `28P01`, do this **from
+`deploy/saas/free-pilot`** with Docker Desktop running:
+
+```powershell
+node repair-db-auth.mjs
+node repair-db-auth.mjs --apply
+docker compose --env-file .env.local -f compose.yaml up -d --no-deps --force-recreate identity
+node migrate-existing-port.mjs 8443
+node migrate-existing-port.mjs 8443 --apply
+cd ..\..\..
+.\START-O-AGENT.cmd
+```
+
+Only run the `--apply` steps after confirming the read-only checks. The
+database repair first creates and authenticates encrypted backups of both
+databases, then reconciles only the three scoped O-AGENT roles via SQL stdin
+(never SQL arguments or a logged password). Backup passphrases are saved under
+your Windows user profile's `.oagent-recovery-keys` folder, **outside OneDrive
+and separate from the encrypted database backup**. Move an encrypted backup
+and its key to separate secure locations for real disaster recovery.
+
+The existing-origin migration also creates and verifies encrypted backups
+before using Keycloak's authenticated admin CLI to update the existing
+`oagent-web` OAuth client and then the local origin, preserving PKCE and all
+other client properties. The import template is updated for future restarts.
+It preserves both Docker volumes and both Tailscale Serve routes.
+
+If Keycloak's bootstrap admin credentials do not match its persistent
+database (an old initialized realm), the migration refuses to reset an
+existing identity; resolve admin access separately rather than deleting the
+Keycloak database. The existing owner's password might differ from the
+generated initial owner password if it was changed after first login. Neither
+helper silently changes that user's password.
+
+**This is a guarded pilot recovery path, not an assertion that physical
+Windows login, MFA, phone approval and provider integrations were tested.**
+
+### Native-first Android and saved Codex threads
+
+O-AGENT Android now uses Flutter as the main control interface, rather than
+launching a PWA as the command center. The system browser is used only
+for Keycloak OAuth PKCE login, after which Home, Work, Inbox, Devices and
+conversation views remain native.
+
+Keep the same Windows repository folder, enrolled worker, PostgreSQL
+database, existing local 8787 port and private Tailscale address. Pull the
+verified feature branch safely (preserve any uncommitted local work), run
+START-O-AGENT.cmd, and start the existing trusted worker. Do not delete
+.env.local, signing keys or Docker volumes to upgrade.
+
+When local Codex CLI is installed and already authenticated, the worker
+discovers saved Codex CLI and VS Code threads within the enrolled project.
+It publishes bounded read-only history through per-device signed requests.
+The phone lets the owner open the saved conversation, type the next prompt
+and explicitly approve it. No automatic run or tool approval is added.
+Running external VS Code turns are NOT hijacked or live-attached.
+
+Devices displays the actual Codex discovery result and actionable failure
+category. The API accepts canonical C:\Windows\... paths reported by trusted
+Windows workers even though the database gateway runs inside Linux Docker;
+cross-drive and outside-project paths are rejected.
+
+To opt out of reading saved threads, set OAGENT_ENABLE_CODEX_DISCOVERY=0.
+To explicitly disable supervised Codex continuation, set
+OAGENT_ENABLE_CODEX_LOCAL_SYNC=0. The signed worker and real provider
+authentication must remain online. No provider accounts or paid keys are
+created automatically.
+
+The installed older APK remains unchanged until a new consolidated debug
+APK is installed. Physical phone sign-in and live Windows Codex acceptance
+are separate, still unverified release gates.

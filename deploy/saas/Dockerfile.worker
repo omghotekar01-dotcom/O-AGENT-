@@ -1,0 +1,13 @@
+# ONE isolated runtime per tenant, never shared with other customers.
+FROM node:22-alpine
+ENV NODE_ENV=production OAGENT_ENABLE_CLAUDE_AGENT_SDK=0 OAGENT_ENABLE_COPILOT_SDK=0 OAGENT_ENABLE_CODEX_LOCAL_SYNC=0 OAGENT_ALLOW_SHELL_TOOLS=0
+WORKDIR /srv/oagent
+COPY apps/saas-worker/package.json ./apps/saas-worker/package.json
+RUN cd apps/saas-worker && npm install --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force
+COPY apps/saas-worker/src ./apps/saas-worker/src
+COPY apps/saas/src/device-crypto.mjs ./apps/saas/src/device-crypto.mjs
+COPY apps/gateway/src ./apps/gateway/src
+RUN addgroup -S oagent && adduser -S -G oagent oagent && mkdir -p /workspace /home/oagent/.oagent-cloud && chown -R oagent:oagent /workspace /home/oagent /srv/oagent
+ENV HOME=/home/oagent OAGENT_WORKSPACE_ROOT=/workspace
+USER oagent
+CMD ["node","apps/saas-worker/src/worker.mjs"]

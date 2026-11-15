@@ -1,5 +1,12 @@
 import 'dart:io';
 
+/// The Flutter-generated MainActivity has an empty taskAffinity. Flutter
+/// AppAuth warns this can prevent the OAuth redirect from returning to the
+/// native application after Keycloak sign-in. Leave other activity options
+/// untouched and remove only the generated empty attribute.
+String nativeOAuthAndroidManifest(String source) =>
+    source.replaceAll('android:taskAffinity=""', '');
+
 /// Run after 'flutter create --platforms=android,ios .'.
 /// Keeps HTTP exceptions limited to local development and enables INTERNET.
 void main() {
@@ -34,7 +41,20 @@ void main() {
       '<application android:allowBackup="false"',
     );
   }
+  android = nativeOAuthAndroidManifest(android);
   mainManifest.writeAsStringSync(android);
+
+  // The AppAuth PKCE callback returns from the system sign-in window to Flutter.
+  final gradleKts = File('android/app/build.gradle.kts');
+  if (gradleKts.existsSync()) {
+    var kotlin = gradleKts.readAsStringSync();
+    if (!kotlin.contains('appAuthRedirectScheme')) {
+      kotlin = kotlin.replaceFirst('defaultConfig {',
+        'defaultConfig {\n'
+        '        manifestPlaceholders.putAll(mapOf("appAuthRedirectScheme" to "com.omiiii.oagent"))');
+      gradleKts.writeAsStringSync(kotlin);
+    }
+  }
 
   final debugManifest = File('android/app/src/debug/AndroidManifest.xml');
   debugManifest.createSync(recursive: true);
@@ -49,6 +69,16 @@ void main() {
   final plist = File('ios/Runner/Info.plist');
   if (plist.existsSync()) {
     var ios = plist.readAsStringSync();
+    if (!ios.contains('<key>CFBundleURLTypes</key>')) {
+      ios = ios.replaceFirst(
+        '</dict>\n</plist>',
+        '  <key>CFBundleURLTypes</key>\n'
+            '  <array><dict><key>CFBundleURLSchemes</key>\n'
+            '  <array><string>com.omiiii.oagent</string></array>\n'
+            '  </dict></array>\n'
+            '</dict>\n</plist>',
+      );
+    }
     if (!ios.contains('<key>NSAppTransportSecurity</key>')) {
       ios = ios.replaceFirst(
         '</dict>\n</plist>',
@@ -56,8 +86,8 @@ void main() {
             '  <dict><key>NSAllowsLocalNetworking</key><true/></dict>\n'
             '</dict>\n</plist>',
       );
-      plist.writeAsStringSync(ios);
     }
+    plist.writeAsStringSync(ios);
   }
 
   stdout.writeln('Platform configuration prepared: Android INTERNET + debug-local HTTP + no backup, iOS local-network exception.');

@@ -1,0 +1,28 @@
+# Staging API only. HTTPS proxy, managed PG, OIDC and external secrets required.
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/saas/Dockerfile.api
+    image: oagent/saas-api:staging
+    read_only: true
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8790:8790"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 180
+    mem_limit: 768m
+    env_file:
+      - path: .env.staging
+        required: true
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://127.0.0.1:8790/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 45s
+      timeout: 8s
+      retries: 3
+  # Each tenant worker MUST be provisioned separately with its own private
+  # signing key, provider account, workspace, egress policy, and resource limits.
