@@ -603,6 +603,8 @@ class _Devices extends StatelessWidget{
     onRefresh:c.refresh,child:ListView(padding:const EdgeInsets.all(18),children:[
       const _Heading('Trusted devices',
         'Signed workers, verified heartbeats and enrolled folders.'),
+      if(c.me['role']=='owner') _NativeEnrollPanel(c:c),
+      if(c.me['role']=='owner') const SizedBox(height:12),
       if(c.devices.isEmpty)const _Blank('No enrolled workers',
         'Run CONNECT-O-AGENT-WORKER.cmd on your laptop and approve '
         'its fingerprint in your signed-in account.',
@@ -639,6 +641,82 @@ class _Devices extends StatelessWidget{
       ],
     ]));
 }
+class _NativeEnrollPanel extends StatefulWidget {
+  const _NativeEnrollPanel({required this.c});
+  final NativePilotController c;
+  @override State<_NativeEnrollPanel> createState() => _NativeEnrollPanelState();
+}
+class _NativeEnrollPanelState extends State<_NativeEnrollPanel> {
+  final field=TextEditingController();
+  bool loading=false;
+  @override void dispose() { field.dispose(); super.dispose(); }
+  Future<void> _inspect() async {
+    if(loading||field.text.trim().isEmpty)return;
+    setState(()=>loading=true);
+    try {
+      final inspected=await widget.c.inspectPairing(field.text);
+      if(!mounted)return;
+      final fingerprint=_val(inspected['fingerprint']);
+      if(inspected['approved']==true){
+        _toast(context,'This worker has already been enrolled.');
+        return;
+      }
+      final accepted=await showDialog<bool>(context:context,builder:(d)=>
+        AlertDialog(
+          title:const Text('Verify laptop identity'),
+          content:SingleChildScrollView(child:Column(
+            mainAxisSize:MainAxisSize.min,
+            crossAxisAlignment:CrossAxisAlignment.start,
+            children:[
+              const Text('Do not approve unless this fingerprint matches '
+                'the one visible on your OWN computer.'),
+              const SizedBox(height:14),
+              Text('Device: '+_val(inspected['name']),style:const TextStyle(
+                fontWeight:FontWeight.w800)),
+              const SizedBox(height:10),
+              SelectableText(fingerprint,style:const TextStyle(
+                fontSize:16,fontWeight:FontWeight.w800)),
+              const SizedBox(height:10),
+              Text('Expires: '+_date(inspected['expiresAt'])),
+            ])),
+          actions:[
+            TextButton(onPressed:()=>Navigator.pop(d,false),
+              child:const Text('Not my device')),
+            FilledButton(onPressed:()=>Navigator.pop(d,true),
+              child:const Text('Fingerprint matches · Approve')),
+          ],
+        ));
+      if(accepted!=true||!mounted)return;
+      await widget.c.approvePairing(field.text,fingerprint);
+      field.clear();
+      if(mounted)_toast(context,'Trusted worker enrollment approved.');
+    }catch(e){
+      if(mounted)_toast(context,pilotFriendlyError(e));
+    }finally{if(mounted)setState(()=>loading=false);}
+  }
+  @override Widget build(BuildContext context)=>_Panel(
+    child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+      const Text('ENROLL A NEW LAPTOP',
+        style:TextStyle(fontWeight:FontWeight.w800,color:OTheme.violet)),
+      const SizedBox(height:9),
+      const Text('On your computer, open CONNECT-O-AGENT-WORKER.cmd. '
+        'Paste its private pairing link here. Review the exact '
+        'device fingerprint before approving—without a website.',
+        style:TextStyle(color:_muted,height:1.5,fontSize:12)),
+      const SizedBox(height:12),
+      TextField(controller:field,obscureText:true,
+        enableSuggestions:false,autocorrect:false,
+        decoration:const InputDecoration(
+          border:OutlineInputBorder(),
+          labelText:'Private one-time pairing link',
+          prefixIcon:Icon(Icons.link))),
+      const SizedBox(height:12),
+      FilledButton.icon(onPressed:loading?null:_inspect,
+        icon:const Icon(Icons.verified_user_outlined),
+        label:Text(loading?'Checking device…':'Inspect & approve laptop')),
+    ]));
+}
+
 class _More extends StatelessWidget{
   const _More({required this.c,required this.legacy});
   final NativePilotController c;final VoidCallback legacy;
