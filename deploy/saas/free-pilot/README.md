@@ -74,3 +74,45 @@ a conflicting 8443 route remains blocked.
 The local readiness URL is `http://127.0.0.1:8787/health/ready`. If
 PostgreSQL migration reports SQLSTATE 28P01, the migrator role password
 does not match the current pilot secret; do not delete volumes.
+
+### Recovering the existing Windows installation without wiping databases
+
+The default Docker gateway is now **127.0.0.1:8787** and the existing
+Tailscale Serve route **HTTPS :8443 -> 127.0.0.1:8787** is reused unchanged.
+
+If the migrator fails with PostgreSQL SQLSTATE `28P01`, do this **from
+`deploy/saas/free-pilot`** with Docker Desktop running:
+
+```powershell
+node repair-db-auth.mjs
+node repair-db-auth.mjs --apply
+docker compose --env-file .env.local -f compose.yaml up -d --no-deps --force-recreate identity
+node migrate-existing-port.mjs 8443
+node migrate-existing-port.mjs 8443 --apply
+cd ..\..\..
+.\START-O-AGENT.cmd
+```
+
+Only run the `--apply` steps after confirming the read-only checks. The
+database repair first creates and authenticates encrypted backups of both
+databases, then reconciles only the three scoped O-AGENT roles via SQL stdin
+(never SQL arguments or a logged password). Backup passphrases are saved under
+your Windows user profile's `.oagent-recovery-keys` folder, **outside OneDrive
+and separate from the encrypted database backup**. Move an encrypted backup
+and its key to separate secure locations for real disaster recovery.
+
+The existing-origin migration also creates and verifies encrypted backups
+before using Keycloak's authenticated admin CLI to update the existing
+`oagent-web` OAuth client and then the local origin, preserving PKCE and all
+other client properties. The import template is updated for future restarts.
+It preserves both Docker volumes and both Tailscale Serve routes.
+
+If Keycloak's bootstrap admin credentials do not match its persistent
+database (an old initialized realm), the migration refuses to reset an
+existing identity; resolve admin access separately rather than deleting the
+Keycloak database. The existing owner's password might differ from the
+generated initial owner password if it was changed after first login. Neither
+helper silently changes that user's password.
+
+**This is a guarded pilot recovery path, not an assertion that physical
+Windows login, MFA, phone approval and provider integrations were tested.**
