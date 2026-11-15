@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import 'native_agent_directory.dart';
 import '../core/controller.dart';
 import '../core/pilot_native.dart';
 import 'native_sdk_sessions.dart';
@@ -51,6 +53,13 @@ class _NativePilotShellState extends State<NativePilotShell>{
   }
   void _legacy()=>Navigator.of(context).push(MaterialPageRoute<void>(
     builder:(_)=>StudioShell(controller:widget.legacy)));
+  void _browseAgents() => Navigator.of(context).push(CupertinoPageRoute<void>(
+    builder: (_) => Scaffold(
+      appBar: AppBar(title: const Text('AI agent directory')),
+      body: NativeAgentDirectory(
+        pilot: c, preview: true,
+        onSessions: () {}, onDevices: () {}, onLegacy: _legacy),
+    )));
   @override void dispose(){
     c.removeListener(_changed);endpoint.dispose();
     if(widget.pilot==null)c.dispose();
@@ -77,16 +86,16 @@ class _NativePilotShellState extends State<NativePilotShell>{
               fontSize:11,fontWeight:FontWeight.w800)),
           ]),
           const SizedBox(height:50),
-          const Text('YOUR AI WORK. ON YOUR PHONE.',
+          const Text('YOUR AI AGENTS. ON YOUR PHONE.',
             style:TextStyle(color:OTheme.violet,fontWeight:FontWeight.w800,
               fontSize:12,letterSpacing:0.7)),
           const SizedBox(height:12),
-          const Text('Stay in control.\nWherever you are.',
+          const Text('Your agents.\nOne command center.',
             style:TextStyle(fontSize:34,fontWeight:FontWeight.w900,
               color:_ink,height:1.14)),
           const SizedBox(height:16),
-          const Text('Connect real laptops, manage supported coding sessions, '
-            'submit prompts and approve exact actions—all inside O-AGENT.',
+          const Text('Browse your AI tools, resume verified coding sessions, '
+            'send follow-up prompts and review real permissions from one app.',
             style:TextStyle(height:1.5,color:_muted,fontSize:15)),
           const SizedBox(height:26),
           _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,
@@ -113,16 +122,20 @@ class _NativePilotShellState extends State<NativePilotShell>{
                   fontSize:12,color:OTheme.violet)),
               ],
               const SizedBox(height:12),
-              CheckboxListTile(
-                value: rememberDevice,
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Remember this phone'),
-                subtitle: const Text('Save only the encrypted refresh session '
-                  'in Android Keystore or iOS Keychain.'),
-                onChanged: c.busy ? null
-                  : (v) => setState(() => rememberDevice = v ?? false),
-              ),
+              Row(children: [
+                const Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Remember this phone',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                    Text('Encrypted session in Android Keystore / iOS Keychain',
+                      style: TextStyle(fontSize: 12, color: _muted)),
+                  ])),
+                CupertinoSwitch(
+                  value: rememberDevice,
+                  onChanged: c.busy ? null :
+                    (v) => setState(() => rememberDevice = v)),
+              ]),
               const SizedBox(height:12),
               FilledButton.icon(onPressed:c.busy?null:_login,
                 icon:c.busy?const SizedBox(width:18,height:18,
@@ -140,6 +153,10 @@ class _NativePilotShellState extends State<NativePilotShell>{
                 'Your command center stays native.',
                 style:TextStyle(fontSize:12,height:1.5,color:_muted)),
             ])),
+          const SizedBox(height:16),
+          OutlinedButton.icon(onPressed: _browseAgents,
+            icon: const Icon(Icons.apps_outlined),
+            label: const Text('Browse AI agents and integrations')),
           const SizedBox(height:22),
           const _Feature(Icons.laptop_mac,'Trusted computer',
             'Verified workers and enrolled project folders'),
@@ -158,45 +175,53 @@ class _NativePilotShellState extends State<NativePilotShell>{
         ]),
       ))));
     return Scaffold(
-      appBar:AppBar(title:const Row(children:[
-        CircleAvatar(radius:15,backgroundColor:_ink,
-          child:Text('O',style:TextStyle(color:Colors.white,
-            fontWeight:FontWeight.w900))),
-        SizedBox(width:10),Text('O-AGENT',
-          style:TextStyle(fontWeight:FontWeight.w800)),
-      ]),actions:[
-        const Icon(Icons.shield_outlined,color:OTheme.violet,size:17),
-        const SizedBox(width:4),
-        const Text('PRIVATE',style:TextStyle(color:OTheme.violet,
-          fontSize:10,fontWeight:FontWeight.w800)),
-        IconButton(onPressed:c.syncing?null:c.refresh,
-          tooltip:'Refresh real server state',icon:const Icon(Icons.refresh)),
-      ]),
-      body:SafeArea(child:Column(children:[
-        if(c.error!=null)MaterialBanner(
-          content:Text(c.error!,maxLines:3),
-          actions:[TextButton(onPressed:c.refresh,child:const Text('RETRY'))]),
-        Expanded(child:IndexedStack(index:tab,children:[
-          _Home(c:c,navigate:(i)=>setState(()=>tab=i)),
-          _Work(c:c,navigate:(i)=>setState(()=>tab=i)),
-          _Inbox(c:c),
-          _Devices(c:c),
-          _More(c:c,legacy:_legacy),
+      appBar: CupertinoNavigationBar(
+        transitionBetweenRoutes: false,
+        backgroundColor: const Color(0xFFF7F9FB),
+        border: const Border(bottom: BorderSide(color: _line, width: 0.5)),
+        middle: const Text('O-AGENT',
+          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800,
+            color: _ink)),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: c.syncing ? null : c.refresh,
+          child: const Icon(CupertinoIcons.refresh, color: OTheme.violet)),
+      ),
+      body: SafeArea(child: Column(children: [
+        if (c.error != null) MaterialBanner(
+          content: Text(c.error!, maxLines: 3),
+          actions: [TextButton(onPressed: c.refresh,
+            child: const Text('RETRY'))]),
+        Expanded(child: IndexedStack(index: tab, children: [
+          NativeAgentDirectory(pilot: c, onLegacy: _legacy,
+            onSessions: () => setState(() => tab = 1),
+            onDevices: () => setState(() => tab = 3)),
+          _Work(c: c, navigate: (i) => setState(() => tab = i)),
+          _Inbox(c: c),
+          _Devices(c: c),
+          _More(c: c, legacy: _legacy),
         ])),
       ])),
-      bottomNavigationBar:NavigationBar(selectedIndex:tab,
-        onDestinationSelected:(i)=>setState(()=>tab=i),
-        labelBehavior:NavigationDestinationLabelBehavior.alwaysShow,
-        destinations:[
-          const NavigationDestination(icon:Icon(Icons.home_outlined),label:'Home'),
-          const NavigationDestination(icon:Icon(Icons.work_outline),label:'Work'),
-          NavigationDestination(icon:Badge(
-              isLabelVisible:c.approvals.isNotEmpty,
-              label:Text(c.approvals.length.toString()),
-              child:const Icon(Icons.approval_outlined)),label:'Inbox'),
-          const NavigationDestination(icon:Icon(Icons.devices_outlined),label:'Devices'),
-          const NavigationDestination(icon:Icon(Icons.settings_outlined),label:'More'),
-        ]),
+      bottomNavigationBar: CupertinoTabBar(
+        currentIndex: tab,
+        onTap: (i) => setState(() => tab = i),
+        activeColor: OTheme.violet,
+        inactiveColor: const Color(0xFF788792),
+        backgroundColor: const Color(0xFFFAFBFC),
+        border: const Border(top: BorderSide(color: _line, width: 0.5)),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.square_grid_2x2), label: 'Agents'),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.chat_bubble_2), label: 'Sessions'),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.tray_full), label: 'Inbox'),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.device_laptop), label: 'Devices'),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.settings), label: 'Settings'),
+        ],
+      ),
     );
   }
 }
@@ -255,65 +280,6 @@ Widget _pill(String text,{bool online=false})=>Container(
   child:Text(_name(text),style:TextStyle(
     fontSize:11,fontWeight:FontWeight.w800,
     color:online?const Color(0xFF467862):OTheme.violet)));
-class _Number extends StatelessWidget{
-  const _Number(this.name,this.value,this.icon);
-  final String name,value;final IconData icon;
-  @override Widget build(BuildContext context)=>Expanded(child:_Panel(
-    child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      Icon(icon,color:OTheme.violet,size:20),
-      const SizedBox(height:10),
-      Text(value,style:const TextStyle(fontSize:27,fontWeight:FontWeight.w800)),
-      Text(name,style:const TextStyle(color:_muted,fontSize:11)),
-    ])));
-}
-class _Home extends StatelessWidget{
-  const _Home({required this.c,required this.navigate});
-  final NativePilotController c;final ValueChanged<int> navigate;
-  @override Widget build(BuildContext context)=>RefreshIndicator(
-    onRefresh:c.refresh,child:ListView(padding:const EdgeInsets.all(18),children:[
-      const _Heading('Mission control','Real work from your verified control plane.'),
-      _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        const Text('SECURE WORKSPACE',style:TextStyle(color:OTheme.violet,
-          fontSize:12,fontWeight:FontWeight.w800)),
-        const SizedBox(height:8),
-        Text(c.origin?.host??'',style:const TextStyle(
-          fontSize:17,fontWeight:FontWeight.w800)),
-        const SizedBox(height:5),
-        Text('Signed in · '+_val(c.me['role']),
-          style:const TextStyle(color:_muted)),
-      ])),
-      const SizedBox(height:12),Row(children:[
-        _Number('Online workers',c.onlineDevices.toString(),Icons.laptop_mac),
-        const SizedBox(width:10),
-        _Number('Active runs',c.activeRuns.toString(),Icons.bolt),
-      ]),
-      const SizedBox(height:10),Row(children:[
-        _Number('Approvals',c.approvals.length.toString(),
-          Icons.verified_user_outlined),
-        const SizedBox(width:10),
-        _Number('Saved threads',
-          (c.sessions.length+c.providerSessions.length).toString(),
-          Icons.forum_outlined),
-      ]),
-      const SizedBox(height:16),
-      FilledButton.icon(onPressed:()=>navigate(1),
-        icon:const Icon(Icons.play_arrow),
-        label:const Text('Continue work on my laptop')),
-      const SizedBox(height:8),
-      OutlinedButton.icon(onPressed:()=>navigate(2),
-        icon:const Icon(Icons.approval_outlined),
-        label:Text('Review approvals ('+c.approvals.length.toString()+')')),
-      const SizedBox(height:22),
-      const Text('RECENT AGENT ACTIVITY',style:TextStyle(
-        color:OTheme.violet,fontWeight:FontWeight.w800)),
-      const SizedBox(height:12),
-      if(c.runs.isEmpty)const _Blank('No real runs yet',
-        'Try a read-only workspace inventory. No demo activity is fabricated.')
-      else for(final r in c.runs.take(5))...[
-        _RunTile(c:c,run:r),const SizedBox(height:10)],
-    ]));
-}
-
 class _Work extends StatefulWidget{
   const _Work({required this.c,required this.navigate});
   final NativePilotController c;final ValueChanged<int> navigate;
@@ -390,8 +356,8 @@ class _WorkState extends State<_Work>{
       (x)=>x['sessionId']==savedSessionId).firstOrNull;
     return RefreshIndicator(onRefresh:widget.c.refresh,
       child:ListView(padding:const EdgeInsets.all(18),children:[
-        const _Heading('Projects & agent runs',
-          'Existing Codex threads on your PC, prompts and verified agent results.'),
+        const _Heading('AI sessions & prompts',
+          'Resume verified agent sessions, inspect output, and send follow-ups.'),
         const Text('YOUR REAL SAVED CODEX THREADS',style:TextStyle(
           color:OTheme.violet,fontWeight:FontWeight.w800)),
         const SizedBox(height:9),
@@ -468,7 +434,7 @@ class _WorkState extends State<_Work>{
         const SizedBox(height:20),
         if(online.isEmpty)...[
           const _Blank('Your worker is offline',
-            'Open CONNECT-O-AGENT-WORKER.cmd on the laptop and keep it running.',
+            'Open START-O-AGENT.cmd on your laptop and keep it running.',
             icon:Icons.laptop_chromebook),const SizedBox(height:20),
         ]else _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,
           children:[
@@ -966,7 +932,7 @@ class _Devices extends StatelessWidget{
       if(c.me['role']=='owner') _NativeEnrollPanel(c:c),
       if(c.me['role']=='owner') const SizedBox(height:12),
       if(c.devices.isEmpty)const _Blank('No enrolled workers',
-        'Run CONNECT-O-AGENT-WORKER.cmd on your laptop and approve '
+        'Run START-O-AGENT.cmd on your laptop and approve '
         'its fingerprint in your signed-in account.',
         icon:Icons.computer_outlined)
       else for(final d in c.devices)...[
@@ -1064,7 +1030,7 @@ class _NativeEnrollPanelState extends State<_NativeEnrollPanel> {
       const Text('ENROLL A NEW LAPTOP',
         style:TextStyle(fontWeight:FontWeight.w800,color:OTheme.violet)),
       const SizedBox(height:9),
-      const Text('On your computer, open CONNECT-O-AGENT-WORKER.cmd. '
+      const Text('On your computer, open START-O-AGENT.cmd. '
         'Paste its private pairing link here. Review the exact '
         'device fingerprint before approving—without a website.',
         style:TextStyle(color:_muted,height:1.5,fontSize:12)),
@@ -1087,8 +1053,8 @@ class _More extends StatelessWidget{
   final NativePilotController c;final VoidCallback legacy;
   @override Widget build(BuildContext context)=>ListView(
     padding:const EdgeInsets.all(18),children:[
-      const _Heading('Accounts & connections',
-        'Everything stays inside this native control app.'),
+      const _Heading('Settings & connections',
+        'Your private workspace, account and trusted connections.'),
       _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,
         children:[
           const Text('PRIVATE BACKEND',style:TextStyle(
