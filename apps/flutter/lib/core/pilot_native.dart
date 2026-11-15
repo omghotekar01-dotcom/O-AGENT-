@@ -370,48 +370,11 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
   }
   Future<void> revokeDevice(Map<String, dynamic> device) async {
     if (me['role'] != 'owner') {
-      throw const PilotFailure('Only the workspace owner can revoke a trusted device.');
+      throw const PilotFailure('Only the owner can revoke a trusted device.');
     }
     final id = device['id']?.toString() ?? '';
-    if (!RegExp(r'^[0-9a-f-]{36}
-    _timer?.cancel();
-    await _store.clear();
-    _tokens = null; _config = null; me = {};
-    devices = []; runs = []; approvals = [];
-    error = null; selectedWorkspace = null; notifyListeners();
-  }
-  void _startPolling() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 6),
-      (_) => refresh(silent: true));
-  }
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) _timer?.cancel();
-    if (state == AppLifecycleState.resumed && connected) {
-      _startPolling();
-      unawaited(refresh());
-    }
-  }
-  @override
-  void dispose() {
-    _timer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-}
-
-String pilotFriendlyError(Object error) {
-  if (error is PilotFailure) return error.message;
-  return 'Secure operation failed. Check your private server or sign in again.';
-}
-String _requestKey() {
-  final secure = Random.secure();
-  return base64UrlEncode(List<int>.generate(24, (_) => secure.nextInt(256)))
-    .replaceAll('=', '');
-}
-).hasMatch(id)) {
-      throw const PilotFailure('Device ID was not verified.');
+    if (!RegExp(r'^[0-9a-f-]{36}' + r'$').hasMatch(id)) {
+      throw const PilotFailure('Device identifier was not verified.');
     }
     await _api('/v1/devices/' + Uri.encodeComponent(id) + '/revoke',
       method: 'POST', body: {});
