@@ -191,6 +191,17 @@ export async function createRun(client,tenantId,subject,body,requestKey) {
     if(!discovered.rowCount)
       throw httpError(409,"Codex conversation is missing, stale or belongs to a different worker. Refresh its saved session list.");
   }
+  // Resume only genuine SDK sessions previously completed by this worker
+  // in this exact project. IDs provided by phone clients are not authority.
+  if(sessionId!=null &&
+     (kind==="claude_agent_turn"||kind==="copilot_sdk_turn")){
+    const priorSdk=await client.query(
+      "SELECT 1 FROM runs WHERE device_id=$1 AND kind=$2 AND cwd=$3 "+
+      "AND status='completed' AND result->>'sessionId'=$4 LIMIT 1",
+      [body.deviceId,kind,cwd,sessionId]);
+    if(!priorSdk.rowCount)
+      throw httpError(409,"Saved SDK session does not belong to this worker, provider and project. Start a new approved session instead.");
+  }
   const digest=actionDigest({deviceId:body.deviceId,kind,mode,prompt,cwd,sessionId});
   // Expired owner approvals must not permanently exhaust a tenant's quota.
   await client.query(

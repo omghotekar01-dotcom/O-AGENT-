@@ -13,6 +13,7 @@ import {createMcp} from "./mcp.mjs";
 import {registerPush,unregisterPush,pushStatus,notifyTenant} from "./push.mjs";
 import {exportOwnerData} from "./export.mjs";
 import {tenantUsage} from "./billing.mjs";
+import {listProviderSessions,providerSessionHistory} from "./provider-sessions.mjs";
 import {storeCodexSessions,listCodexSessions} from "./codex-sessions.mjs";
 import {listWorkspaces,listTeamMembers,createTeamInvite,redeemTeamInvite,removeTeamMember,renameWorkspace} from "./team.mjs";
 import {
@@ -327,6 +328,18 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         /^\/v1\/devices\/([0-9a-f-]{36})\/revoke$/i);
       if(method==="POST"&&revoke)return reply(res,200,
         await asTenant((c,t)=>revokeDevice(c,t,identity.subject,revoke[1])));
+      if(method==="GET"&&path==="/v1/provider-sessions")
+        return reply(res,200,{sessions:await asTenant(listProviderSessions)});
+      const sdkHistory=capturePath(path,
+        /^\/v1\/provider-sessions\/(claude_agent_turn|copilot_sdk_turn)\/([A-Za-z0-9_-]{8,120})$/);
+      if(method==="GET"&&sdkHistory){
+        if([...parsed.searchParams.keys()].some(key=>key!=="deviceId"))
+          throw httpError(400,"Unexpected SDK history query");
+        return reply(res,200,await asTenant(c=>providerSessionHistory(c,{
+          kind:sdkHistory[1],sessionId:sdkHistory[2],
+          deviceId:parsed.searchParams.get("deviceId"),
+        })));
+      }
       if(method==="GET"&&path==="/v1/sessions")
          return reply(res,200,{sessions:await asTenant(listCodexSessions)});
        if(method==="GET"&&path==="/v1/runs")
