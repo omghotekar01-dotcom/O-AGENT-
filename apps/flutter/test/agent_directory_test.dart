@@ -52,7 +52,9 @@ void main() {
     final chatgpt=list.singleWhere((x)=>x.id=='chatgpt');
     expect(chatgpt.state,AgentState.externalOnly);
     expect(chatgpt.hasVerifiedSession,false);
-    expect(chatgpt.officialUrl,'https://chatgpt.com/');
+    expect(chatgpt.route,AgentRoute.remoteDesktop);
+    expect(chatgpt.summary,contains('shared'));
+    expect(chatgpt.officialUrl,isNull);
   });
 
   test('verified live saved Codex and SDK sessions are counted, never fabricated',(){
