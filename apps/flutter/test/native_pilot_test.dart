@@ -102,7 +102,7 @@ void main(){
     }
     final c=NativePilotController(request:request,auth:FakeLogin(),store:saved);
     addTearDown(c.dispose);
-    await c.signIn(origin);
+    await c.signIn(origin, rememberDevice: true);
     expect(c.connected,true);
     expect(c.onlineDevices,1);
     expect(saved.saved?.origin,'https://pilot.example.ts.net:8443');
