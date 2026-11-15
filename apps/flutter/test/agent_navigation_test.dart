@@ -25,7 +25,7 @@ class _NoRemember implements PilotSessionStore {
 }
 
 void main() {
-  testWidgets('signed-in iOS-style native home is Agents, Sessions, Inbox, Devices, Settings',
+  testWidgets('signed-in iOS-style native home is Agents, Sessions, Remote, Inbox, Settings',
     (tester) async {
     const address='https://example.tailnet.ts.net:8443/';
     Future<Map<String,dynamic>> request(Uri url,String method,
@@ -66,7 +66,7 @@ void main() {
       expect(find.text('OpenAI Codex CLI / IDE'),findsOneWidget);
       expect(find.text('Sessions'),findsOneWidget);
       expect(find.text('Inbox'),findsOneWidget);
-      expect(find.text('Devices'),findsOneWidget);
+      expect(find.text('Remote'),findsOneWidget);
       expect(find.text('Settings'),findsOneWidget);
       expect(tester.takeException(),isNull);
       await tester.pumpWidget(const SizedBox.shrink());
