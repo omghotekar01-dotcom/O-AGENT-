@@ -223,7 +223,7 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
     validatedPilotAuthConfig(target, await _request(
       target.resolve('/v1/public-config'), 'GET', null, null, const {}));
 
-  Future<void> signIn(String address) async {
+  Future<void> signIn(String address, {bool rememberDevice = false}) async {
     if (busy) return;
     final target = privatePilotOrigin(address);
     if (target == null) {
@@ -236,8 +236,10 @@ class NativePilotController extends ChangeNotifier with WidgetsBindingObserver {
       final tokens = await _auth.signIn(target, cfg);
       origin = target; _config = cfg; _tokens = tokens;
       me = await _api('/v1/me');
-      if (tokens.refreshToken != null) {
+      if (rememberDevice && tokens.refreshToken != null) {
         await _store.write(StoredPilotSession(target.origin, tokens.refreshToken!));
+      } else {
+        await _store.clear();
       }
       _startPolling();
       await refresh();
