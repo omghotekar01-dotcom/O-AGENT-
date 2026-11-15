@@ -130,6 +130,16 @@ test("real HTTP + PostgreSQL: OIDC owner, exact fingerprint pairing, signed work
     assert.deepEqual(ownerSessions.data.sessions[0].messages,savedSession.messages);
     const otherSessions=await request("/v1/sessions",{token:"other-user"});
     assert.deepEqual(otherSessions.data.sessions,[]);
+    const health=await signed("/v1/device/codex-health",{status:"available"});
+    assert.equal(health.status,200);
+    assert.equal(health.data.status,"available");
+    assert.equal((await signed("/v1/device/codex-health",
+      {status:"inject_backend_secrets"})).status,400);
+    const ownerDevices=await request("/v1/devices",{token:"owner-user"});
+    assert.equal(ownerDevices.data.devices[0].codex_session_health,"available");
+    assert.ok(ownerDevices.data.devices[0].codex_last_checked_at);
+    const foreignDevices=await request("/v1/devices",{token:"other-user"});
+    assert.deepEqual(foreignDevices.data.devices,[]);
 
     const unavailable=await request("/v1/runs",{
       method:"POST",token:"other-user",headers:{"idempotency-key":randomUUID()},

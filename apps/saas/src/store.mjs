@@ -8,7 +8,7 @@ export const createPool=config=>new Pool({
   connectionTimeoutMillis:5000,idleTimeoutMillis:30000,
   application_name:"oagent_saas",
 });
-const migrationFiles=["001_init.sql","002_legacy_upgrade.sql","003_team_workspaces.sql","004_codex_sessions.sql"];
+const migrationFiles=["001_init.sql","002_legacy_upgrade.sql","003_team_workspaces.sql","004_codex_sessions.sql","005_codex_health.sql"];
 export async function migrate(pool) {
   const migrations=await Promise.all(migrationFiles.map(async name=>{
     const sql=await readFile(fileURLToPath(new URL("../sql/"+name,import.meta.url)),"utf8");

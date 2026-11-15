@@ -9,6 +9,16 @@ import 'studio.dart';
 const _ink=OTheme.ink, _muted=Color(0xFF66757D), _line=Color(0xFFDCE6E9);
 String _val(dynamic x,[String missing='—']) => x==null||x.toString().isEmpty?
   missing:x.toString();
+String _codexStatus(dynamic status) => switch(status?.toString()) {
+  'available' => 'Saved Codex conversations detected',
+  'no_saved_threads' => 'Codex available; no saved threads in this project',
+  'missing_cli' => 'Codex CLI not detected on this laptop',
+  'rpc_unavailable' => 'Codex app-server could not list saved threads',
+  'scan_timeout' => 'Codex session discovery timed out',
+  'disabled' => 'Codex discovery disabled for this worker',
+  'unavailable' => 'Codex session discovery unavailable',
+  _ => 'Checking locally installed Codex sessions',
+};
 String _date(dynamic x){
   final d=DateTime.tryParse(x?.toString()??'')?.toLocal();
   if(d==null)return 'Not reported';
@@ -813,6 +823,11 @@ class _Devices extends StatelessWidget{
               style:const TextStyle(color:_muted)),
             Text('Last heartbeat: '+_date(d['last_seen_at']),
               style:const TextStyle(color:_muted,fontSize:12)),
+            const SizedBox(height:7),
+            Text(_codexStatus(d['codex_session_health']),
+              style:const TextStyle(color:_muted,fontSize:12,height:1.4)),
+            Text('Codex checked: '+_date(d['codex_last_checked_at']),
+              style:const TextStyle(color:_muted,fontSize:11)),
             const SizedBox(height:9),
             Text(((d['capabilities'] as List?)??[]).map((x)=>
               pilotCapabilityLabel(x.toString())).join(' · '),

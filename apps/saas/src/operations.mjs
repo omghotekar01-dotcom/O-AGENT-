@@ -87,7 +87,7 @@ export async function approveEnrollment(client,tenantId,subject,token,expectedFi
 }
 export async function listDevices(client) {
   const result=await client.query(
-    "SELECT id,name,capabilities,workspace_root,last_seen_at,created_at,revoked_at FROM devices ORDER BY created_at DESC LIMIT 100");
+    "SELECT id,name,capabilities,workspace_root,last_seen_at,created_at,revoked_at,codex_session_health,codex_last_checked_at FROM devices ORDER BY created_at DESC LIMIT 100");
   return result.rows;
 }
 export async function revokeDevice(client,tenantId,subject,id) {
@@ -124,6 +124,17 @@ export async function updateCapabilities(client,tenantId,deviceId,requested,work
   if(!result.rowCount)throw httpError(403,"Device revoked");
   await audit(client,tenantId,deviceId,"device.capabilities",deviceId,{capabilities});
   return {capabilities};
+}
+export async function updateCodexHealth(client,tenantId,deviceId,status) {
+  if(!["available","no_saved_threads","missing_cli","rpc_unavailable",
+    "scan_timeout","unavailable","disabled"].includes(status))
+    throw httpError(400,"Invalid Codex health report");
+  const changed=await client.query(
+    "UPDATE devices SET codex_session_health=$1,codex_last_checked_at=now() "+
+    "WHERE id=$2 AND revoked_at IS NULL RETURNING id",
+    [status,deviceId]);
+  if(!changed.rowCount)throw httpError(403,"Device revoked");
+  return {status};
 }
 export async function heartbeat(client,deviceId) {
   const result=await client.query(

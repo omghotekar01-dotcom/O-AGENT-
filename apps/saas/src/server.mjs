@@ -17,7 +17,7 @@ import {storeCodexSessions,listCodexSessions} from "./codex-sessions.mjs";
 import {listWorkspaces,listTeamMembers,createTeamInvite,redeemTeamInvite,removeTeamMember,renameWorkspace} from "./team.mjs";
 import {
   httpError,startEnrollment,inspectEnrollment,enrollmentStatus,approveEnrollment,listDevices,revokeDevice,
-  updateCapabilities,heartbeat,createRun,listRuns,runDetail,
+  updateCapabilities,updateCodexHealth,heartbeat,createRun,listRuns,runDetail,
   listApprovals,decideApproval,claimRun,renewLease,finishRun,
   requestToolApproval,toolApprovalStatus,appendRunEvent,listRunEvents,
   cancelRun,resolveInterruptedRun,listAuditEvents,deleteOwnAccount,isUUID,
@@ -198,6 +198,9 @@ export function makeSaasServer({config,pool,authenticate,now=()=>Date.now()}){
         if(method==="POST"&&path==="/v1/device/sessions")
           return reply(res,200,await call((c,t)=>
             storeCodexSessions(c,t,device.deviceId,data)));
+        if(method==="POST"&&path==="/v1/device/codex-health")
+          return reply(res,200,await call((c,t)=>updateCodexHealth(
+            c,t,device.deviceId,data.status)));
         if(method==="POST"&&path==="/v1/device/heartbeat")
           return reply(res,200,await call(c=>heartbeat(c,device.deviceId)));
         if(method==="POST"&&path==="/v1/device/capabilities")

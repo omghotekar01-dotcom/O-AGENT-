@@ -209,6 +209,9 @@ export class SignedCloudWorker {
       });
       if(this.revoked)return;
       await this.api("/v1/device/sessions",{body:{sessions}});
+      await this.api("/v1/device/codex-health",{
+        body:{status:sessions.length?"available":"no_saved_threads"},
+      });
       // Only an actual working local Codex app-server with at least one
       // verified stored thread can activate the Codex continuation adapter.
       // All agent turns still require a separate owner approval, and "0"
@@ -224,9 +227,16 @@ export class SignedCloudWorker {
         });
         this.env.OAGENT_ENABLE_CODEX_LOCAL_SYNC="1";
       }
-    }catch{
-      // Optional read-only discovery must not stop the signed worker or
-      // advertise stale snapshots as active IDE connections.
+    }catch(error){
+      // Only publish bounded diagnostic categories; never provider output,
+      // secrets, local paths or exception messages.
+      const message=String(error?.message||"");
+      const status=/Codex CLI is not installed/i.test(message)?"missing_cli":
+        /unavailable|rejected|exited/i.test(message)?"rpc_unavailable":
+        /timed out|timeout/i.test(message)?"scan_timeout":"unavailable";
+      if(!this.revoked){
+        try{await this.api("/v1/device/codex-health",{body:{status}});}catch{}
+      }
       console.warn("Codex session listing unavailable on this worker; supervised operations remain available.");
     }
   }
