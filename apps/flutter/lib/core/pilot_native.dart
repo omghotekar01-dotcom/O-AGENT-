@@ -655,6 +655,12 @@ String pilotLoginStageError(Object error, String stage) {
       return 'Cannot reach Keycloak identity service (ID-03). Check Tailscale HTTPS and the PC launcher identity check.';
     case 'android-auth':
       if (error is PlatformException) {
+        if (error.code == 'no_browser_available') {
+          return 'No compatible secure Android browser is available (AUTH-BROWSER). Install or enable Chrome and retry.';
+        }
+        if (error.code == 'null_activity') {
+          return 'Android sign-in was interrupted (AUTH-ACTIVITY). Reopen O-AGENT and try again.';
+        }
         return 'Android secure sign-in failed to open or return (AUTH-04). Update Chrome, verify the native OAuth client in START-O-AGENT.cmd, and retry.';
       }
       return 'Secure sign-in could not finish (AUTH-04). Test the private connection; if it passes, check Keycloak mobile login and the Android browser callback.';
