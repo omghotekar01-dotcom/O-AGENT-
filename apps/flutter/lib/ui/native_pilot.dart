@@ -264,7 +264,7 @@ class _Home extends StatelessWidget{
         _Number('Approvals',c.approvals.length.toString(),
           Icons.verified_user_outlined),
         const SizedBox(width:10),
-        _Number('Run history',c.runs.length.toString(),Icons.history),
+        _Number('Saved Codex',c.sessions.length.toString(),Icons.forum_outlined),
       ]),
       const SizedBox(height:16),
       FilledButton.icon(onPressed:()=>navigate(1),
@@ -291,20 +291,38 @@ class _Work extends StatefulWidget{
   @override State<_Work> createState()=>_WorkState();
 }
 class _WorkState extends State<_Work>{
-  final prompt=TextEditingController(),session=TextEditingController();
-  String? machineId,operation;
+  final prompt=TextEditingController();
+  String? machineId,operation,savedSessionId;
   String mode='read_only';bool sending=false;
-  @override void dispose(){prompt.dispose();session.dispose();super.dispose();}
+  @override void dispose(){prompt.dispose();super.dispose();}
+  void _useSavedSession(Map<String,dynamic> saved){
+    setState((){
+      machineId=saved['deviceId']?.toString();
+      operation='codex_cli_turn';
+      savedSessionId=saved['sessionId']?.toString();
+    });
+  }
   Future<void> _submit(Map<String,dynamic> machine,String kind)async{
     if(sending)return;
+    if(kind=='codex_cli_turn'&&savedSessionId==null){
+      final candidate=widget.c.sessions.where((x)=>
+        x['deviceId']==machine['id']).firstOrNull;
+      if(candidate==null){
+        _toast(context,'No verified Codex conversation on this worker.');return;
+      }
+      savedSessionId=candidate['sessionId']?.toString();
+    }
     final text=kind=='workspace_inventory'
       ?'Inspect enrolled workspace files':prompt.text.trim();
     if(text.isEmpty){_toast(context,'Enter a prompt first.');return;}
     final details='Worker: '+_val(machine['name'])+
       '\nProvider: '+pilotCapabilityLabel(kind)+
       '\nMode: '+_name(mode)+
-      '\nExact folder: '+_val(machine['workspace_root'])+
-      '\nSaved session: '+_val(session.text.trim(),'New if supported')+
+      '\nExact folder: '+(kind=='codex_cli_turn'
+        ?_val(widget.c.sessions.where((x)=>x['sessionId']==savedSessionId &&
+            x['deviceId']==machine['id']).firstOrNull?['cwd'])
+        :_val(machine['workspace_root']))+
+      '\nSaved session: '+_val(savedSessionId,'New if supported')+
       '\n\nPrompt:\n'+text+
       '\n\nThis REQUESTS approval; nothing executes automatically.';
     final confirmed=await showDialog<bool>(context:context,builder:(dialog)=>
@@ -319,10 +337,10 @@ class _WorkState extends State<_Work>{
     setState(()=>sending=true);
     try{
       await widget.c.requestTurn(device:machine,kind:kind,mode:mode,
-        prompt:text,sessionId:session.text.trim().isEmpty
-          ?null:session.text.trim());
+        prompt:text,sessionId:kind=='codex_cli_turn'
+          ?savedSessionId:null);
       if(!mounted)return;
-      prompt.clear();session.clear();widget.navigate(2);
+      prompt.clear();widget.navigate(2);
       _toast(context,'Supervised request created. Approve it separately.');
     }catch(e){if(mounted)_toast(context,pilotFriendlyError(e));}
     finally{if(mounted)setState(()=>sending=false);}
@@ -337,10 +355,50 @@ class _WorkState extends State<_Work>{
         'copilot_sdk_turn'].contains(x)).toList();
     final kind=available.contains(operation)?operation:
       (available.isNotEmpty?available.first:null);
+    final savedForDevice=widget.c.sessions
+      .where((x)=>x['deviceId']==selected?['id']).toList();
+    final chosenSaved=savedForDevice.where(
+      (x)=>x['sessionId']==savedSessionId).firstOrNull;
     return RefreshIndicator(onRefresh:widget.c.refresh,
       child:ListView(padding:const EdgeInsets.all(18),children:[
         const _Heading('Projects & agent runs',
-          'Select your laptop, prompt a supported agent, and view live results.'),
+          'Existing Codex threads on your PC, prompts and verified agent results.'),
+        const Text('YOUR REAL SAVED CODEX THREADS',style:TextStyle(
+          color:OTheme.violet,fontWeight:FontWeight.w800)),
+        const SizedBox(height:9),
+        if(widget.c.sessions.isEmpty)
+          const _Blank('No saved Codex sessions synchronized yet',
+            'Keep your laptop worker online. The app lists existing CLI and '
+            'VS Code Codex threads found inside the enrolled project, '
+            'without copying IDs or opening a website.')
+        else for(final saved in widget.c.sessions.take(20))...[
+          _Panel(child:InkWell(
+            onTap:()=>Navigator.push(context,MaterialPageRoute<void>(
+              builder:(_)=>NativeSavedSessionDetail(
+                saved:saved,
+                canContinue:online.any((m)=>m['id']==saved['deviceId'] &&
+                  ((m['capabilities'] as List?)?.contains('codex_cli_turn')??false)),
+                onContinue:()=>_useSavedSession(saved)))),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Row(children:[
+                const Icon(Icons.forum_outlined,color:OTheme.violet),
+                const SizedBox(width:9),
+                Expanded(child:Text(_val(saved['title']),
+                  style:const TextStyle(fontWeight:FontWeight.w800))),
+                const Icon(Icons.chevron_right,color:OTheme.violet),
+              ]),
+              const SizedBox(height:8),
+              Text(_val(saved['preview'],'Open saved thread'),
+                maxLines:3,overflow:TextOverflow.ellipsis,
+                style:const TextStyle(color:_muted)),
+              const SizedBox(height:6),
+              Text('Saved thread · '+_name(_val(saved['sourceKind']))+
+                ' · '+_date(saved['updatedAt']),
+                style:const TextStyle(color:_muted,fontSize:11)),
+            ]))),
+          const SizedBox(height:9),
+        ],
+        const SizedBox(height:20),
         if(online.isEmpty)...[
           const _Blank('Your worker is offline',
             'Open CONNECT-O-AGENT-WORKER.cmd on the laptop and keep it running.',
@@ -357,7 +415,9 @@ class _WorkState extends State<_Work>{
                 border:OutlineInputBorder()),
               items:[for(final d in online)DropdownMenuItem<String>(
                 value:d['id']?.toString(),child:Text(_val(d['name'])) )],
-              onChanged:(v)=>setState((){machineId=v;operation=null;})),
+              onChanged:(v)=>setState((){
+                machineId=v;operation=null;savedSessionId=null;
+              })),
             const SizedBox(height:9),
             Text('Trusted project: '+_val(selected?['workspace_root']),
               style:const TextStyle(color:_muted,fontSize:12)),
@@ -368,7 +428,10 @@ class _WorkState extends State<_Work>{
                 border:OutlineInputBorder()),
               items:[for(final k in available)DropdownMenuItem<String>(
                 value:k,child:Text(pilotCapabilityLabel(k)))],
-              onChanged:(v)=>setState(()=>operation=v))
+              onChanged:(v)=>setState((){
+                operation=v;
+                if(v!='codex_cli_turn')savedSessionId=null;
+              }))
             else const Text('No compatible provider enabled on this worker.',
               style:TextStyle(color:_muted)),
             const SizedBox(height:12),
@@ -383,9 +446,22 @@ class _WorkState extends State<_Work>{
               ],onChanged:(v)=>setState(()=>mode=v??'read_only')),
             if(kind=='codex_cli_turn')...[
               const SizedBox(height:12),
-              TextField(controller:session,decoration:const InputDecoration(
-                labelText:'Existing verified Codex session ID',
-                border:OutlineInputBorder())),
+              if(savedForDevice.isEmpty)
+                const Text('No verified saved Codex threads on this worker yet. '
+                  'Check local Codex login and keep the worker online.',
+                  style:TextStyle(color:Colors.red,height:1.45))
+              else DropdownButtonFormField<String>(
+                key:ValueKey('codex-'+_val(selected?['id'])),
+                initialValue:chosenSaved?['sessionId']?.toString() ??
+                  savedForDevice.first['sessionId']?.toString(),
+                decoration:const InputDecoration(
+                  border:OutlineInputBorder(),
+                  labelText:'Real saved Codex conversation'),
+                items:[for(final x in savedForDevice)
+                  DropdownMenuItem<String>(value:x['sessionId']?.toString(),
+                    child:Text(_val(x['title']),
+                      overflow:TextOverflow.ellipsis))],
+                onChanged:(v)=>setState(()=>savedSessionId=v)),
             ],
             const SizedBox(height:12),
             TextField(controller:prompt,minLines:3,maxLines:5,maxLength:4000,
@@ -395,7 +471,9 @@ class _WorkState extends State<_Work>{
                   ?'Read-only inventory does not require a prompt'
                   :'Continue the task; explain what changed.')),
             FilledButton.icon(
-              onPressed:sending||kind==null?null:()=>_submit(selected!,kind),
+              onPressed:sending||kind==null||
+                (kind=='codex_cli_turn'&&savedForDevice.isEmpty)
+                ?null:()=>_submit(selected!,kind),
               icon:const Icon(Icons.send_outlined),
               label:Text(sending?'Requesting…':'Review and request approval')),
             const SizedBox(height:9),
@@ -414,6 +492,69 @@ class _WorkState extends State<_Work>{
       ]));
   }
 }
+
+class NativeSavedSessionDetail extends StatelessWidget {
+  const NativeSavedSessionDetail({super.key,required this.saved,
+    required this.canContinue,required this.onContinue});
+  final Map<String,dynamic> saved;
+  final bool canContinue;
+  final VoidCallback onContinue;
+  @override Widget build(BuildContext context){
+    final messages=(saved['messages'] as List?)??[];
+    return Scaffold(
+      appBar:AppBar(title:const Text('Saved Codex conversation')),
+      body:SafeArea(child:ListView(padding:const EdgeInsets.all(18),children:[
+        _Heading(_val(saved['title']),
+          'Real persisted CLI / VS Code conversation snapshot, not a live IDE takeover.'),
+        _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text('Worker: '+_val(saved['deviceName']),
+            style:const TextStyle(fontWeight:FontWeight.w800)),
+          const SizedBox(height:6),
+          SelectableText('Folder: '+_val(saved['cwd']),
+            style:const TextStyle(fontSize:12,color:_muted)),
+          Text('Last activity: '+_date(saved['updatedAt']),
+            style:const TextStyle(fontSize:12,color:_muted)),
+          Text('Last synchronized: '+_date(saved['syncedAt']),
+            style:const TextStyle(fontSize:12,color:_muted)),
+        ])),
+        const SizedBox(height:20),
+        const Text('PERSISTED CONVERSATION',style:TextStyle(
+          color:OTheme.violet,fontWeight:FontWeight.w800)),
+        const SizedBox(height:10),
+        if(messages.isEmpty)
+          const _Blank('No readable text in the saved snapshot',
+            'The Codex app-server returned metadata only for this thread. '
+            'Recent text is shown only where the provider makes it available.')
+        else for(final message in messages)...[
+          _Panel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+            Text(message is Map && message['role']=='user'
+              ?'YOU':'CODEX',
+              style:const TextStyle(color:OTheme.violet,
+                fontWeight:FontWeight.w800,fontSize:12)),
+            const SizedBox(height:7),
+            SelectableText(message is Map
+              ?_val(message['text']):'Unsupported message',
+              style:const TextStyle(height:1.5)),
+          ])),
+          const SizedBox(height:10),
+        ],
+        const SizedBox(height:10),
+        FilledButton.icon(
+          onPressed:canContinue?(){
+            onContinue();
+            Navigator.pop(context);
+          }:null,
+          icon:const Icon(Icons.play_arrow),
+          label:const Text('Select this thread to continue')),
+        if(!canContinue)const Text(
+          'This thread is readable, but Codex execution is disabled or '
+          'the worker is offline. The worker must explicitly enable Codex turns.',
+          style:TextStyle(color:_muted,fontSize:12,height:1.5)),
+      ])),
+    );
+  }
+}
+
 class _RunTile extends StatelessWidget{
   const _RunTile({required this.c,required this.run});
   final NativePilotController c;final Map<String,dynamic> run;
